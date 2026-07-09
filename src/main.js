@@ -187,6 +187,10 @@ $('btn-ghost').addEventListener('click', (e) => {
   ghostMode = !ghostMode;
   e.target.textContent = `Ghost: ${ghostMode ? 'ON' : 'OFF'}`;
 });
+$('btn-torso').addEventListener('click', (e) => {
+  avatar.torso = avatar.torso === '1d' ? '2d' : '1d';
+  e.target.textContent = `Torso: ${avatar.torso.toUpperCase()}`;
+});
 
 // Keep the camera alive across tab switches (mobile browsers may pause it).
 document.addEventListener('visibilitychange', () => {
