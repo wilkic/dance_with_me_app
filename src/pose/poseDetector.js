@@ -1,11 +1,12 @@
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import { fromMediaPipe } from './poseFormat.js';
 
-const WASM_URL =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+// WASM runtime and model are vendored in public/ so the app is fully
+// self-contained: any static file host works, no CDN or backend needed.
+const BASE = import.meta.env.BASE_URL;
+const WASM_URL = `${BASE}mediapipe/wasm`;
 // "lite" model: best speed/accuracy trade-off for mobile browsers.
-const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+const MODEL_URL = `${BASE}models/pose_landmarker_lite.task`;
 
 /**
  * Wraps MediaPipe PoseLandmarker behind a small interface so the detector
