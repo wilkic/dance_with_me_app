@@ -10,6 +10,7 @@ import {
   CompositeTransport,
 } from './net/poseChannel.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
+import { Metronome } from './audio/metronome.js';
 
 // ---- DOM ----
 const $ = (id) => document.getElementById(id);
@@ -43,10 +44,20 @@ const guestTransport = new DelayedLoopbackTransport({
 // ?server=1 uses the Vite dev proxy (wss://<host>/ws → local server);
 // ?server=wss://… connects directly. Without it the app is fully offline
 // and shows no BPM.
-const serverParam = new URLSearchParams(location.search).get('server');
+const urlParams = new URLSearchParams(location.search);
+const serverParam = urlParams.get('server');
 const serverUrl = serverParam === '1' ? `wss://${location.host}/ws` : serverParam;
 const serverLink = serverUrl ? new WebSocketTransport(serverUrl) : null;
 if (serverLink) serverLink.onMessage = onServerMessage;
+
+// Dance-lab calibration: ?click=120 plays a metronome once dancing starts
+// and labels the server session with the ground-truth BPM (the server
+// records labeled sessions when started with RECORD_DIR — see server/).
+const clickBpm = Number(urlParams.get('click')) || 0;
+const metronome = clickBpm > 0 ? new Metronome(clickBpm) : null;
+if (serverLink && clickBpm > 0) {
+  serverLink.onOpen = () => serverLink.sendJSON({ type: 'label', clickBpm });
+}
 
 const channel = new PoseChannel(
   serverLink ? new CompositeTransport([guestTransport, serverLink]) : guestTransport,
@@ -231,6 +242,7 @@ async function startCamera() {
 
 function exitToStart() {
   $('menu-panel').classList.add('hidden');
+  metronome?.stop();
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
   camera.stop();
@@ -262,6 +274,7 @@ async function captureRoom() {
   fpsEma = 0;
   lastFrameT = 0;
   showScreen('dance');
+  metronome?.start();
 }
 
 // ---- Wire up UI ----

@@ -16,15 +16,25 @@
  */
 import { WebSocketServer } from 'ws';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, createWriteStream } from 'node:fs';
+import { join } from 'node:path';
 import { deserializePoseFrame } from '../src/pose/poseFormat.js';
 import { BeatDetector } from './beatDetector.js';
 import { Matcher } from './matcher.js';
 import { pickSong } from './songs.js';
 
-export function startServer({ port = 8901, scanIntervalMs = 2000 } = {}) {
+export function startServer({
+  port = 8901,
+  scanIntervalMs = 2000,
+  // Dance-lab data capture: when set (e.g. RECORD_DIR=recordings npm start),
+  // every session's frames + label messages are appended to a JSONL file,
+  // ready for `node lab/run.js analyze <file>`.
+  recordDir = process.env.RECORD_DIR,
+} = {}) {
   const wss = new WebSocketServer({ port });
   const sessions = new Map(); // id -> { id, ws, detector, matchKey }
   const matcher = new Matcher();
+  if (recordDir) mkdirSync(recordDir, { recursive: true });
 
   const send = (s, msg) => {
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(msg));
@@ -36,12 +46,34 @@ export function startServer({ port = 8901, scanIntervalMs = 2000 } = {}) {
     sessions.set(id, s);
     send(s, { type: 'welcome', id });
 
+    let rec = null;
+    if (recordDir) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      rec = createWriteStream(join(recordDir, `${stamp}-${id}.jsonl`), { flags: 'a' });
+    }
+
     ws.on('message', (data, isBinary) => {
-      if (!isBinary) return; // no client→server JSON messages yet
+      if (!isBinary) {
+        // JSON control messages: currently just session labels (metronome
+        // BPM from ?click=…), kept with the frames for ground truth.
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'label') rec?.write(JSON.stringify(msg) + '\n');
+        } catch { /* ignore malformed */ }
+        return;
+      }
       const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-      s.detector.update(deserializePoseFrame(buf));
+      const frame = deserializePoseFrame(buf);
+      rec?.write(JSON.stringify({
+        t: Math.round(frame.t),
+        k: Array.from(frame.keypoints, (v) => +v.toFixed(4)),
+      }) + '\n');
+      s.detector.update(frame);
     });
-    ws.on('close', () => sessions.delete(id));
+    ws.on('close', () => {
+      rec?.end();
+      sessions.delete(id);
+    });
   });
 
   // Opinion scan: profiles out, then tempo-first pairing with a next song.

@@ -56,6 +56,7 @@ export class WebSocketTransport {
     this.url = url;
     this.onReceive = null;
     this.onMessage = null;
+    this.onOpen = null; // fires on every (re)connect — resend session state here
     this.ws = null;
     this.closed = false;
     this.#connect();
@@ -64,6 +65,7 @@ export class WebSocketTransport {
   #connect() {
     const ws = new WebSocket(this.url);
     ws.binaryType = 'arraybuffer';
+    ws.onopen = () => this.onOpen?.();
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         try { this.onMessage?.(JSON.parse(ev.data)); } catch { /* ignore bad JSON */ }
@@ -79,6 +81,11 @@ export class WebSocketTransport {
 
   send(_dancerId, buf) {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(buf);
+  }
+
+  /** Text-frame control message (labels etc.) — see server/index.js. */
+  sendJSON(obj) {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
   }
 
   close() {

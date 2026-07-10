@@ -54,6 +54,12 @@ server/                dance-analysis server (Node, separate package.json)
   matcher.js           tempo-first pairing, half/double-tempo tolerant
   songs.js             stub BPM-labeled catalog for "next song" pairing
   test/synthetic.js    end-to-end: 2 synthetic dancers → profiled + matched
+  lab/                 dance lab: BPM calibration + rhythm research tools
+    run.js             scenario suite ("dance unit tests") + recording analysis
+    synthDancer.js     synthetic dancer with per-body-part oscillators
+    signals.js         per-part position/speed channels from PoseFrames
+    stft.js            STFT on a BPM grid → waterfall matrices
+    report.js          self-contained HTML report (waterfall heatmaps)
 ```
 
 ### Dance-analysis server
@@ -76,6 +82,38 @@ analysis server so the phone reuses the already-accepted HTTPS cert. On a
 non-Vite host pass a full URL instead: `?server=wss://host:port`.
 `cd server && npm test` runs the synthetic end-to-end check (two fake
 dancers at 120/118 BPM must be profiled and matched).
+
+### Dance lab (BPM calibration)
+
+Dancers layer frequencies — hips carry a slow groove, arms flourish on top,
+and moving at half tempo (the Nyquist of the song) is idiomatic. The
+production detector collapses the body into one speed scalar, so the
+fastest limb wins. The lab in `server/lab/` measures this instead of
+guessing:
+
+```bash
+cd server && npm run lab      # synthetic scenario suite → lab/out/report.html
+```
+
+Each scenario is a synthetic dancer with independent per-part oscillators;
+checks are PASS/FAIL for required behavior and KNOWN GAP for measured
+shortcomings we intend to fix. The report renders STFT waterfall heatmaps
+(time × BPM) of the detector's speed scalar and per-part position channels,
+with ground truth and the live detector estimate overlaid.
+
+To capture real data, dance to the built-in metronome while the server
+records:
+
+```bash
+cd server && RECORD_DIR=recordings npm start
+# phone: https://<lan-ip>:5173/?server=1&click=100   ← metronome at 100 BPM
+cd server && node lab/run.js analyze recordings/<file>.jsonl
+```
+
+The `?click=BPM` parameter plays an accented click once dancing starts and
+labels the recorded session with the ground-truth BPM, so recorded moves
+("dance unit tests" performed by a human) can be checked against what the
+detector and the waterfalls saw.
 
 ### Design decisions (and how they serve the end-state)
 
