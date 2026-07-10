@@ -90,6 +90,7 @@ function processRecording(path, force) {
     name,
     title: label?.title ?? null,
     source: label?.source ?? null,
+    tag: label?.tag ?? null,
     durS,
     fps,
     frames: frames.length,
@@ -109,7 +110,7 @@ function writeIndex(entries) {
   <section class="card">
     <video src="${e.name}.mp4" controls preload="metadata"></video>
     <div class="info">
-      <h2>${e.name}</h2>
+      <h2>${e.tag ? `<span style="color:#e8a8d8">[${e.tag}]</span> ` : ''}${e.name}</h2>
       <p class="meta">${e.durS.toFixed(0)}s · ${e.frames} frames · ~${e.fps.toFixed(0)} fps
         · label ${e.clickBpm ?? '—'} BPM</p>
       <p class="meta">detector settled at

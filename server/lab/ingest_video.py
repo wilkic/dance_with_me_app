@@ -33,6 +33,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--source", default=None)
     ap.add_argument("--title", default=None)
+    ap.add_argument("--tag", default=None, help="genre/style tag for the library")
     ap.add_argument("--max-s", type=float, default=90.0,
                     help="stop after this many seconds of video")
     ap.add_argument("--model", default=DEFAULT_MODEL)
@@ -58,6 +59,9 @@ def main():
             label["source"] = args.source
         if args.title:
             label["title"] = args.title
+        if args.tag:
+            label["tag"] = args.tag
+        label["sectionS"] = [0, args.max_s]
         f.write(json.dumps(label) + "\n")
 
         while True:
