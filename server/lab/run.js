@@ -108,12 +108,16 @@ function chartsFor(frames, { moving, trace }) {
 // Scenario suite
 
 // `moving`: part → position Hz (beat BPM = 120 × Hz, see synthDancer.js).
-const SCENARIOS = [
+// `click`: the design metronome — the tempo a human observer should feel
+// (used by video.js to overlay audio; refHz phase-aligns clicks to that
+// part's movement extremes, where motion beats are perceived).
+export const SCENARIOS = [
   {
     name: 'arms-only-120',
     title: 'Arm wave at 120 BPM',
     desc: 'Baseline: only the arms move (1.0 Hz swing → 120 BPM beat). The case that already works in the wild.',
     parts: { arms: { hz: 1.0, amp: 0.10 } },
+    click: { bpm: 120, refHz: 1.0, note: 'metronome on the arm beat' },
     checks: (ctx) => [
       verdict('detector locks ~120', near(ctx.bpm, 120), `settled at ${ctx.bpm.toFixed(0)} BPM`),
     ],
@@ -123,6 +127,7 @@ const SCENARIOS = [
     title: 'Hip sway at 96 BPM, nothing else',
     desc: 'Hips (and shoulders riding along) sway laterally at 0.8 Hz → 96 BPM beat. In isolation the slow layer is the only signal — can the detector see it at all?',
     parts: { hips: { hz: 0.8, amp: 0.045, axis: 'x' } },
+    click: { bpm: 96, refHz: 0.8, note: 'metronome on the hip beat' },
     checks: (ctx) => [
       verdict('detector locks ~96', near(ctx.bpm, 96), `settled at ${ctx.bpm.toFixed(0)} BPM`),
     ],
@@ -136,6 +141,7 @@ const SCENARIOS = [
       hips: { hz: 0.5, amp: 0.05, axis: 'x' },
       legs: { hz: 0.5, amp: 0.035 },
     },
+    click: { bpm: 60, refHz: 0.5, note: 'metronome on the GROOVE (hips/legs), not the arm flourish' },
     checks: (ctx) => [
       gapUnless('detector locks onto the groove (60, or its 120 octave)',
         ctx.wander < 15 && (near(ctx.bpm, 60) || near(ctx.bpm, 120)),
@@ -160,6 +166,7 @@ const SCENARIOS = [
       hips: { hz: 0.5, amp: 0.04, axis: 'x' },
       legs: { hz: 0.5, amp: 0.04 },
     },
+    click: { bpm: 120, refHz: 0.5, note: 'metronome is the SONG at 120; body hits every other click' },
     checks: (ctx) => [
       verdict('detector reports the movement octave (~60)', near(ctx.bpm, 60),
         `settled at ${ctx.bpm.toFixed(0)} BPM; matcher folds 60⇄120⇄240 into one octave, so matching still works`),
@@ -173,6 +180,7 @@ const SCENARIOS = [
       hips: { hz: 0.35, amp: 0.05, axis: 'x' },
       arms: { hz: 0.35, amp: 0.06 },
     },
+    click: { bpm: 42, refHz: 0.35, note: 'metronome on the sway beat, below the detector floor' },
     checks: (ctx) => [
       gapUnless('detector reports ~42 — or at least stays silent', near(ctx.bpm, 42, 5) || ctx.bpm === 0,
         `reports ${ctx.bpm ? ctx.bpm.toFixed(0) : 'nothing'} BPM (spread ${ctx.wander.toFixed(0)}, conf ~${ctx.conf.toFixed(2)}) — below-floor motion doesn't read as silence: near the floor it pins to the 50 BPM range edge, further below it wanders across random in-range tempos, either way clearing the 0.15 accept threshold`),
@@ -187,6 +195,7 @@ const SCENARIOS = [
     desc: 'Baseline plus gaussian keypoint noise (σ = 0.004 image units) at the level a phone pose detector wobbles. Speed-based energy amplifies white noise (differentiation), so jitter robustness is a real calibration axis.',
     parts: { arms: { hz: 1.0, amp: 0.10 } },
     noise: 0.004,
+    click: { bpm: 120, refHz: 1.0, note: 'metronome on the arm beat; keypoints jittered' },
     checks: (ctx) => [
       gapUnless('detector locks ~120 under realistic jitter', near(ctx.bpm, 120, 10) && ctx.wander < 20,
         `settled at ${ctx.bpm.toFixed(0)} BPM, spread ${ctx.wander.toFixed(0)} — differentiating positions amplifies white noise, so jitter lands in the exact signal the detector analyzes; smoothing or position-domain analysis is the fix direction`),
@@ -304,11 +313,14 @@ function runAnalyze(path, argBpm) {
 
 // ---------------------------------------------------------------------------
 
-const [, , cmd, ...rest] = process.argv;
-if (cmd === 'analyze') {
-  const bpmIdx = rest.indexOf('--bpm');
-  const bpm = bpmIdx >= 0 ? Number(rest[bpmIdx + 1]) : undefined;
-  runAnalyze(rest[0], bpm);
-} else {
-  process.exit(runSuite() ? 1 : 0);
+// Only dispatch when executed directly — video.js imports SCENARIOS.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const [, , cmd, ...rest] = process.argv;
+  if (cmd === 'analyze') {
+    const bpmIdx = rest.indexOf('--bpm');
+    const bpm = bpmIdx >= 0 ? Number(rest[bpmIdx + 1]) : undefined;
+    runAnalyze(rest[0], bpm);
+  } else {
+    process.exit(runSuite() ? 1 : 0);
+  }
 }
