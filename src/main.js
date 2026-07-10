@@ -24,22 +24,37 @@ const detector = new PoseDetector();
 const smoother = new PoseSmoother();
 const room = new RoomModel();
 const beat = new BeatDetector();
-let channel = new PoseChannel(); // rebuilt at start if guest dancers enabled
 
 // Guest dancers: "remote" dancers whose frames arrive via the channel.
 // Today that's the user's own moves replayed on a delay; later, real peers
 // and AI variants arrive through the exact same subscribe() path.
-const GUEST_DELAY_MS = 60_000;
+// Settings are live-adjustable from the burger menu while dancing.
 const GUEST_FADE_MS = 12_000;
-const guests = new Map(); // dancerId -> { avatar, pose, bornAt, dx, dy, scale }
+const guestCfg = { count: 1, spacingSec: 60, opacity: 0.9 };
+const transport = new DelayedLoopbackTransport({
+  guests: guestCfg.count,
+  spacingMs: guestCfg.spacingSec * 1000,
+});
+const channel = new PoseChannel(transport);
+channel.subscribe(onRemoteFrame);
+const guests = new Map(); // dancerId -> { avatar, pose, bornAt, slot, dx, dy, scale }
+
+// Distinct tint per guest slot so multiple guests read as different dancers.
+const GUEST_COLORS = [
+  { color: '#ff7dc5', glow: '#ffc2e4' }, // pink
+  { color: '#7dd3ff', glow: '#c2ecff' }, // cyan
+  { color: '#ffd27d', glow: '#ffe9c2' }, // amber
+];
 
 function onRemoteFrame(dancerId, frame) {
   let g = guests.get(dancerId);
   if (!g) {
+    const slot = parseInt(/^guest-(\d+)-/.exec(dancerId)?.[1] ?? '1', 10);
     g = {
-      avatar: new StickFigureAvatar({ color: '#ff7dc5', glow: '#ffc2e4' }),
+      avatar: new StickFigureAvatar(GUEST_COLORS[(slot - 1) % GUEST_COLORS.length]),
       pose: null,
       bornAt: performance.now(),
+      slot,
       // A spot behind the dancer: shifted to one side, slightly up + smaller
       dx: (0.12 + Math.random() * 0.15) * (Math.random() < 0.5 ? -1 : 1),
       dy: -0.05,
@@ -122,11 +137,13 @@ function loop() {
     updateFps(raw.t);
   }
 
-  // Guests render first so they appear behind the main dancer.
-  channel.transport.tick?.();
+  // Guests render first so they stay behind the main dancer, and are
+  // capped at guestCfg.opacity (default 90%) so they never crowd it out.
+  transport.tick();
   for (const g of guests.values()) {
     if (!g.pose) continue;
-    g.avatar.alpha = Math.min(1, (performance.now() - g.bornAt) / GUEST_FADE_MS);
+    const fade = Math.min(1, (performance.now() - g.bornAt) / GUEST_FADE_MS);
+    g.avatar.alpha = fade * guestCfg.opacity;
     g.avatar.render(ctx, g.pose, { width: W, height: H });
   }
 
@@ -184,12 +201,25 @@ async function startCamera() {
     return;
   }
   setLoading(null);
-  if ($('chk-guests').checked) {
-    channel = new PoseChannel(new DelayedLoopbackTransport(GUEST_DELAY_MS));
-    channel.subscribe(onRemoteFrame);
-  }
   showScreen('capture');
   if (!rafId) loop();
+}
+
+function exitToStart() {
+  $('menu-panel').classList.add('hidden');
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  camera.stop();
+  room.clear();
+  transport.clear();
+  guests.clear();
+  smoother.reset();
+  beat.reset();
+  lastPose = null;
+  fpsEma = 0;
+  lastFrameT = 0;
+  ctx.clearRect(0, 0, stage.width, stage.height);
+  showScreen('start');
 }
 
 async function captureRoom() {
@@ -226,7 +256,7 @@ $('btn-flip').addEventListener('click', async () => {
 });
 $('btn-rescan').addEventListener('click', () => {
   room.clear();
-  channel.transport.clear?.();
+  transport.clear();
   guests.clear();
   showScreen('capture');
 });
@@ -237,6 +267,36 @@ $('btn-ghost').addEventListener('click', (e) => {
 $('btn-torso').addEventListener('click', (e) => {
   avatar.torso = avatar.torso === '1d' ? '2d' : '1d';
   e.target.textContent = `Torso: ${avatar.torso.toUpperCase()}`;
+});
+
+// ---- Burger menu ----
+$('btn-menu').addEventListener('click', () => {
+  $('menu-panel').classList.toggle('hidden');
+});
+$('btn-exit').addEventListener('click', exitToStart);
+
+function bindSlider(id, valId, format, apply) {
+  const el = $(id);
+  const val = $(valId);
+  el.addEventListener('input', () => {
+    const v = Number(el.value);
+    val.textContent = format(v);
+    apply(v);
+  });
+}
+
+bindSlider('sl-guests', 'val-guests', (v) => `${v}`, (v) => {
+  guestCfg.count = v;
+  transport.configure({ guests: v });
+  // Drop guests from removed slots immediately.
+  for (const [id, g] of guests) if (g.slot > v) guests.delete(id);
+});
+bindSlider('sl-spacing', 'val-spacing', (v) => `${v}s`, (v) => {
+  guestCfg.spacingSec = v;
+  transport.configure({ spacingMs: v * 1000 });
+});
+bindSlider('sl-opacity', 'val-opacity', (v) => `${v}%`, (v) => {
+  guestCfg.opacity = v / 100;
 });
 
 // Keep the camera alive across tab switches (mobile browsers may pause it).

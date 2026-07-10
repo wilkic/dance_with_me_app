@@ -45,37 +45,51 @@ export class LoopbackTransport {
 }
 
 /**
- * DelayedLoopbackTransport: re-emits every published frame after a fixed
- * delay under a different dancer id — a stand-in for a network peer that
- * happens to be dancing your moves from a minute ago. Powers the "guest
- * dancer" feature, and exercises the full serialize → transmit →
- * deserialize path a real transport will use.
+ * DelayedLoopbackTransport: re-emits every published frame under different
+ * dancer ids, one per guest slot — stand-ins for network peers that happen
+ * to be dancing your moves from a while ago. Guest N's frames arrive
+ * spacingMs * N after the original. Powers the "guest dancer" feature, and
+ * exercises the full serialize → transmit → deserialize path a real
+ * transport will use.
+ *
+ * Entries store their send time rather than a due time, so configure() can
+ * change guests/spacing mid-dance and already-queued frames retime too.
  *
  * Call tick() regularly (once per render frame) to flush due frames.
  */
 export class DelayedLoopbackTransport {
-  constructor(delayMs = 60000) {
-    this.delayMs = delayMs;
-    this.queue = [];
+  constructor({ guests = 1, spacingMs = 60000 } = {}) {
+    this.guests = guests;
+    this.spacingMs = spacingMs;
+    this.queues = []; // per guest slot: [{ sentAt, id, buf }]
     this.onReceive = null;
   }
 
+  configure({ guests, spacingMs } = {}) {
+    if (guests !== undefined) this.guests = guests;
+    if (spacingMs !== undefined) this.spacingMs = spacingMs;
+    if (this.queues.length > this.guests) this.queues.length = this.guests;
+  }
+
   send(dancerId, buf) {
-    this.queue.push({
-      due: performance.now() + this.delayMs,
-      id: `guest-of-${dancerId}`,
-      buf,
-    });
+    const sentAt = performance.now();
+    for (let g = 0; g < this.guests; g++) {
+      (this.queues[g] ??= []).push({ sentAt, id: `guest-${g + 1}-of-${dancerId}`, buf });
+    }
   }
 
   tick(now = performance.now()) {
-    while (this.queue.length && this.queue[0].due <= now) {
-      const { id, buf } = this.queue.shift();
-      this.onReceive?.(id, buf);
+    for (let g = 0; g < this.queues.length; g++) {
+      const q = this.queues[g];
+      const delay = this.spacingMs * (g + 1);
+      while (q.length && q[0].sentAt + delay <= now) {
+        const { id, buf } = q.shift();
+        this.onReceive?.(id, buf);
+      }
     }
   }
 
   clear() {
-    this.queue.length = 0;
+    this.queues.length = 0;
   }
 }

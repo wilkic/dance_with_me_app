@@ -27,7 +27,11 @@ CDN on first load, so the phone needs internet the first time.
 
 Controls: **Ghost** toggles between the clean room (user removed) and the
 live feed (debugging). **Rescan** recaptures the room. **Flip** switches
-front/back camera before capture.
+front/back camera before capture. The **☰ menu** (top right while dancing)
+has guest-dancer options — how many guests (0–3), the delay before each
+appears, their opacity — and **Exit** back to the start screen. Guests are
+delayed replays of your own moves, drawn behind you at 90% opacity by
+default.
 
 ## Architecture
 

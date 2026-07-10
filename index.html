@@ -20,11 +20,8 @@
       <h1>Dance&nbsp;With&nbsp;Me</h1>
       <p class="tagline">Scan your room. Step in. Dance as a stick figure.</p>
       <button id="btn-start" class="primary">Start Camera</button>
-      <label class="toggle">
-        <input type="checkbox" id="chk-guests" />
-        Guest dancers &mdash; a partner fades in after a minute of dancing
-      </label>
-      <p class="hint">Works best on a phone. Allow camera access when prompted.</p>
+      <p class="hint">Works best on a phone. Allow camera access when prompted.<br />
+        A guest dancer fades in after a minute &mdash; tune it in the &#9776; menu while dancing.</p>
     </section>
 
     <!-- ===== Screen: room capture ===== -->
@@ -48,6 +45,25 @@
         <span id="hud-fps">-- fps</span>
         <span id="hud-bpm">-- bpm</span>
         <span id="hud-status"></span>
+      </div>
+      <button id="btn-menu" class="burger" aria-label="Menu">&#9776;</button>
+      <div id="menu-panel" class="menu hidden">
+        <div class="menu-row">
+          <label for="sl-guests">Guests</label>
+          <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" />
+          <span id="val-guests">1</span>
+        </div>
+        <div class="menu-row">
+          <label for="sl-spacing">Guest delay</label>
+          <input type="range" id="sl-spacing" min="30" max="180" step="15" value="60" />
+          <span id="val-spacing">60s</span>
+        </div>
+        <div class="menu-row">
+          <label for="sl-opacity">Guest opacity</label>
+          <input type="range" id="sl-opacity" min="10" max="100" step="5" value="90" />
+          <span id="val-opacity">90%</span>
+        </div>
+        <button id="btn-exit" class="danger">Exit to start</button>
       </div>
       <div class="bottom-bar">
         <button id="btn-rescan">&#8617; Rescan</button>

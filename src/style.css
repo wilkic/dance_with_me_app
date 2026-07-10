@@ -52,23 +52,6 @@ html, body {
 .tagline { color: #aab; max-width: 26rem; }
 .hint { color: #667; font-size: 0.85rem; }
 
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  color: #aab;
-  font-size: 0.9rem;
-  cursor: pointer;
-  max-width: 24rem;
-  text-align: left;
-}
-.toggle input {
-  accent-color: #b84ce7;
-  width: 1.15rem;
-  height: 1.15rem;
-  flex: none;
-}
-
 button {
   font: inherit;
   border: 1px solid #445;
@@ -96,7 +79,7 @@ button:active { transform: scale(0.97); }
   justify-content: space-between;
   pointer-events: none;
 }
-#screen-capture button, #screen-dance button { pointer-events: auto; }
+#screen-capture button, #screen-dance button, #screen-dance .menu { pointer-events: auto; }
 
 .top-banner {
   margin-top: env(safe-area-inset-top, 0);
@@ -125,6 +108,57 @@ button:active { transform: scale(0.97); }
   color: #fff;
   text-shadow: 0 0 30px rgba(108, 92, 231, 0.9);
   background: rgba(0, 0, 0, 0.35);
+}
+
+.burger {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 0.6rem);
+  right: 0.8rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.menu {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 3.5rem);
+  right: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: min(19rem, calc(100vw - 1.6rem));
+  background: rgba(10, 10, 20, 0.88);
+  border: 1px solid #334;
+  border-radius: 14px;
+  padding: 1rem;
+  backdrop-filter: blur(8px);
+  text-align: left;
+}
+
+.menu-row {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 2.8rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #aab;
+}
+
+.menu-row span {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #9fa8ff;
+}
+
+.menu input[type="range"] {
+  width: 100%;
+  accent-color: #b84ce7;
+  touch-action: manipulation;
+}
+
+button.danger {
+  border-color: #844;
+  color: #f9a;
 }
 
 .hud {
