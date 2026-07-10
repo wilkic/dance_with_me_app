@@ -262,6 +262,7 @@ export function loadRecording(path) {
     if (!line.trim()) continue;
     const o = JSON.parse(line);
     if (o.type === 'label') { label = o; continue; }
+    if (!Array.isArray(o.k)) continue; // not a frame line (e.g. manifest data)
     const f = emptyPoseFrame();
     f.t = o.t;
     f.keypoints.set(o.k);

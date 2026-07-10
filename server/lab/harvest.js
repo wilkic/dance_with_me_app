@@ -146,6 +146,10 @@ function sweep() {
     env: { ...process.env, RECORD_DIR: OUT_DIR },
     timeout: 3_000_000,
   });
+  if (r.status !== 0) {
+    console.log(`SWEEP FAILED: ${(r.stderr ?? '').trim().split('\n').slice(-3).join(' | ')}`);
+    return;
+  }
   const tail = (r.stdout ?? '').trim().split('\n').pop();
   console.log(`SWEEP done: ${tail}`);
 }

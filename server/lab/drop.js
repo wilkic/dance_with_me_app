@@ -156,7 +156,8 @@ ${cards}
 
 const force = process.argv.includes('--force');
 mkdirSync(DROP_DIR, { recursive: true });
-const files = readdirSync(REC_DIR).filter((f) => f.endsWith('.jsonl'));
+const files = readdirSync(REC_DIR)
+  .filter((f) => f.endsWith('.jsonl') && f !== 'library.jsonl'); // manifest ≠ recording
 if (!files.length) {
   console.log(`no .jsonl recordings in ${REC_DIR}`);
   process.exit(0);
