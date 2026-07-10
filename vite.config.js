@@ -11,5 +11,11 @@ export default defineConfig({
   plugins: [basicSsl()],
   server: {
     https: true,
+    proxy: {
+      // Dance-analysis server: the app opens wss://<host>/ws when started
+      // with ?server=1, riding the already-accepted dev cert. Run it with
+      // `npm start` in server/.
+      '/ws': { target: 'ws://localhost:8901', ws: true },
+    },
   },
 });

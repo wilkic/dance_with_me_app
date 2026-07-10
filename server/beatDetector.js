@@ -1,4 +1,4 @@
-import { KP, getKeypoint } from '../pose/poseFormat.js';
+import { KP, getKeypoint } from '../src/pose/poseFormat.js';
 
 // Joints that carry the most rhythmic information, weighted accordingly.
 const TRACKED = [

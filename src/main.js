@@ -3,8 +3,12 @@ import { PoseDetector } from './pose/poseDetector.js';
 import { PoseSmoother } from './pose/smoothing.js';
 import { RoomModel } from './room/roomModel.js';
 import { StickFigureAvatar } from './avatar/stickFigure.js';
-import { BeatDetector } from './rhythm/beatDetector.js';
-import { PoseChannel, DelayedLoopbackTransport } from './net/poseChannel.js';
+import {
+  PoseChannel,
+  DelayedLoopbackTransport,
+  WebSocketTransport,
+  CompositeTransport,
+} from './net/poseChannel.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 
 // ---- DOM ----
@@ -23,7 +27,6 @@ const camera = new Camera(video);
 const detector = new PoseDetector();
 const smoother = new PoseSmoother();
 const room = new RoomModel();
-const beat = new BeatDetector();
 
 // Guest dancers: "remote" dancers whose frames arrive via the channel.
 // Today that's the user's own moves replayed on a delay; later, real peers
@@ -31,12 +34,37 @@ const beat = new BeatDetector();
 // Settings are live-adjustable from the burger menu while dancing.
 const GUEST_FADE_MS = 12_000;
 const guestCfg = { count: 1, spacingSec: 60, opacity: 0.9 };
-const transport = new DelayedLoopbackTransport({
+const guestTransport = new DelayedLoopbackTransport({
   guests: guestCfg.count,
   spacingMs: guestCfg.spacingSec * 1000,
 });
-const channel = new PoseChannel(transport);
+
+// Dance-analysis server (optional): rhythm/BPM analysis lives there now.
+// ?server=1 uses the Vite dev proxy (wss://<host>/ws → local server);
+// ?server=wss://… connects directly. Without it the app is fully offline
+// and shows no BPM.
+const serverParam = new URLSearchParams(location.search).get('server');
+const serverUrl = serverParam === '1' ? `wss://${location.host}/ws` : serverParam;
+const serverLink = serverUrl ? new WebSocketTransport(serverUrl) : null;
+if (serverLink) serverLink.onMessage = onServerMessage;
+
+const channel = new PoseChannel(
+  serverLink ? new CompositeTransport([guestTransport, serverLink]) : guestTransport,
+);
 channel.subscribe(onRemoteFrame);
+
+function onServerMessage(msg) {
+  if (msg.type === 'profile') {
+    $('hud-bpm').textContent = msg.bpm > 0 && msg.confidence > 0.25
+      ? `${msg.bpm.toFixed(0)} bpm`
+      : '-- bpm';
+  } else if (msg.type === 'match') {
+    $('hud-match').textContent =
+      `♪ ${msg.song.title} (${Math.round(msg.song.bpm)} bpm) with ${msg.partner}`;
+  } else if (msg.type === 'unmatch') {
+    $('hud-match').textContent = '';
+  }
+}
 const guests = new Map(); // dancerId -> { avatar, pose, bornAt, slot, dx, dy, scale }
 
 // Distinct tint per guest slot so multiple guests read as different dancers.
@@ -132,14 +160,13 @@ function loop() {
   const raw = detector.detect(video, camera.mirrored);
   if (raw) {
     lastPose = smoother.apply(raw);
-    beat.update(lastPose);
-    channel.publish(lastPose); // networking seam: no-op in single player
+    channel.publish(lastPose); // → guest queues + dance-analysis server
     updateFps(raw.t);
   }
 
   // Guests render first so they stay behind the main dancer, and are
   // capped at guestCfg.opacity (default 90%) so they never crowd it out.
-  transport.tick();
+  channel.transport.tick?.();
   for (const g of guests.values()) {
     if (!g.pose) continue;
     const fade = Math.min(1, (performance.now() - g.bornAt) / GUEST_FADE_MS);
@@ -148,17 +175,14 @@ function loop() {
   }
 
   if (lastPose) {
-    avatar.render(ctx, lastPose, { width: W, height: H }, beat.state);
+    avatar.render(ctx, lastPose, { width: W, height: H });
     $('hud-status').textContent = '';
   } else {
     $('hud-status').textContent = 'step into frame…';
   }
 
-  // HUD
+  // HUD (bpm/match come from server opinions via onServerMessage)
   $('hud-fps').textContent = `${fpsEma.toFixed(0)} fps`;
-  $('hud-bpm').textContent = beat.state.bpm > 0 && beat.state.confidence > 0.25
-    ? `${beat.state.bpm.toFixed(0)} bpm`
-    : '-- bpm';
 }
 
 function drawVideo() {
@@ -211,10 +235,9 @@ function exitToStart() {
   rafId = null;
   camera.stop();
   room.clear();
-  transport.clear();
+  guestTransport.clear();
   guests.clear();
   smoother.reset();
-  beat.reset();
   lastPose = null;
   fpsEma = 0;
   lastFrameT = 0;
@@ -235,7 +258,6 @@ async function captureRoom() {
   cd.classList.add('hidden');
 
   smoother.reset();
-  beat.reset();
   lastPose = null;
   fpsEma = 0;
   lastFrameT = 0;
@@ -256,7 +278,7 @@ $('btn-flip').addEventListener('click', async () => {
 });
 $('btn-rescan').addEventListener('click', () => {
   room.clear();
-  transport.clear();
+  guestTransport.clear();
   guests.clear();
   showScreen('capture');
 });
@@ -287,13 +309,13 @@ function bindSlider(id, valId, format, apply) {
 
 bindSlider('sl-guests', 'val-guests', (v) => `${v}`, (v) => {
   guestCfg.count = v;
-  transport.configure({ guests: v });
+  guestTransport.configure({ guests: v });
   // Drop guests from removed slots immediately.
   for (const [id, g] of guests) if (g.slot > v) guests.delete(id);
 });
 bindSlider('sl-spacing', 'val-spacing', (v) => `${v}s`, (v) => {
   guestCfg.spacingSec = v;
-  transport.configure({ spacingMs: v * 1000 });
+  guestTransport.configure({ spacingMs: v * 1000 });
 });
 bindSlider('sl-opacity', 'val-opacity', (v) => `${v}%`, (v) => {
   guestCfg.opacity = v / 100;

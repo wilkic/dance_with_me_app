@@ -45,6 +45,72 @@ export class LoopbackTransport {
 }
 
 /**
+ * WebSocketTransport: streams serialized PoseFrames to the dance-analysis
+ * server (binary frames) and surfaces its JSON opinions — profile, match,
+ * unmatch — via onMessage. Reconnects automatically. Binary frames from
+ * the server (future: matched partners' poses relayed back) will arrive
+ * through the standard onReceive path once the server starts sending them.
+ */
+export class WebSocketTransport {
+  constructor(url) {
+    this.url = url;
+    this.onReceive = null;
+    this.onMessage = null;
+    this.ws = null;
+    this.closed = false;
+    this.#connect();
+  }
+
+  #connect() {
+    const ws = new WebSocket(this.url);
+    ws.binaryType = 'arraybuffer';
+    ws.onmessage = (ev) => {
+      if (typeof ev.data === 'string') {
+        try { this.onMessage?.(JSON.parse(ev.data)); } catch { /* ignore bad JSON */ }
+      }
+    };
+    ws.onerror = () => ws.close();
+    ws.onclose = () => {
+      this.ws = null;
+      if (!this.closed) setTimeout(() => this.#connect(), 3000);
+    };
+    this.ws = ws;
+  }
+
+  send(_dancerId, buf) {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(buf);
+  }
+
+  close() {
+    this.closed = true;
+    this.ws?.close();
+  }
+}
+
+/** Fans one channel out over several transports (e.g. guests + server). */
+export class CompositeTransport {
+  constructor(transports) {
+    this.transports = transports;
+  }
+
+  set onReceive(cb) {
+    for (const t of this.transports) t.onReceive = cb;
+  }
+
+  send(id, buf) {
+    for (const t of this.transports) t.send(id, buf);
+  }
+
+  tick(now) {
+    for (const t of this.transports) t.tick?.(now);
+  }
+
+  clear() {
+    for (const t of this.transports) t.clear?.();
+  }
+}
+
+/**
  * DelayedLoopbackTransport: re-emits every published frame under different
  * dancer ids, one per guest slot — stand-ins for network peers that happen
  * to be dancing your moves from a while ago. Guest N's frames arrive

@@ -1,0 +1,14 @@
+{
+  "name": "dance-with-me-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dance-analysis server: ingests PoseFrames, forms opinions on dance style (tempo first), matches dancers via next songs.",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test/synthetic.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -22,8 +22,8 @@ CDN on first load, so the phone needs internet the first time.
    of frame, tap the button. A 5-second countdown fires, then the app
    averages several frames into a "clean plate" of your empty room.
 3. **Dance** — step back in. You're gone from the screen; a stick figure
-   dances in your room instead. The HUD shows FPS and, once you move
-   rhythmically for a few seconds, your motion-derived BPM.
+   dances in your room instead. The HUD shows FPS — and, when connected to
+   the dance-analysis server, your motion-derived BPM and song matches.
 
 Controls: **Ghost** toggles between the clean room (user removed) and the
 live feed (debugging). **Rescan** recaptures the room. **Flip** switches
@@ -46,10 +46,36 @@ src/
   avatar/
     avatar.js          Avatar interface (render(ctx, poseFrame, viewport, beat))
     stickFigure.js     MVP implementation: glowing stick figure, beat pulse
-  rhythm/beatDetector.js  tempo + beats from motion alone (no audio)
   net/poseChannel.js   networking seam: publish/subscribe of PoseFrames
   main.js              app state machine + render loop
+server/                dance-analysis server (Node, separate package.json)
+  index.js             WebSocket ingest of PoseFrames → opinions out
+  beatDetector.js      tempo + beats from motion alone (moved from the client)
+  matcher.js           tempo-first pairing, half/double-tempo tolerant
+  songs.js             stub BPM-labeled catalog for "next song" pairing
+  test/synthetic.js    end-to-end: 2 synthetic dancers → profiled + matched
 ```
+
+### Dance-analysis server
+
+Rhythm analysis no longer runs on the phone. The client streams its raw
+PoseFrames (the same binary format used everywhere) to the server, which
+runs a per-dancer BeatDetector, forms an opinion of each dancer's tempo,
+and pairs tempo-compatible dancers by proposing a shared "next song" — the
+music does the syncing, not phase alignment. Without a server the app is
+fully offline as before (no BPM shown).
+
+```bash
+cd server && npm install && npm start   # ws://0.0.0.0:8901
+npm run dev                             # in another terminal, as usual
+```
+
+Then open the app with `?server=1` appended
+(`https://<lan-ip>:5173/?server=1`) — the dev server proxies `/ws` to the
+analysis server so the phone reuses the already-accepted HTTPS cert. On a
+non-Vite host pass a full URL instead: `?server=wss://host:port`.
+`cd server && npm test` runs the synthetic end-to-end check (two fake
+dancers at 120/118 BPM must be profiled and matched).
 
 ### Design decisions (and how they serve the end-state)
 
