@@ -5,3 +5,4 @@ dist/
 .claude/
 server/lab/out/
 server/recordings/
+server/recordings_web/

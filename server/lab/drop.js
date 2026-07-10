@@ -26,7 +26,10 @@ import { renderClip } from './video.js';
 
 const LAB_DIR = dirname(fileURLToPath(import.meta.url));
 const REC_DIR = process.env.RECORD_DIR ?? join(LAB_DIR, '..', 'recordings');
-const DROP_DIR = join(LAB_DIR, 'out', 'drop');
+// Each recordings folder gets its own gallery (web ingests via
+// RECORD_DIR=recordings_web don't mix into Chris's metronome tests).
+const DROP_DIR = join(LAB_DIR, 'out',
+  basename(REC_DIR) === 'recordings' ? 'drop' : `drop-${basename(REC_DIR)}`);
 const FPS = 30;
 const MIN_FRAMES = 90; // same floor as run.js analyze — a few seconds
 
@@ -67,7 +70,7 @@ function processRecording(path, force) {
     }
     renderClip({
       name,
-      title: name,
+      title: label?.title ? String(label.title).slice(0, 48) : name,
       partLines: [
         `recorded ${durS.toFixed(0)}s at ~${fps.toFixed(0)} fps`,
         clickBpm ? `label: click ${clickBpm} BPM (phase arbitrary)` : 'no click label',
@@ -85,6 +88,8 @@ function processRecording(path, force) {
 
   return {
     name,
+    title: label?.title ?? null,
+    source: label?.source ?? null,
     durS,
     fps,
     frames: frames.length,
@@ -110,6 +115,7 @@ function writeIndex(entries) {
       <p class="meta">detector settled at
         <b style="color:${verdictColor}">${e.settled.toFixed(0)} BPM</b>
         ${e.clickBpm ? `(target ${e.clickBpm})` : ''}</p>
+      ${e.title ? `<p>${e.title}${e.source ? ` — <a href="${e.source}">source ↗</a>` : ''}</p>` : ''}
       <p><a href="${e.name}.html">waterfall analysis report →</a></p>
     </div>
   </section>`;
