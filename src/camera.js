@@ -6,7 +6,9 @@ export class Camera {
   constructor(videoEl) {
     this.video = videoEl;
     this.stream = null;
-    this.facingMode = 'environment'; // back camera by default (phone propped up)
+    // Front camera by default: the phone is propped up facing the dancer,
+    // so the self-facing camera is the one you dance to. Flip gets the back.
+    this.facingMode = 'user';
   }
 
   get width() { return this.video.videoWidth; }
