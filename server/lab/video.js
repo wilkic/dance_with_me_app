@@ -36,6 +36,37 @@ function run(cmd, args) {
   }
 }
 
+/**
+ * Render one clip: frames [{t(ms), k:number[132]}] → <outDir>/<name>.mp4.
+ * Reused by drop.js to replay real recordings; frames must be ~uniformly
+ * spaced at `fps` (wall-clock time is frameIndex/fps).
+ */
+export function renderClip({ name, title, partLines, click, clickTimes, frames, outDir = VID_DIR, fps = FPS }) {
+  const tmp = join(outDir, 'tmp', name);
+  const framesDir = join(tmp, 'frames');
+  mkdirSync(framesDir, { recursive: true });
+
+  const job = { title, partLines, click: click ?? null, clickTimes, fps, size: SIZE, frames };
+  const jobPath = join(tmp, 'job.json');
+  const wavPath = join(tmp, 'click.wav');
+  writeFileSync(jobPath, JSON.stringify(job));
+
+  run('python3', [join(LAB_DIR, 'render_video.py'), jobPath, framesDir, wavPath]);
+
+  const out = join(outDir, `${name}.mp4`);
+  run('ffmpeg', [
+    '-y',
+    '-framerate', String(fps), '-i', join(framesDir, '%05d.png'),
+    '-i', wavPath,
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-shortest', '-movflags', '+faststart',
+    out,
+  ]);
+  rmSync(tmp, { recursive: true, force: true });
+  console.log(`video: ${out}  (click ${click?.bpm ?? '—'} BPM: ${click?.note ?? 'none'})`);
+  return out;
+}
+
 function makeVideo(sc) {
   const dancer = makeDancer({ parts: sc.parts, noise: sc.noise });
   const frames = dancer.frames(DURATION_S, FPS).map((f) => ({
@@ -56,36 +87,7 @@ function makeVideo(sc) {
   );
   if (sc.noise) partLines.push(`keypoint jitter s=${sc.noise}`);
 
-  const tmp = join(VID_DIR, 'tmp', sc.name);
-  const framesDir = join(tmp, 'frames');
-  mkdirSync(framesDir, { recursive: true });
-
-  const job = {
-    title: sc.title,
-    partLines,
-    click: sc.click ?? null,
-    clickTimes,
-    fps: FPS,
-    size: SIZE,
-    frames,
-  };
-  const jobPath = join(tmp, 'job.json');
-  const wavPath = join(tmp, 'click.wav');
-  writeFileSync(jobPath, JSON.stringify(job));
-
-  run('python3', [join(LAB_DIR, 'render_video.py'), jobPath, framesDir, wavPath]);
-
-  const out = join(VID_DIR, `${sc.name}.mp4`);
-  run('ffmpeg', [
-    '-y',
-    '-framerate', String(FPS), '-i', join(framesDir, '%05d.png'),
-    '-i', wavPath,
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-shortest', '-movflags', '+faststart',
-    out,
-  ]);
-  rmSync(tmp, { recursive: true, force: true });
-  console.log(`video: ${out}  (click ${sc.click?.bpm ?? '—'} BPM: ${sc.click?.note ?? 'none'})`);
+  renderClip({ name: sc.name, title: sc.title, partLines, click: sc.click, clickTimes, frames });
 }
 
 // What a human should watch/listen for, per scenario (gallery only).
@@ -151,15 +153,18 @@ ${cards}
   console.log(`gallery: ${out}`);
 }
 
-const names = process.argv.slice(2);
-if (!names.includes('--gallery')) {
-  const picked = names.length
-    ? SCENARIOS.filter((s) => names.includes(s.name))
-    : SCENARIOS;
-  if (!picked.length) {
-    console.error(`no scenario matches ${names}; have: ${SCENARIOS.map((s) => s.name).join(', ')}`);
-    process.exit(1);
+// Only dispatch when executed directly — drop.js imports renderClip.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const names = process.argv.slice(2);
+  if (!names.includes('--gallery')) {
+    const picked = names.length
+      ? SCENARIOS.filter((s) => names.includes(s.name))
+      : SCENARIOS;
+    if (!picked.length) {
+      console.error(`no scenario matches ${names}; have: ${SCENARIOS.map((s) => s.name).join(', ')}`);
+      process.exit(1);
+    }
+    for (const sc of picked) makeVideo(sc);
   }
-  for (const sc of picked) makeVideo(sc);
+  writeGallery();
 }
-writeGallery();

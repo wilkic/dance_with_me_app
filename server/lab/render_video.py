@@ -87,7 +87,7 @@ def render_frames(job, frames_dir):
         if job["click"]:
             d.text((14, H - 40), f"click {job['click']['bpm']} BPM — {job['click']['note']}",
                    fill=TEXT, font=small)
-        d.text((W - 60, H - 40), f"{t:5.1f}s", fill=TEXT, font=small)
+        d.text((W - 60, 12), f"{t:5.1f}s", fill=TEXT, font=small)
 
         img.save(f"{frames_dir}/{n:05d}.png")
 

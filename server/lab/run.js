@@ -29,7 +29,7 @@ const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), 'out');
 // ---------------------------------------------------------------------------
 // Analysis plumbing
 
-function detectorTrace(frames) {
+export function detectorTrace(frames) {
   const det = new BeatDetector();
   const trace = [];
   let lastSampled = -Infinity;
@@ -44,7 +44,7 @@ function detectorTrace(frames) {
 }
 
 /** Median of the last few non-zero detector estimates — the "verdict" BPM. */
-function settledBpm(trace) {
+export function settledBpm(trace) {
   const tail = trace.filter((p) => p.bpm > 0).slice(-7).map((p) => p.bpm).sort((a, b) => a - b);
   return tail.length ? tail[Math.floor(tail.length / 2)] : 0;
 }
@@ -255,7 +255,7 @@ function runSuite() {
 // ---------------------------------------------------------------------------
 // Recording analysis
 
-function loadRecording(path) {
+export function loadRecording(path) {
   const frames = [];
   let label = null;
   for (const line of readFileSync(path, 'utf8').split('\n')) {
@@ -274,7 +274,7 @@ function loadRecording(path) {
   return { frames, label };
 }
 
-function runAnalyze(path, argBpm) {
+export function runAnalyze(path, argBpm) {
   const { frames, label } = loadRecording(path);
   if (frames.length < 90) {
     console.error(`only ${frames.length} frames in ${path} — need a few seconds of dancing`);
