@@ -4,7 +4,8 @@ import { PoseSmoother } from './pose/smoothing.js';
 import { RoomModel } from './room/roomModel.js';
 import { StickFigureAvatar } from './avatar/stickFigure.js';
 import { BeatDetector } from './rhythm/beatDetector.js';
-import { PoseChannel } from './net/poseChannel.js';
+import { PoseChannel, DelayedLoopbackTransport } from './net/poseChannel.js';
+import { KP, STRIDE } from './pose/poseFormat.js';
 
 // ---- DOM ----
 const $ = (id) => document.getElementById(id);
@@ -23,7 +24,39 @@ const detector = new PoseDetector();
 const smoother = new PoseSmoother();
 const room = new RoomModel();
 const beat = new BeatDetector();
-const channel = new PoseChannel();
+let channel = new PoseChannel(); // rebuilt at start if guest dancers enabled
+
+// Guest dancers: "remote" dancers whose frames arrive via the channel.
+// Today that's the user's own moves replayed on a delay; later, real peers
+// and AI variants arrive through the exact same subscribe() path.
+const GUEST_DELAY_MS = 60_000;
+const GUEST_FADE_MS = 12_000;
+const guests = new Map(); // dancerId -> { avatar, pose, bornAt, dx, dy, scale }
+
+function onRemoteFrame(dancerId, frame) {
+  let g = guests.get(dancerId);
+  if (!g) {
+    g = {
+      avatar: new StickFigureAvatar({ color: '#ff7dc5', glow: '#ffc2e4' }),
+      pose: null,
+      bornAt: performance.now(),
+      // A spot behind the dancer: shifted to one side, slightly up + smaller
+      dx: (0.12 + Math.random() * 0.15) * (Math.random() < 0.5 ? -1 : 1),
+      dy: -0.05,
+      scale: 0.8,
+    };
+    guests.set(dancerId, g);
+  }
+  // Place the guest "behind": shrink about the hip midpoint, then shift.
+  const kp = frame.keypoints;
+  const cx = (kp[KP.LEFT_HIP * STRIDE] + kp[KP.RIGHT_HIP * STRIDE]) / 2;
+  const cy = (kp[KP.LEFT_HIP * STRIDE + 1] + kp[KP.RIGHT_HIP * STRIDE + 1]) / 2;
+  for (let i = 0; i < kp.length; i += STRIDE) {
+    kp[i] = cx + (kp[i] - cx) * g.scale + g.dx;
+    kp[i + 1] = cy + (kp[i + 1] - cy) * g.scale + g.dy;
+  }
+  g.pose = frame;
+}
 
 // Local dancer avatar. Swappable: any Avatar implementation works here,
 // and remote dancers (via channel.subscribe) would get their own instances.
@@ -89,6 +122,14 @@ function loop() {
     updateFps(raw.t);
   }
 
+  // Guests render first so they appear behind the main dancer.
+  channel.transport.tick?.();
+  for (const g of guests.values()) {
+    if (!g.pose) continue;
+    g.avatar.alpha = Math.min(1, (performance.now() - g.bornAt) / GUEST_FADE_MS);
+    g.avatar.render(ctx, g.pose, { width: W, height: H });
+  }
+
   if (lastPose) {
     avatar.render(ctx, lastPose, { width: W, height: H }, beat.state);
     $('hud-status').textContent = '';
@@ -143,6 +184,10 @@ async function startCamera() {
     return;
   }
   setLoading(null);
+  if ($('chk-guests').checked) {
+    channel = new PoseChannel(new DelayedLoopbackTransport(GUEST_DELAY_MS));
+    channel.subscribe(onRemoteFrame);
+  }
   showScreen('capture');
   if (!rafId) loop();
 }
@@ -181,6 +226,8 @@ $('btn-flip').addEventListener('click', async () => {
 });
 $('btn-rescan').addEventListener('click', () => {
   room.clear();
+  channel.transport.clear?.();
+  guests.clear();
   showScreen('capture');
 });
 $('btn-ghost').addEventListener('click', (e) => {

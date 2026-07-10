@@ -25,11 +25,12 @@ const LIMB_BONES = [
  *    forming a quad (the original MVP look).
  */
 export class StickFigureAvatar extends Avatar {
-  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d' } = {}) {
+  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1 } = {}) {
     super();
     this.color = color;
     this.glow = glow;
     this.torso = torso;
+    this.alpha = alpha; // 0..1, lets guests fade into the room
   }
 
   render(ctx, frame, viewport, beat = null) {
@@ -59,6 +60,7 @@ export class StickFigureAvatar extends Avatar {
     }
 
     ctx.save();
+    ctx.globalAlpha = this.alpha;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.strokeStyle = this.color;

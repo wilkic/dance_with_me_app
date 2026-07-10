@@ -52,6 +52,23 @@ html, body {
 .tagline { color: #aab; max-width: 26rem; }
 .hint { color: #667; font-size: 0.85rem; }
 
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #aab;
+  font-size: 0.9rem;
+  cursor: pointer;
+  max-width: 24rem;
+  text-align: left;
+}
+.toggle input {
+  accent-color: #b84ce7;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+}
+
 button {
   font: inherit;
   border: 1px solid #445;

@@ -43,3 +43,39 @@ export class LoopbackTransport {
     // to peers; remote peers' frames come back via this.onReceive.
   }
 }
+
+/**
+ * DelayedLoopbackTransport: re-emits every published frame after a fixed
+ * delay under a different dancer id — a stand-in for a network peer that
+ * happens to be dancing your moves from a minute ago. Powers the "guest
+ * dancer" feature, and exercises the full serialize → transmit →
+ * deserialize path a real transport will use.
+ *
+ * Call tick() regularly (once per render frame) to flush due frames.
+ */
+export class DelayedLoopbackTransport {
+  constructor(delayMs = 60000) {
+    this.delayMs = delayMs;
+    this.queue = [];
+    this.onReceive = null;
+  }
+
+  send(dancerId, buf) {
+    this.queue.push({
+      due: performance.now() + this.delayMs,
+      id: `guest-of-${dancerId}`,
+      buf,
+    });
+  }
+
+  tick(now = performance.now()) {
+    while (this.queue.length && this.queue[0].due <= now) {
+      const { id, buf } = this.queue.shift();
+      this.onReceive?.(id, buf);
+    }
+  }
+
+  clear() {
+    this.queue.length = 0;
+  }
+}
