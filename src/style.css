@@ -195,3 +195,53 @@ button.danger {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Dance rooms (start screen) ---- */
+.room-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  width: min(22rem, 100%);
+  padding: 1rem 1.1rem 0.9rem;
+  border: 1px solid #334;
+  border-radius: 16px;
+  background: rgba(10, 10, 20, 0.55);
+}
+.room-box > label {
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9fa8ff;
+}
+.room-input {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+.room-input input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 1.15rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(20, 20, 35, 0.9);
+  border: 1px solid #556;
+  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.room-input input:focus { outline: none; border-color: #b84ce7; }
+.room-input button { padding: 0.5rem 0.8rem; font-size: 1.2rem; }
+.room-box .hint { margin-top: 0.1rem; }
+.status { min-height: 1.2em; }
+.status.online { color: #7dffb0; }
+.status.offline { color: #f9a; }
+.room-line {
+  color: #9fa8ff;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+#hud-room { color: #fff; font-weight: 600; }

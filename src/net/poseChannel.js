@@ -1,13 +1,15 @@
 import { serializePoseFrame, deserializePoseFrame } from '../pose/poseFormat.js';
+import { decodeEnvelope } from './envelope.js';
 
 /**
  * PoseChannel: the networking seam for future multiplayer.
  *
  * The dance loop publishes every local PoseFrame here. Subscribers receive
- * frames tagged with a dancer id. In the MVP the only transport is
- * LoopbackTransport (frames go nowhere), but a WebRTC/WebSocket transport
- * can be dropped in without touching the render loop: remote frames arrive
- * through the same subscribe() path and get rendered as additional avatars.
+ * frames tagged with a dancer id. Transports: LoopbackTransport (frames go
+ * nowhere), DelayedLoopbackTransport (your own moves come back as guests),
+ * WebSocketTransport (the dance server relays room-mates' frames back).
+ * Remote frames all arrive through the same subscribe() path and get
+ * rendered as additional avatars.
  */
 export class PoseChannel {
   constructor(transport = new LoopbackTransport()) {
@@ -45,47 +47,75 @@ export class LoopbackTransport {
 }
 
 /**
- * WebSocketTransport: streams serialized PoseFrames to the dance-analysis
- * server (binary frames) and surfaces its JSON opinions — profile, match,
- * unmatch — via onMessage. Reconnects automatically. Binary frames from
- * the server (future: matched partners' poses relayed back) will arrive
- * through the standard onReceive path once the server starts sending them.
+ * WebSocketTransport: streams serialized PoseFrames to the dance server
+ * (binary frames) and surfaces its JSON opinions — profile, room, match,
+ * unmatch — via onMessage. Binary frames from the server are relay
+ * envelopes carrying room-mates' PoseFrames; they arrive through the
+ * standard onReceive path and render as guest avatars. Reconnects
+ * automatically and re-joins the current room on every (re)connect.
  */
 export class WebSocketTransport {
   constructor(url) {
     this.url = url;
     this.onReceive = null;
     this.onMessage = null;
-    this.onOpen = null; // fires on every (re)connect — resend session state here
+    this.onOpen = null;   // fires on every (re)connect — resend session state here
+    this.onStatus = null; // 'connecting' | 'open' | 'closed'
+    this.room = null;     // room to (re)join on connect
     this.ws = null;
     this.closed = false;
     this.#connect();
   }
 
+  get connected() {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
   #connect() {
+    this.onStatus?.('connecting');
     const ws = new WebSocket(this.url);
     ws.binaryType = 'arraybuffer';
-    ws.onopen = () => this.onOpen?.();
+    ws.onopen = () => {
+      this.onStatus?.('open');
+      if (this.room) this.sendJSON({ type: 'join', room: this.room });
+      this.onOpen?.();
+    };
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         try { this.onMessage?.(JSON.parse(ev.data)); } catch { /* ignore bad JSON */ }
+      } else {
+        const { dancerId, frameBytes } = decodeEnvelope(ev.data);
+        this.onReceive?.(dancerId, frameBytes);
       }
     };
     ws.onerror = () => ws.close();
     ws.onclose = () => {
       this.ws = null;
+      this.onStatus?.('closed');
       if (!this.closed) setTimeout(() => this.#connect(), 3000);
     };
     this.ws = ws;
   }
 
   send(_dancerId, buf) {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(buf);
+    if (this.connected) this.ws.send(buf);
   }
 
   /** Text-frame control message (labels etc.) — see server/index.js. */
   sendJSON(obj) {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
+    if (this.connected) this.ws.send(JSON.stringify(obj));
+  }
+
+  /** Enter a dance room (created if it doesn't exist). Sticky across reconnects. */
+  join(room) {
+    this.room = room;
+    this.sendJSON({ type: 'join', room });
+  }
+
+  /** Back to solo dancing. */
+  leave() {
+    this.room = null;
+    this.sendJSON({ type: 'leave' });
   }
 
   close() {

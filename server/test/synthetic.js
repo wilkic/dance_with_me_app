@@ -1,15 +1,17 @@
 /**
  * End-to-end synthetic test: start the server, connect two WebSocket
  * clients streaming synthetic PoseFrames "dancing" at 120 and 118 BPM,
- * and assert the server profiles both near 120 and matches them with a
- * tempo-appropriate song.
+ * in the same dance room, and assert the server profiles both near 120,
+ * relays each one's frames to the other, reports the room tempo, and
+ * matches them with a tempo-appropriate song.
  *
  * Synthesis note: motion energy is joint *speed*, so a joint oscillating
  * at 1 Hz produces two energy peaks per cycle → 2 Hz → 120 BPM.
  */
 import WebSocket from 'ws';
 import { startServer } from '../index.js';
-import { serializePoseFrame, emptyPoseFrame, KP, STRIDE } from '../../src/pose/poseFormat.js';
+import { serializePoseFrame, deserializePoseFrame, emptyPoseFrame, KP, STRIDE } from '../../src/pose/poseFormat.js';
+import { decodeEnvelope } from '../../src/net/envelope.js';
 
 const setKp = (frame, i, x, y) => {
   const o = i * STRIDE;
@@ -44,13 +46,27 @@ function makeFrame(tMs, beatBpm) {
 function connectDancer(port, bpm) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-    const dancer = { bpm, ws, id: null, profile: null, match: null };
+    const dancer = { bpm, ws, id: null, profile: null, match: null, room: null, relayed: new Map() };
     ws.on('message', (data, isBinary) => {
-      if (isBinary) return;
+      if (isBinary) {
+        // Room-mates' frames, relayed: count them per sender.
+        const { dancerId, frameBytes } = decodeEnvelope(new Uint8Array(data));
+        const f = deserializePoseFrame(frameBytes);
+        const r = dancer.relayed.get(dancerId) ?? { n: 0, lastT: 0 };
+        r.n++;
+        r.lastT = f.t;
+        dancer.relayed.set(dancerId, r);
+        return;
+      }
       const msg = JSON.parse(data.toString());
       if (msg.type === 'welcome') {
         dancer.id = msg.id;
+        ws.send(JSON.stringify({ type: 'join', room: 'Test Floor' }));
+      } else if (msg.type === 'joined') {
+        dancer.joined = msg;
         resolve(dancer);
+      } else if (msg.type === 'room') {
+        dancer.room = msg;
       } else if (msg.type === 'profile') {
         dancer.profile = msg;
       } else if (msg.type === 'match') {
@@ -104,6 +120,36 @@ for (const d of dancers) {
 check(
   'dancers matched with each other',
   dancers[0].match?.partner === dancers[1].id && dancers[1].match?.partner === dancers[0].id,
+);
+
+// ---- Dance room checks ----
+const [d0, d1] = dancers;
+check(
+  `room: first dancer created "test-floor", second joined it`,
+  d0.joined?.room === 'test-floor' && d0.joined.created === true &&
+  d1.joined?.room === 'test-floor' && d1.joined.created === false,
+);
+const nFrames = Math.floor(15000 / 33) + 1;
+for (const [me, other] of [[d0, d1], [d1, d0]]) {
+  const r = me.relayed.get(other.id);
+  check(
+    `room: dancer@${me.bpm} received ${r?.n ?? 0}/${nFrames} of dancer@${other.bpm}'s frames (last t=${r?.lastT})`,
+    r?.n === nFrames && r.lastT === (nFrames - 1) * 33 && me.relayed.size === 1,
+  );
+}
+check(
+  `room: opinion lists both members with tempo (room ${d0.room?.bpm?.toFixed(1)} bpm)`,
+  d0.room?.name === 'test-floor' && d0.room.members.length === 2 &&
+  d0.room.members.some((m) => m.you && m.id === d0.id) &&
+  d0.room.members.some((m) => !m.you && m.id === d1.id && Math.abs(m.bpm - 118) < 6) &&
+  Math.abs(d0.room.bpm - 119) < 6,
+);
+// Leaving: the room shrinks for the one who stays.
+d1.ws.send(JSON.stringify({ type: 'leave' }));
+await new Promise((r) => setTimeout(r, 200));
+check(
+  'room: after one leaves, the other sees a room of one',
+  d0.room?.members.length === 1 && d0.room.members[0].you,
 );
 
 for (const d of dancers) d.ws.close();
