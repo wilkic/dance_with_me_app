@@ -7,6 +7,7 @@
  * room, and periodically forms opinions:
  *
  *   → { type: 'welcome', id }                     on connect
+ *   → { type: 'rooms', rooms }                    lobby: open rooms to pick from
  *   → { type: 'joined', room, created }           after a join
  *   → { type: 'room', name, bpm, members }        who's in your room + tempo
  *   → { type: 'profile', bpm, confidence }        the server's read on you
@@ -55,6 +56,23 @@ export function startServer({
     return { id: s.id, bpm, confidence };
   };
 
+  // Lobby: every open room with how many are dancing and its tempo, so the
+  // start screen can list rooms to join. Sent to everyone on connect, on
+  // every scan, and immediately when any room's membership changes.
+  const lobby = () => ({
+    type: 'rooms',
+    rooms: rooms.names
+      .map((name) => {
+        const profiles = rooms.members(name).map(profileOf);
+        return { name, dancers: profiles.length, bpm: roomTempo(profiles) };
+      })
+      .sort((a, b) => b.dancers - a.dancers || a.name.localeCompare(b.name)),
+  });
+  const broadcastLobby = () => {
+    const msg = lobby();
+    for (const s of sessions.values()) send(s, msg);
+  };
+
   // Room opinion: membership + everyone's tempo + the room's consensus.
   // Sent on every scan and immediately when membership changes.
   const broadcastRoom = (name) => {
@@ -77,6 +95,7 @@ export function startServer({
     const s = { id, ws, detector: new BeatDetector(), matchKey: null, room: null };
     sessions.set(id, s);
     send(s, { type: 'welcome', id });
+    send(s, lobby());
 
     let rec = null;
     if (recordDir) {
@@ -98,9 +117,10 @@ export function startServer({
           send(s, { type: 'joined', room: res.name, created: res.created });
           if (before && before !== res.name) broadcastRoom(before);
           broadcastRoom(res.name);
+          if (res.created || before !== res.name) broadcastLobby();
         } else if (msg.type === 'leave') {
           const left = rooms.leave(s);
-          if (left) broadcastRoom(left);
+          if (left) { broadcastRoom(left); broadcastLobby(); }
           if (s.matchKey) { s.matchKey = null; send(s, { type: 'unmatch' }); }
         }
         return;
@@ -127,7 +147,7 @@ export function startServer({
       rec?.end();
       const left = rooms.leave(s);
       sessions.delete(id);
-      if (left) broadcastRoom(left);
+      if (left) { broadcastRoom(left); broadcastLobby(); }
     });
   });
 
@@ -135,6 +155,7 @@ export function startServer({
   // pairing (within a room) with a next song.
   const timer = setInterval(() => {
     for (const s of sessions.values()) send(s, { type: 'profile', ...profileOf(s) });
+    broadcastLobby();
 
     const matched = new Set();
     for (const name of rooms.names) {

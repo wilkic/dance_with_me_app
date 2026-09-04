@@ -17,10 +17,12 @@ CDN on first load, so the phone needs internet the first time.
 
 ## How to use
 
-1. **Pick a dance room** — the start screen suggests a name like
-   `funky-otter` (🎲 shuffles). Tap **Dance in room** to start it; anyone
-   who types the same name joins you. **Dance solo** skips rooms. Room
-   links work too: `https://…/?room=funky-otter`. Grant camera permission.
+1. **Pick a dance room** — the start screen lists the rooms that are open
+   right now (who's dancing, room BPM); tap one to join. Or start a new
+   one: the app suggests a name like `funky-otter` (🎲 shuffles), tap
+   **Start this room**, and anyone who picks it from the list or types the
+   same name joins you. **Dance solo** skips rooms. Room links work too:
+   `https://…/?room=funky-otter`. Grant camera permission.
 2. **Capture Room** — prop the phone up facing your dance space, step out
    of frame, tap the button. A 5-second countdown fires, then the app
    averages several frames into a "clean plate" of your empty room.
@@ -76,7 +78,9 @@ member sends is relayed to the other members (wrapped in an envelope
 carrying the sender's id, `src/net/envelope.js`), and the client renders
 them through the same guest-avatar path as its delayed replays — dancing
 with room-mates is dancing with "delayed you's", except they're real
-people. The one thing assessed per room is tempo: each member's BPM and a
+people. A `rooms` lobby message (every open room, dancer count, tempo)
+goes to every connection on connect, every scan and on any membership
+change — it feeds the start screen's room list. The one thing assessed per room is tempo: each member's BPM and a
 confidence-weighted room BPM go out in `room` opinions every scan and on
 every join/leave. This is where the app will later pick music for the
 room (tastes × each dancer's tempo × the room's tempo). No audio is

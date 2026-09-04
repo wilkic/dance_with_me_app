@@ -20,14 +20,18 @@
       <h1>Dance&nbsp;With&nbsp;Me</h1>
       <p class="tagline">Scan your room. Step in. Dance as a stick figure &mdash; alone or in a dance room with friends.</p>
       <div id="room-box" class="room-box">
-        <label for="room-name">Dance room</label>
+        <label>Open rooms &mdash; tap one to join</label>
+        <div id="room-list" class="room-list" role="listbox" aria-label="Open dance rooms">
+          <p class="room-list-empty">Looking for rooms&hellip;</p>
+        </div>
+        <label for="room-name">Or start a new room</label>
         <div class="room-input">
           <input id="room-name" type="text" maxlength="24" autocomplete="off"
                  autocapitalize="none" autocorrect="off" spellcheck="false"
                  placeholder="room name" enterkeyhint="go" />
           <button id="btn-shuffle" title="Pick a random room name" aria-label="Random room name">&#127922;</button>
         </div>
-        <button id="btn-join" class="primary">Dance in room</button>
+        <button id="btn-join" class="primary">Start this room</button>
         <p class="hint">Same name = same room. Tell your friends the name and they dance in with you.</p>
       </div>
       <button id="btn-solo">Dance solo</button>

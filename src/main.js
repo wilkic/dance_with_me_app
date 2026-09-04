@@ -81,6 +81,7 @@ channel.subscribe(onRemoteFrame);
 // The one thing assessed per room today: tempo. Each member's BPM, and the
 // room's consensus BPM, arrive in the server's 'room' opinions.
 const roomState = { name: null, bpm: 0, members: [] };
+let lobby = []; // open rooms from the server: [{ name, dancers, bpm }]
 const peerBpm = new Map(); // dancerId -> { bpm, confidence }
 let myBpm = 0;
 
@@ -97,12 +98,53 @@ function onServerStatus(state) {
     el.classList.add('offline');
   }
   $('btn-join').disabled = state !== 'open';
+  if (state !== 'open') {
+    lobby = [];
+    renderRoomList(state === 'connecting' ? 'Looking for rooms…' : 'No dance server — rooms unavailable.');
+  }
+}
+
+/** Start screen: the list of open rooms (tap to join). */
+function renderRoomList(emptyText = 'No rooms open yet — start one below and tell your friends its name.') {
+  const list = $('room-list');
+  list.replaceChildren();
+  if (!lobby.length) {
+    const p = document.createElement('p');
+    p.className = 'room-list-empty';
+    p.textContent = emptyText;
+    list.append(p);
+    return;
+  }
+  const typed = normalizeRoomName($('room-name').value);
+  for (const r of lobby) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'room-row';
+    row.setAttribute('role', 'option');
+    if (r.name === typed) row.classList.add('current');
+    const name = document.createElement('span');
+    name.className = 'room-row-name';
+    name.textContent = r.name;
+    const meta = document.createElement('span');
+    meta.className = 'room-row-meta';
+    const who = r.dancers === 1 ? '1 dancing' : `${r.dancers} dancing`;
+    meta.textContent = r.bpm > 0 ? `${who} · ${Math.round(r.bpm)} bpm` : who;
+    row.append(name, meta);
+    row.addEventListener('click', () => {
+      $('room-name').value = r.name;
+      enter(r.name);
+    });
+    list.append(row);
+  }
 }
 
 function onServerMessage(msg) {
   if (msg.type === 'profile') {
     myBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
     $('hud-bpm').textContent = myBpm ? `${myBpm.toFixed(0)} bpm` : '-- bpm';
+  } else if (msg.type === 'rooms') {
+    lobby = msg.rooms;
+    if (mode === 'start') renderRoomList();
   } else if (msg.type === 'joined') {
     roomState.name = msg.room;
     renderRoomLine();
@@ -402,6 +444,7 @@ function exitToStart() {
   $('hud-match').textContent = '';
   ctx.clearRect(0, 0, stage.width, stage.height);
   showScreen('start');
+  if (serverLink) renderRoomList();
 }
 
 async function captureRoom() {
@@ -433,12 +476,14 @@ roomInput.addEventListener('input', () => {
   // Keep typing fluid: only rewrite when the normalized form differs in
   // more than a trailing dash (the user may be mid-word).
   if (norm !== cur && norm !== cur.replace(/-$/, '')) roomInput.value = norm;
+  if (lobby.length) renderRoomList();
 });
 roomInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') $('btn-join').click();
 });
 $('btn-shuffle').addEventListener('click', () => {
   roomInput.value = randomRoomName();
+  if (lobby.length) renderRoomList();
 });
 $('btn-join').addEventListener('click', () => {
   const name = normalizeRoomName(roomInput.value) || randomRoomName();

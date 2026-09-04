@@ -67,6 +67,8 @@ function connectDancer(port, bpm) {
         resolve(dancer);
       } else if (msg.type === 'room') {
         dancer.room = msg;
+      } else if (msg.type === 'rooms') {
+        dancer.lobby = msg.rooms;
       } else if (msg.type === 'profile') {
         dancer.profile = msg;
       } else if (msg.type === 'match') {
@@ -124,6 +126,28 @@ check(
 
 // ---- Dance room checks ----
 const [d0, d1] = dancers;
+// ---- Lobby checks: the start screen's room list ----
+const lob = d0.lobby?.find((r) => r.name === 'test-floor');
+check(
+  `lobby: lists test-floor with ${lob?.dancers} dancing at ${lob?.bpm?.toFixed?.(1)} bpm`,
+  d0.lobby?.length === 1 && lob?.dancers === 2 && Math.abs(lob.bpm - 119) < 6,
+);
+// A newcomer (not in any room) gets the lobby on connect, before joining.
+const newcomer = await new Promise((resolve, reject) => {
+  const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+  ws.on('message', (data, isBinary) => {
+    if (isBinary) return;
+    const msg = JSON.parse(data.toString());
+    if (msg.type === 'rooms') { resolve({ ws, lobby: msg.rooms }); }
+  });
+  ws.on('error', reject);
+});
+check(
+  'lobby: newcomer sees the open room on connect',
+  newcomer.lobby.length === 1 && newcomer.lobby[0].name === 'test-floor' && newcomer.lobby[0].dancers === 2,
+);
+newcomer.ws.close();
+
 check(
   `room: first dancer created "test-floor", second joined it`,
   d0.joined?.room === 'test-floor' && d0.joined.created === true &&
