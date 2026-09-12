@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0b12" />
+  <title>Dance Floor — Dance With Me</title>
+  <link rel="stylesheet" href="/src/floor.css" />
+</head>
+<body>
+  <header class="bar">
+    <h1>Dance&nbsp;Floor</h1>
+    <span id="status" class="status">connecting…</span>
+    <span id="count" class="count"></span>
+    <span class="spacer"></span>
+    <label class="music">
+      <span>Music</span>
+      <select id="music-select">
+        <option value="none">off</option>
+        <option value="file">audio file…</option>
+      </select>
+    </label>
+    <input id="music-file" type="file" accept="audio/*" hidden />
+    <audio id="player" controls loop hidden></audio>
+    <span id="now-playing" class="now-playing"></span>
+  </header>
+  <canvas id="floor"></canvas>
+  <div id="empty" class="empty">
+    <p>Waiting for dancers&hellip;</p>
+    <p class="hint">Phones on this wifi open <b id="join-url"></b> and dance in a room.</p>
+  </div>
+  <script type="module" src="/src/floor.js"></script>
+</body>
+</html>

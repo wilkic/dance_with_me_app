@@ -17,6 +17,11 @@
  *   ← { type: 'join', room }                      enter a room (creates it)
  *   ← { type: 'leave' }                           back to solo
  *   ← { type: 'label', clickBpm }                 dance-lab ground truth
+ *   ← { type: 'watch' }                           become a spectator (dance floor)
+ *
+ * Spectators (the big-screen dance floor, floor.html) send no frames; they
+ * receive every dancer's frames as relay envelopes plus:
+ *   → { type: 'floor', dancers, rooms }           everyone online + per-room tempo/song
  *
  * Text frames are JSON control messages. Binary frames are PoseFrames from
  * the client; binary frames to the client are relay envelopes
@@ -71,6 +76,27 @@ export function startServer({
   const broadcastLobby = () => {
     const msg = lobby();
     for (const s of sessions.values()) send(s, msg);
+    broadcastFloor();
+  };
+
+  // Dance floor: what a spectator screen shows — every dancer (with room
+  // and tempo) and every room with its consensus tempo and the song the
+  // catalog would put on for it. Sent to watchers with every lobby update.
+  const dancersOnline = () => [...sessions.values()].filter((s) => !s.watching);
+  const floor = () => ({
+    type: 'floor',
+    dancers: dancersOnline().map((s) => ({ ...profileOf(s), room: s.room })),
+    rooms: rooms.names.map((name) => {
+      const profiles = rooms.members(name).map(profileOf);
+      const bpm = roomTempo(profiles);
+      return { name, dancers: profiles.length, bpm, song: bpm ? pickSong(bpm) : null };
+    }),
+  });
+  const broadcastFloor = () => {
+    let msg = null;
+    for (const s of sessions.values()) {
+      if (s.watching) send(s, (msg ??= floor()));
+    }
   };
 
   // Room opinion: membership + everyone's tempo + the room's consensus.
@@ -92,11 +118,12 @@ export function startServer({
 
   wss.on('connection', (ws) => {
     const id = randomUUID().slice(0, 8);
-    const s = { id, ws, detector: new BeatDetector(), matchKey: null, room: null };
+    const s = { id, ws, detector: new BeatDetector(), matchKey: null, room: null, watching: false };
     sessions.set(id, s);
     send(s, { type: 'welcome', id });
     send(s, lobby());
     console.log(`+ ${id} connected (${sessions.size} online)`);
+    broadcastFloor();
 
     let rec = null;
     if (recordDir) {
@@ -124,9 +151,16 @@ export function startServer({
           const left = rooms.leave(s);
           if (left) { console.log(`< ${id} left room ${left}`); broadcastRoom(left); broadcastLobby(); }
           if (s.matchKey) { s.matchKey = null; send(s, { type: 'unmatch' }); }
+        } else if (msg.type === 'watch') {
+          // Spectator: leaves any room, is not a dancer, sees everyone.
+          const left = rooms.leave(s);
+          s.watching = true;
+          console.log(`* ${id} is watching the dance floor`);
+          if (left) { broadcastRoom(left); broadcastLobby(); } else broadcastFloor();
         }
         return;
       }
+      if (s.watching) return; // spectators don't dance
       const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
       const frame = deserializePoseFrame(buf);
       rec?.write(JSON.stringify({
@@ -138,6 +172,7 @@ export function startServer({
       // Relay to room-mates: they render this dancer through the same
       // avatar path as their delayed-replay guests.
       const peers = rooms.peersOf(s);
+      for (const w of sessions.values()) if (w.watching) peers.push(w);
       if (peers.length) {
         const env = encodeEnvelope(s.id, new Uint8Array(buf));
         for (const p of peers) {
@@ -150,14 +185,14 @@ export function startServer({
       const left = rooms.leave(s);
       sessions.delete(id);
       console.log(`- ${id} disconnected${left ? ` (was in room ${left})` : ''} (${sessions.size} online)`);
-      if (left) { broadcastRoom(left); broadcastLobby(); }
+      if (left) { broadcastRoom(left); broadcastLobby(); } else broadcastFloor();
     });
   });
 
   // Opinion scan: profiles out, room tempo per room, then tempo-first
   // pairing (within a room) with a next song.
   const timer = setInterval(() => {
-    for (const s of sessions.values()) send(s, { type: 'profile', ...profileOf(s) });
+    for (const s of dancersOnline()) send(s, { type: 'profile', ...profileOf(s) });
     broadcastLobby();
 
     const matched = new Set();

@@ -9,6 +9,12 @@ export default defineConfig({
   // (GitHub Pages subpaths, file servers, etc.) with no configuration.
   base: './',
   plugins: [basicSsl()],
+  build: {
+    rollupOptions: {
+      // Two pages: the phone app and the big-screen dance floor.
+      input: { main: 'index.html', floor: 'floor.html' },
+    },
+  },
   server: {
     https: true,
     proxy: {

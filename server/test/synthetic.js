@@ -88,6 +88,23 @@ const dancers = await Promise.all([
   connectDancer(server.port, 118),
 ]);
 
+// A spectator (the big-screen dance floor) watching before anyone dances.
+const watcher = await new Promise((resolve, reject) => {
+  const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+  const w = { ws, floor: null, relayed: new Map() };
+  ws.on('message', (data, isBinary) => {
+    if (isBinary) {
+      const { dancerId } = decodeEnvelope(new Uint8Array(data));
+      w.relayed.set(dancerId, (w.relayed.get(dancerId) ?? 0) + 1);
+      return;
+    }
+    const msg = JSON.parse(data.toString());
+    if (msg.type === 'welcome') ws.send(JSON.stringify({ type: 'watch' }));
+    else if (msg.type === 'floor') { w.floor = msg; resolve(w); }
+  });
+  ws.on('error', reject);
+});
+
 // Stream 15 virtual seconds of dancing at ~30 fps (frame.t is synthetic,
 // so this can be sent as fast as the socket allows).
 for (const d of dancers) {
@@ -123,6 +140,24 @@ check(
   'dancers matched with each other',
   dancers[0].match?.partner === dancers[1].id && dancers[1].match?.partner === dancers[0].id,
 );
+
+// ---- Dance floor (spectator) checks ----
+{
+  const ids = dancers.map((d) => d.id).sort();
+  const seen = [...watcher.relayed.keys()].sort();
+  check(
+    `floor: spectator received frames from both dancers (${[...watcher.relayed.values()].join('/')})`,
+    seen.join() === ids.join() && [...watcher.relayed.values()].every((n) => n === 455),
+  );
+  const fd = watcher.floor?.dancers ?? [];
+  const fr = watcher.floor?.rooms?.find((r) => r.name === 'test-floor');
+  check(
+    `floor: lists ${fd.length} dancers in room test-floor, room ${fr?.bpm?.toFixed?.(1)} bpm, song "${fr?.song?.title}"`,
+    fd.length === 2 && fd.every((d) => d.room === 'test-floor' && ids.includes(d.id)) &&
+      fr?.dancers === 2 && Math.abs(fr.bpm - 119) < 6 && !!fr.song,
+  );
+  check('floor: spectator is not listed as a dancer', !fd.some((d) => d.id === watcher.id));
+}
 
 // ---- Dance room checks ----
 const [d0, d1] = dancers;

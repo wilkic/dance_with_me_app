@@ -10,6 +10,7 @@ import {
   CompositeTransport,
 } from './net/poseChannel.js';
 import { randomRoomName, normalizeRoomName } from './net/roomNames.js';
+import { resolveServerUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
 
@@ -43,20 +44,10 @@ const guestTransport = new DelayedLoopbackTransport({
   spacingMs: guestCfg.spacingSec * 1000,
 });
 
-// Dance server (rooms + rhythm analysis). Where it lives:
-//   ?server=wss://…   explicit URL
-//   ?server=1         Vite dev proxy (wss://<host>/ws → local server)
-//   ?server=0         off (fully offline, solo only)
-//   otherwise         VITE_SERVER_URL at build time, or the dev proxy
-//                     when running under `npm run dev`.
+// Dance server (rooms + rhythm analysis) — see net/serverUrl.js for how
+// the URL is chosen.
 const urlParams = new URLSearchParams(location.search);
-const serverParam = urlParams.get('server');
-let serverUrl = null;
-if (serverParam === '0') serverUrl = null;
-else if (serverParam === '1') serverUrl = `wss://${location.host}/ws`;
-else if (serverParam) serverUrl = serverParam;
-else if (import.meta.env.VITE_SERVER_URL) serverUrl = import.meta.env.VITE_SERVER_URL;
-else if (import.meta.env.DEV) serverUrl = `wss://${location.host}/ws`;
+const serverUrl = resolveServerUrl(urlParams);
 const serverLink = serverUrl ? new WebSocketTransport(serverUrl) : null;
 if (serverLink) {
   serverLink.onMessage = onServerMessage;

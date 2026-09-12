@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Dance With Me — LAN test stack for phones on the same wifi.
 #
-#   ./dance-lan.sh
+#   ./dance-lan.sh            (--no-browser to skip opening the dance floor)
 #
 # Starts the dance server (rooms, tempo) and the Vite dev server (HTTPS,
-# proxies /ws to the dance server), then prints the phone URL as a QR code.
+# proxies /ws to the dance server), prints the phone URL as a QR code and
+# opens the big-screen dance floor (floor.html: every dancer as a stick
+# figure, grouped by room, with a music selector) in the default browser.
 # Each phone must accept the self-signed certificate once. Ctrl+C stops both.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PORT=5173
 LOGDIR=/tmp/dance-lan
+OPEN_BROWSER=1
+[ "${1:-}" = "--no-browser" ] && OPEN_BROWSER=0
 mkdir -p "$LOGDIR"
 
 # --- clean up a previous run of this script -------------------------------
@@ -58,6 +62,11 @@ IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"
 [ -n "$IP" ] || IP=$(hostname -I | awk '{print $1}')
 URL="https://$IP:$PORT/"
 
+FLOOR="${URL}floor.html"
+if [ "$OPEN_BROWSER" = 1 ] && command -v xdg-open >/dev/null; then
+  (xdg-open "$FLOOR" >/dev/null 2>&1 &)
+fi
+
 clear
 echo
 if command -v qrencode >/dev/null; then
@@ -70,6 +79,8 @@ fi
 echo
 echo "  Phones on this wifi:  $URL"
 echo "  Accept the certificate warning once per phone, then Dance in room."
+echo
+echo "  Dance floor (this screen):  $FLOOR"
 echo
 echo "  logs: $LOGDIR/server.log  $LOGDIR/vite.log      Ctrl+C stops everything"
 echo "------------------------------------------------------------------------"
