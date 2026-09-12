@@ -96,6 +96,7 @@ export function startServer({
     sessions.set(id, s);
     send(s, { type: 'welcome', id });
     send(s, lobby());
+    console.log(`+ ${id} connected (${sessions.size} online)`);
 
     let rec = null;
     if (recordDir) {
@@ -115,12 +116,13 @@ export function startServer({
           const res = rooms.join(s, msg.room);
           if (!res) return send(s, { type: 'error', error: 'bad room name' });
           send(s, { type: 'joined', room: res.name, created: res.created });
+          console.log(`> ${id} ${res.created ? 'opened' : 'joined'} room ${res.name} (${rooms.members(res.name).length} dancing)`);
           if (before && before !== res.name) broadcastRoom(before);
           broadcastRoom(res.name);
           if (res.created || before !== res.name) broadcastLobby();
         } else if (msg.type === 'leave') {
           const left = rooms.leave(s);
-          if (left) { broadcastRoom(left); broadcastLobby(); }
+          if (left) { console.log(`< ${id} left room ${left}`); broadcastRoom(left); broadcastLobby(); }
           if (s.matchKey) { s.matchKey = null; send(s, { type: 'unmatch' }); }
         }
         return;
@@ -147,6 +149,7 @@ export function startServer({
       rec?.end();
       const left = rooms.leave(s);
       sessions.delete(id);
+      console.log(`- ${id} disconnected${left ? ` (was in room ${left})` : ''} (${sessions.size} online)`);
       if (left) { broadcastRoom(left); broadcastLobby(); }
     });
   });
