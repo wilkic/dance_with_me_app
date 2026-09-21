@@ -196,6 +196,60 @@ button.danger {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---- Guests (start screen + menu) ---- */
+.guest-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  width: min(22rem, 100%);
+  padding: 1rem 1.1rem 0.9rem;
+  border: 1px solid #334;
+  border-radius: 16px;
+  background: rgba(10, 10, 20, 0.55);
+}
+.guest-box > label, .menu-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9fa8ff;
+}
+.guest-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  pointer-events: auto;
+}
+.guest-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+  color: #dde;
+  text-align: left;
+}
+.guest-row.unavailable { opacity: 0.45; }
+.guest-row .kind small { display: block; color: #778; font-size: 0.72rem; }
+.stepper { display: inline-flex; align-items: center; gap: 0.15rem; }
+.stepper button { padding: 0.28rem 0.75rem; font-size: 1.05rem; line-height: 1; }
+.stepper span {
+  min-width: 1.6rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: #9fa8ff;
+  font-weight: 600;
+}
+.menu { max-height: calc(100vh - env(safe-area-inset-top, 0px) - 4.5rem); overflow-y: auto; }
+.menu-row.wide { grid-template-columns: 3.6rem 1fr; }
+.chips { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.chip { padding: 0.25rem 0.6rem; font-size: 0.76rem; }
+.chip.on { background: rgba(108, 92, 231, 0.35); border-color: #b84ce7; color: #fff; }
+#share-box { display: flex; flex-direction: column; gap: 0.6rem; }
+#share-status { font-size: 0.75rem; }
+#hud-guests { color: #fff; }
+
 /* ---- Dance rooms (start screen) ---- */
 .room-box {
   display: flex;

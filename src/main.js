@@ -13,6 +13,7 @@ import { randomRoomName, normalizeRoomName } from './net/roomNames.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
+import { SessionShare, VIDEO_LEVELS, MUSIC_LEVELS } from './share/sessionShare.js';
 
 // ---- DOM ----
 const $ = (id) => document.getElementById(id);
@@ -32,35 +33,56 @@ const smoother = new PoseSmoother();
 const room = new RoomModel();
 
 // Guest dancers: "remote" dancers whose frames arrive via the channel.
-// Two kinds share one path: your own moves replayed on a delay (the
-// DelayedLoopbackTransport), and real people in your dance room (relayed
-// by the dance server). Settings are live-adjustable from the burger menu.
-const GUEST_FADE_MS = 12_000;
-const PEER_FADE_MS = 2_000;
+// Three kinds share one path:
+//   replay  — your own moves replayed on a delay (DelayedLoopbackTransport)
+//   people  — real dancers: room-mates, or anyone online the server brings
+//             into your space when you ask for "other people"
+//   ai      — AI dancers the server builds from the dance library (a real
+//             person's recorded dance on your beat, with borrowed moves)
+// Settings are live-adjustable from the start screen and the burger menu.
+const GUEST_FADE_MS = { replay: 12_000, peer: 2_000, ai: 4_000 };
 const PEER_STALE_MS = 6_000;
-const guestCfg = { count: 1, spacingSec: 60, opacity: 0.9 };
+const MAX_GUESTS = 3;
+const guestCfg = { replay: 1, people: 0, ai: 1, spacingSec: 60, opacity: 0.9, variation: 0.5 };
+const GUEST_KINDS = [
+  { key: 'replay', icon: '⏱', label: 'Delayed you', hint: 'your own moves, a minute later', local: true },
+  { key: 'people', icon: '👥', label: 'Other people', hint: 'real dancers online right now' },
+  { key: 'ai', icon: '✨', label: 'AI dancers', hint: 'real dances from the library, on your beat' },
+];
 const guestTransport = new DelayedLoopbackTransport({
-  guests: guestCfg.count,
+  guests: guestCfg.replay,
   spacingMs: guestCfg.spacingSec * 1000,
 });
 
-// Dance server (rooms + rhythm analysis) — see net/serverUrl.js for how
-// the URL is chosen.
+// Dance server (rooms, guests, rhythm analysis, the dance library) — see
+// net/serverUrl.js for how the URL is chosen.
 const urlParams = new URLSearchParams(location.search);
 const serverUrl = resolveServerUrl(urlParams);
 const serverLink = serverUrl ? new WebSocketTransport(serverUrl) : null;
+let serverOnline = false;
 if (serverLink) {
   serverLink.onMessage = onServerMessage;
   serverLink.onStatus = onServerStatus;
 }
 
 // Dance-lab calibration: ?click=120 plays a metronome once dancing starts
-// and labels the server session with the ground-truth BPM (the server
-// records labeled sessions when started with RECORD_DIR — see server/).
+// and labels the server session with the ground-truth BPM.
 const clickBpm = Number(urlParams.get('click')) || 0;
 const metronome = clickBpm > 0 ? new Metronome(clickBpm) : null;
-if (serverLink && clickBpm > 0) {
-  serverLink.onOpen = () => serverLink.sendJSON({ type: 'label', clickBpm });
+
+// What this phone shares for the library (see share/sessionShare.js).
+const share = new SessionShare(serverLink, {
+  videoTrack: () => camera.stream?.getVideoTracks()[0] ?? null,
+  onStatus: (m) => { $('share-status').textContent = m; renderChips(); },
+});
+
+if (serverLink) {
+  serverLink.onOpen = () => {
+    // Every (re)connect: resend session state.
+    if (clickBpm > 0) serverLink.sendJSON({ type: 'label', clickBpm });
+    share.announce();
+    sendGuestWants();
+  };
 }
 
 const channel = new PoseChannel(
@@ -68,24 +90,29 @@ const channel = new PoseChannel(
 );
 channel.subscribe(onRemoteFrame);
 
-// ---- Dance room state ----
+// ---- Dance room + guest state ----
 // The one thing assessed per room today: tempo. Each member's BPM, and the
 // room's consensus BPM, arrive in the server's 'room' opinions.
 const roomState = { name: null, bpm: 0, members: [] };
 let lobby = []; // open rooms from the server: [{ name, dancers, bpm }]
-const peerBpm = new Map(); // dancerId -> { bpm, confidence }
+const peerBpm = new Map(); // dancerId -> { bpm, confidence } (room-mates + people guests)
+const peopleGuests = new Set(); // dancer ids the server brought into my space
+const aiInfo = new Map(); // ai dancer id -> { tag, title, bpm, base, moves, borrowing }
+let libraryClips = null;
 let myBpm = 0;
+let musicBpm = 0;
 
 function onServerStatus(state) {
   const el = $('server-status');
   el.classList.remove('online', 'offline');
+  serverOnline = state === 'open';
   if (state === 'open') {
     el.textContent = '● dance server online';
     el.classList.add('online');
   } else if (state === 'connecting') {
     el.textContent = 'connecting to dance server…';
   } else {
-    el.textContent = '○ dance server unreachable — rooms unavailable, solo works';
+    el.textContent = '○ dance server unreachable — rooms, other people and AI dancers unavailable; delayed you works';
     el.classList.add('offline');
   }
   $('btn-join').disabled = state !== 'open';
@@ -93,6 +120,7 @@ function onServerStatus(state) {
     lobby = [];
     renderRoomList(state === 'connecting' ? 'Looking for rooms…' : 'No dance server — rooms unavailable.');
   }
+  renderPickers();
 }
 
 /** Start screen: the list of open rooms (tap to join). */
@@ -132,7 +160,8 @@ function renderRoomList(emptyText = 'No rooms open yet — start one below and t
 function onServerMessage(msg) {
   if (msg.type === 'profile') {
     myBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
-    $('hud-bpm').textContent = myBpm ? `${myBpm.toFixed(0)} bpm` : '-- bpm';
+    musicBpm = msg.musicBpm > 0 && msg.musicConfidence > 0.25 ? msg.musicBpm : 0;
+    renderBpm();
   } else if (msg.type === 'rooms') {
     lobby = msg.rooms;
     if (mode === 'start') renderRoomList();
@@ -143,21 +172,38 @@ function onServerMessage(msg) {
     if (msg.name !== roomState.name) return;
     roomState.bpm = msg.bpm;
     roomState.members = msg.members;
-    peerBpm.clear();
-    const present = new Set();
-    for (const m of msg.members) {
-      present.add(m.id);
-      if (!m.you) peerBpm.set(m.id, m);
-    }
-    // Room-mates who left stop rendering right away.
-    for (const [id, g] of guests) if (g.kind === 'peer' && !present.has(id)) guests.delete(id);
+    for (const m of msg.members) if (!m.you) peerBpm.set(m.id, m);
+    pruneReal();
     renderRoomLine();
+  } else if (msg.type === 'guests') {
+    peopleGuests.clear();
+    for (const p of msg.people) { peopleGuests.add(p.id); peerBpm.set(p.id, p); }
+    aiInfo.clear();
+    for (const a of msg.ai) aiInfo.set(a.id, a);
+    libraryClips = msg.library?.clips ?? null;
+    for (const [id, g] of guests) if (g.kind === 'ai' && !aiInfo.has(id)) guests.delete(id);
+    pruneReal();
+    renderGuestLine();
+    renderPickers();
   } else if (msg.type === 'match') {
     $('hud-match').textContent =
       `♪ ${msg.song.title} (${Math.round(msg.song.bpm)} bpm) with ${msg.partner}`;
   } else if (msg.type === 'unmatch') {
     $('hud-match').textContent = '';
   }
+}
+
+/** Real people who are neither room-mates nor assigned guests stop rendering right away. */
+function pruneReal() {
+  const present = new Set(peopleGuests);
+  for (const m of roomState.members) present.add(m.id);
+  for (const [id, g] of guests) if (g.kind === 'peer' && !present.has(id)) guests.delete(id);
+  for (const id of peerBpm.keys()) if (!present.has(id)) peerBpm.delete(id);
+}
+
+function renderBpm() {
+  const you = myBpm ? `${myBpm.toFixed(0)} bpm` : '-- bpm';
+  $('hud-bpm').textContent = musicBpm ? `${you} · ♫ ${musicBpm.toFixed(0)}` : you;
 }
 
 function renderRoomLine() {
@@ -177,6 +223,16 @@ function renderRoomLine() {
   cap.classList.remove('hidden');
 }
 
+/** HUD: who the server put in your space (people count, AI dancers' styles). */
+function renderGuestLine() {
+  const el = $('hud-guests');
+  const parts = [];
+  if (peopleGuests.size) parts.push(`👥 ${peopleGuests.size}`);
+  for (const a of aiInfo.values()) parts.push(`✨ ${a.tag ?? 'dancer'}${a.borrowing?.length ? ` +${a.borrowing.join('+')}` : ''}`);
+  el.textContent = parts.join(' · ');
+  el.classList.toggle('hidden', !parts.length);
+}
+
 const guests = new Map(); // dancerId -> { avatar, pose, bornAt, lastSeen, kind, slot, dx, dy, scale }
 
 // Distinct tint per guest slot so multiple guests read as different dancers.
@@ -192,15 +248,23 @@ const PEER_COLORS = [
   { color: '#e07dff', glow: '#f0c2ff' }, // violet
   { color: '#fff37d', glow: '#fffac2' }, // lemon
 ];
+// AI dancers: whites — ghosts of dancers who were here before.
+const AI_COLORS = [
+  { color: '#ffffff', glow: '#d8ccff' },
+  { color: '#e6f4ff', glow: '#b8e8ff' },
+  { color: '#fff2e0', glow: '#ffd9b0' },
+];
 let peersSeen = 0;
 
 function onRemoteFrame(dancerId, frame) {
   let g = guests.get(dancerId);
   if (!g) {
-    const m = /^guest-(\d+)-/.exec(dancerId);
-    const kind = m ? 'replay' : 'peer';
-    const slot = kind === 'replay' ? parseInt(m[1], 10) : ++peersSeen;
-    const palette = kind === 'replay' ? GUEST_COLORS : PEER_COLORS;
+    const replay = /^guest-(\d+)-/.exec(dancerId);
+    const ai = /^ai-(\d+)-/.exec(dancerId);
+    const kind = replay ? 'replay' : ai ? 'ai' : 'peer';
+    if (kind === 'ai' && !aiInfo.has(dancerId) && parseInt(ai[1], 10) > guestCfg.ai) return; // no longer wanted
+    const slot = replay ? parseInt(replay[1], 10) : ai ? parseInt(ai[1], 10) : ++peersSeen;
+    const palette = kind === 'replay' ? GUEST_COLORS : kind === 'ai' ? AI_COLORS : PEER_COLORS;
     g = {
       avatar: new StickFigureAvatar(palette[(slot - 1) % palette.length]),
       pose: null,
@@ -209,10 +273,10 @@ function onRemoteFrame(dancerId, frame) {
       kind,
       slot,
       // A spot behind the dancer: shifted to one side, slightly up + smaller.
-      // Room-mates alternate sides so a full room spreads out.
-      dx: (0.12 + Math.random() * 0.15) * (kind === 'peer' ? (slot % 2 ? -1 : 1) : (Math.random() < 0.5 ? -1 : 1)),
+      // Real people and AI dancers alternate sides so a full floor spreads out.
+      dx: (0.12 + Math.random() * 0.15) * (kind === 'replay' ? (Math.random() < 0.5 ? -1 : 1) : (slot % 2 ? -1 : 1)),
       dy: -0.05,
-      scale: kind === 'peer' ? 0.85 : 0.8,
+      scale: kind === 'replay' ? 0.8 : 0.85,
     };
     guests.set(dancerId, g);
   }
@@ -235,6 +299,7 @@ const avatar = new StickFigureAvatar();
 let mode = 'start';        // start | capture | dance
 let ghostMode = true;      // true: show clean plate (user removed); false: live feed
 let pendingRoom = null;    // room chosen on the start screen (null = solo)
+let guestsTouched = false; // the user set guest counts themselves (don't override on room entry)
 let lastPose = null;
 let rafId = null;
 let fpsEma = 0;
@@ -288,7 +353,7 @@ function loop() {
   const raw = detector.detect(video, camera.mirrored);
   if (raw) {
     lastPose = smoother.apply(raw);
-    channel.publish(lastPose); // → guest queues + dance server (room relay + analysis)
+    channel.publish(lastPose); // → guest queues + dance server (relay, analysis, library)
     updateFps(raw.t);
   }
 
@@ -298,22 +363,24 @@ function loop() {
   const now = performance.now();
   for (const [id, g] of guests) {
     if (!g.pose) continue;
-    if (g.kind === 'peer' && now - g.lastSeen > PEER_STALE_MS) { guests.delete(id); continue; }
-    const fadeMs = g.kind === 'peer' ? PEER_FADE_MS : GUEST_FADE_MS;
-    const fade = Math.min(1, (now - g.bornAt) / fadeMs);
+    if (g.kind !== 'replay' && now - g.lastSeen > PEER_STALE_MS) { guests.delete(id); continue; }
+    const fade = Math.min(1, (now - g.bornAt) / GUEST_FADE_MS[g.kind]);
     g.avatar.alpha = fade * guestCfg.opacity;
     g.avatar.render(ctx, g.pose, { width: W, height: H });
     if (g.kind === 'peer') {
       const p = peerBpm.get(id);
       if (p && p.bpm > 0 && p.confidence > 0.25) {
-        drawBpmLabel(g.pose, p.bpm, g.avatar.color, g.avatar.alpha, W, H);
+        drawLabel(g.pose, `${Math.round(p.bpm)}`, g.avatar.color, g.avatar.alpha, W, H);
       }
+    } else if (g.kind === 'ai') {
+      const a = aiInfo.get(id);
+      if (a?.tag) drawLabel(g.pose, `✨ ${a.tag}`, g.avatar.color, g.avatar.alpha, W, H);
     }
   }
 
   if (lastPose) {
     avatar.render(ctx, lastPose, { width: W, height: H });
-    if (roomState.name && myBpm) drawBpmLabel(lastPose, myBpm, avatar.color, 1, W, H);
+    if (roomState.name && myBpm) drawLabel(lastPose, `${Math.round(myBpm)}`, avatar.color, 1, W, H);
     $('hud-status').textContent = '';
   } else {
     $('hud-status').textContent = 'step into frame…';
@@ -323,8 +390,8 @@ function loop() {
   $('hud-fps').textContent = `${fpsEma.toFixed(0)} fps`;
 }
 
-/** Tempo tag floating above a dancer's head, in that dancer's color. */
-function drawBpmLabel(pose, bpm, color, alpha, W, H) {
+/** Tag floating above a dancer's head (tempo, or an AI dancer's style), in that dancer's color. */
+function drawLabel(pose, text, color, alpha, W, H) {
   const kp = pose.keypoints;
   const nose = { x: kp[KP.NOSE * STRIDE], y: kp[KP.NOSE * STRIDE + 1], v: kp[KP.NOSE * STRIDE + 3] };
   if (nose.v < 0.4) return;
@@ -337,7 +404,7 @@ function drawBpmLabel(pose, bpm, color, alpha, W, H) {
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
   ctx.shadowBlur = size * 0.4;
   ctx.fillStyle = color;
-  ctx.fillText(`${Math.round(bpm)}`, nose.x * W, nose.y * H - size * 1.2);
+  ctx.fillText(text, nose.x * W, nose.y * H - size * 1.2);
   ctx.restore();
 }
 
@@ -391,8 +458,8 @@ async function enter(roomName) {
   pendingRoom = roomName;
   setRoomInUrl(roomName);
   // In a room, real people are the guests: replay guests default off
-  // (the slider brings them back). Solo keeps the one-replay default.
-  setGuestCount(roomName ? 0 : 1);
+  // (the picker brings them back). Solo keeps the one-replay default.
+  if (!guestsTouched) setGuestKind('replay', roomName ? 0 : 1, { quiet: true });
   if (roomName && serverLink) serverLink.join(roomName);
   const ok = await startCamera();
   if (!ok) leaveRoom();
@@ -404,7 +471,7 @@ function leaveRoom() {
   roomState.name = null;
   roomState.bpm = 0;
   roomState.members = [];
-  peerBpm.clear();
+  pruneReal();
   pendingRoom = null;
   renderRoomLine();
 }
@@ -421,6 +488,7 @@ function exitToStart() {
   metronome?.stop();
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
+  share.stop();
   camera.stop();
   room.clear();
   guestTransport.clear();
@@ -429,12 +497,17 @@ function exitToStart() {
   smoother.reset();
   lastPose = null;
   myBpm = 0;
+  musicBpm = 0;
   fpsEma = 0;
   lastFrameT = 0;
-  $('hud-bpm').textContent = '-- bpm';
+  renderBpm();
   $('hud-match').textContent = '';
   ctx.clearRect(0, 0, stage.width, stage.height);
   showScreen('start');
+  sendGuestWants(); // mode is 'start' → the server clears our guests
+  peopleGuests.clear();
+  aiInfo.clear();
+  renderGuestLine();
   if (serverLink) renderRoomList();
 }
 
@@ -456,6 +529,112 @@ async function captureRoom() {
   lastFrameT = 0;
   showScreen('dance');
   metronome?.start();
+  sendGuestWants();
+  share.start({ w: camera.width, h: camera.height });
+}
+
+// ---- Guests: what we want in our space ----
+/** Tell the server how many real people and AI dancers to bring in (0/0 off the dance screen). */
+function sendGuestWants() {
+  if (!serverLink) return;
+  const dancing = mode === 'dance';
+  serverLink.sendJSON({
+    type: 'guests',
+    people: dancing ? guestCfg.people : 0,
+    ai: dancing ? guestCfg.ai : 0,
+    aspect: camera.width && camera.height ? camera.width / camera.height : 9 / 16,
+    variation: guestCfg.variation,
+  });
+}
+
+function setGuestKind(kind, v, { quiet = false } = {}) {
+  v = Math.max(0, Math.min(MAX_GUESTS, v));
+  guestCfg[kind] = v;
+  if (!quiet) guestsTouched = true;
+  if (kind === 'replay') {
+    guestTransport.configure({ guests: v });
+    for (const [id, g] of guests) if (g.kind === 'replay' && g.slot > v) guests.delete(id);
+  } else if (kind === 'ai') {
+    for (const [id, g] of guests) if (g.kind === 'ai' && g.slot > v) guests.delete(id);
+  }
+  renderPickers();
+  if (kind !== 'replay' && mode === 'dance') sendGuestWants();
+}
+
+/** The three-kind guest picker, rendered into every .guest-picker container. */
+function buildPickers() {
+  for (const box of document.querySelectorAll('.guest-picker')) {
+    box.replaceChildren();
+    for (const k of GUEST_KINDS) {
+      const row = document.createElement('div');
+      row.className = 'guest-row';
+      row.dataset.kind = k.key;
+      const kind = document.createElement('span');
+      kind.className = 'kind';
+      kind.innerHTML = `${k.icon} ${k.label}<small></small>`;
+      const stepper = document.createElement('span');
+      stepper.className = 'stepper';
+      const minus = document.createElement('button');
+      minus.type = 'button';
+      minus.textContent = '−';
+      minus.setAttribute('aria-label', `fewer ${k.label}`);
+      const val = document.createElement('span');
+      const plus = document.createElement('button');
+      plus.type = 'button';
+      plus.textContent = '+';
+      plus.setAttribute('aria-label', `more ${k.label}`);
+      minus.addEventListener('click', () => setGuestKind(k.key, guestCfg[k.key] - 1));
+      plus.addEventListener('click', () => setGuestKind(k.key, guestCfg[k.key] + 1));
+      stepper.append(minus, val, plus);
+      row.append(kind, stepper);
+      box.append(row);
+    }
+  }
+  renderPickers();
+}
+
+function renderPickers() {
+  for (const row of document.querySelectorAll('.guest-row')) {
+    const k = GUEST_KINDS.find((x) => x.key === row.dataset.kind);
+    const available = k.local || (serverLink && serverOnline);
+    row.classList.toggle('unavailable', !available);
+    const small = row.querySelector('small');
+    if (!serverLink && !k.local) small.textContent = 'needs the dance server';
+    else if (!available) small.textContent = 'dance server offline';
+    else if (k.key === 'ai' && libraryClips === 0) small.textContent = 'library is empty — dance to fill it';
+    else if (k.key === 'ai' && libraryClips) small.textContent = `${k.hint} (${libraryClips} dances)`;
+    else small.textContent = k.hint;
+    row.querySelector('.stepper span').textContent = `${guestCfg[k.key]}`;
+    row.querySelector('.stepper button:first-child').disabled = guestCfg[k.key] <= 0;
+    row.querySelector('.stepper button:last-child').disabled = guestCfg[k.key] >= MAX_GUESTS || !available;
+  }
+}
+
+// ---- Sharing levels (what feeds the library) ----
+const LEVEL_LABELS = {
+  video: { points: 'points', video: 'video' },
+  music: { motion: 'motion', beat: 'beat (mic only)', audio: 'audio' },
+};
+function buildChips() {
+  for (const [dial, levels] of [['video', VIDEO_LEVELS], ['music', MUSIC_LEVELS]]) {
+    const box = $(`chips-${dial}`);
+    box.replaceChildren();
+    for (const lv of levels) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.dataset.level = lv;
+      b.textContent = LEVEL_LABELS[dial][lv];
+      b.addEventListener('click', () => { share.configure({ [dial]: lv }); renderChips(); });
+      box.append(b);
+    }
+  }
+  renderChips();
+}
+function renderChips() {
+  for (const dial of ['video', 'music']) {
+    for (const b of $(`chips-${dial}`).querySelectorAll('.chip')) b.classList.toggle('on', b.dataset.level === share.level[dial]);
+  }
 }
 
 // ---- Wire up UI ----
@@ -482,9 +661,12 @@ $('btn-join').addEventListener('click', () => {
   enter(name);
 });
 $('btn-solo').addEventListener('click', () => enter(null));
+buildPickers();
+buildChips();
 if (!serverLink) {
   $('room-box').classList.add('hidden');
-  $('server-status').textContent = 'No dance server configured — solo only.';
+  $('share-box').classList.add('hidden');
+  $('server-status').textContent = 'No dance server configured — delayed-you guests only.';
 }
 
 $('btn-capture').addEventListener('click', captureRoom);
@@ -528,22 +710,16 @@ function bindSlider(id, valId, format, apply) {
   });
 }
 
-function setGuestCount(v) {
-  guestCfg.count = v;
-  guestTransport.configure({ guests: v });
-  // Drop replay guests from removed slots immediately.
-  for (const [id, g] of guests) if (g.kind === 'replay' && g.slot > v) guests.delete(id);
-  $('sl-guests').value = v;
-  $('val-guests').textContent = `${v}`;
-}
-
-bindSlider('sl-guests', 'val-guests', (v) => `${v}`, setGuestCount);
 bindSlider('sl-spacing', 'val-spacing', (v) => `${v}s`, (v) => {
   guestCfg.spacingSec = v;
   guestTransport.configure({ spacingMs: v * 1000 });
 });
 bindSlider('sl-opacity', 'val-opacity', (v) => `${v}%`, (v) => {
   guestCfg.opacity = v / 100;
+});
+bindSlider('sl-variation', 'val-variation', (v) => `${v}%`, (v) => {
+  guestCfg.variation = v / 100;
+  if (mode === 'dance') sendGuestWants();
 });
 
 // Keep the camera alive across tab switches (mobile browsers may pause it).

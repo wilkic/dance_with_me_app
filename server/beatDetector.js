@@ -1,4 +1,5 @@
 import { KP, getKeypoint } from '../src/pose/poseFormat.js';
+import { dominantTempo } from './tempo.js';
 
 // Joints that carry the most rhythmic information, weighted accordingly.
 const TRACKED = [
@@ -137,41 +138,19 @@ export class BeatDetector {
     }
   }
 
-  /** Autocorrelation of the energy signal → dominant tempo. */
+  /** Autocorrelation of the energy signal → dominant tempo (see tempo.js). */
   #analyzeTempo() {
-    const n = this.grid.length;
-    if (n < SAMPLE_HZ * 3) return; // need ≥3s of motion
-
-    const mean = this.grid.reduce((s, v) => s + v, 0) / n;
-    const sig = this.grid.map((v) => v - mean);
-    const norm = sig.reduce((s, v) => s + v * v, 0);
-    if (norm < 1e-6) {
+    if (this.grid.length < SAMPLE_HZ * 3) return; // need ≥3s of motion
+    const { bpm, confidence, flat } = dominantTempo(this.grid, SAMPLE_HZ, { minBpm: MIN_BPM, maxBpm: MAX_BPM });
+    if (flat) {
       this.state.bpm = 0;
       this.state.confidence = 0;
-      return;
-    }
-
-    const minLag = Math.round((60 / MAX_BPM) * SAMPLE_HZ);
-    const maxLag = Math.min(Math.round((60 / MIN_BPM) * SAMPLE_HZ), n - 1);
-    let bestLag = 0;
-    let bestVal = 0;
-    for (let lag = minLag; lag <= maxLag; lag++) {
-      let acc = 0;
-      for (let i = 0; i + lag < n; i++) acc += sig[i] * sig[i + lag];
-      const val = acc / norm;
-      if (val > bestVal) {
-        bestVal = val;
-        bestLag = lag;
-      }
-    }
-
-    if (bestLag > 0 && bestVal > 0.15) {
-      const bpm = 60 / (bestLag / SAMPLE_HZ);
+    } else if (bpm > 0) {
       // Smooth tempo estimate to avoid HUD flicker.
       this.state.bpm = this.state.bpm > 0
         ? this.state.bpm * 0.7 + bpm * 0.3
         : bpm;
-      this.state.confidence = bestVal;
+      this.state.confidence = confidence;
     } else {
       this.state.confidence *= 0.8;
       if (this.state.confidence < 0.1) this.state.bpm = 0;

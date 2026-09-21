@@ -17,12 +17,17 @@ CDN on first load, so the phone needs internet the first time.
 
 ## How to use
 
-1. **Pick a dance room** — the start screen lists the rooms that are open
-   right now (who's dancing, room BPM); tap one to join. Or start a new
-   one: the app suggests a name like `funky-otter` (🎲 shuffles), tap
-   **Start this room**, and anyone who picks it from the list or types the
-   same name joins you. **Dance solo** skips rooms. Room links work too:
-   `https://…/?room=funky-otter`. Grant camera permission.
+1. **Pick your guests** — the start screen asks who dances in your space:
+   **⏱ Delayed you** (your own moves, a minute later), **👥 Other people**
+   (real dancers online right now, brought into your space by the server)
+   and **✨ AI dancers** (real recorded dances from the library, replayed
+   on your beat with borrowed moves), 0–3 of each. Tap **Dance**. Or dance
+   in a room: the start screen lists the rooms that are open right now
+   (who's dancing, room BPM); tap one to join, or start a new one — the
+   app suggests a name like `funky-otter` (🎲 shuffles), tap **Start this
+   room**, and anyone who picks it from the list or types the same name
+   joins you. Room links work too: `https://…/?room=funky-otter`. Grant
+   camera permission.
 2. **Capture Room** — prop the phone up facing your dance space, step out
    of frame, tap the button. A 5-second countdown fires, then the app
    averages several frames into a "clean plate" of your empty room.
@@ -35,11 +40,64 @@ CDN on first load, so the phone needs internet the first time.
 Controls: **Ghost** toggles between the clean room (user removed) and the
 live feed (debugging). **Rescan** recaptures the room. **Flip** switches
 front/back camera before capture. The **☰ menu** (top right while dancing)
-has guest-dancer options — how many guests (0–3), the delay before each
-appears, their opacity — and **Exit** back to the start screen (which also
-leaves the room). Replay guests are delayed copies of your own moves; they
-default to 1 when solo and 0 in a room, where real people are the guests.
-Everyone but you is drawn behind you at 90% opacity by default.
+has the same guest picker, the delay before each replay appears, guest
+opacity, **AI variation** (how far the AI dancers stray from the person
+they replay), the **sharing levels** (below) and **Exit** back to the start
+screen (which also leaves the room). Replay guests default to 1 when solo
+and 0 in a room, where real people are the guests; AI dancers default to
+1 whenever a dance server is reachable. Everyone but you is drawn behind
+you at 90% opacity by default; AI dancers are white and carry their style
+tag (`✨ salsa`) above the head, real people carry their tempo.
+
+### Guests: delayed you, other people, AI dancers
+
+All three kinds arrive through the same path (`PoseChannel.subscribe`) and
+render as extra stick figures behind you.
+
+- **Delayed you** is client-side: your frames come back after a delay.
+- **Other people** are real dancers online right now. When you ask for N,
+  the server assigns up to N of them to your space (tempo-compatible
+  first, then whoever is in the fewest spaces) and relays their frames to
+  you exactly like room-mates'. They don't see you unless they asked for
+  people too — so you can be dancing in someone's space while dancing
+  alone in yours. Rooms still work as before; room-mates are never
+  double-booked as guests.
+- **AI dancers** are built server-side from the **dance library**. No
+  choreography is generated: an AI dancer is a real person's recorded
+  dance, retimed so its tempo lands on yours (half/double time allowed),
+  with *variation in the "moves" sense* — for a phrase at a time its arms
+  or legs are borrowed from a second dancer of similar tempo and style,
+  hung off its own shoulders/hips, and limbs swing a little further. Every
+  two minutes it moves on to another person's dance (crossfaded). The beat
+  comes in as a number, so this works for silent dancers; when the phone
+  hears music the number is better and the style match tighter.
+
+### The dance library, and what your phone shares
+
+Every session is library material: the server records each session's
+PoseFrames and tempo into `server/library/sessions/` (short blips are
+dropped; sessions ≥300 frames join the library live). What else leaves
+the phone is up to the dancer, two dials in the ☰ menu (remembered on the
+device):
+
+| dial  | minimal                          | …                                                  | full                        |
+|-------|----------------------------------|----------------------------------------------------|-----------------------------|
+| video | **points** — the PoseFrames only |                                                    | **video** — the camera feed |
+| music | **motion** — no microphone       | **beat** — mic on, only a 30 Hz onset envelope sent | **audio** — the mic recording |
+
+At the **beat** level the server hears the tempo (`♫ 120` in the HUD)
+without ever receiving sound; it drives the AI dancers and is stored with
+the session. Full media lands next to the session as `.audio.webm` /
+`.video.webm` (MediaRecorder chunks) for later ingestion.
+
+The library itself (`server/library.js`) indexes `recordings_web/` (the
+harvested web clips, tagged by genre), `recordings/` (metronome sessions)
+and `library/sessions/`; each clip gets a descriptor — tempo (metronome
+label > music tempo > motion tempo), a **style vector** (per body part,
+how far it travels and how fast, in torso lengths — `server/style.js`),
+pose coverage, source aspect — cached in `library/index.json`. Picking a
+clip is tempo-first, style-second, tag-third, the same order as the
+dancer matcher, and needs none of them to be known.
 
 ## Architecture
 
@@ -55,10 +113,16 @@ src/
     avatar.js          Avatar interface (render(ctx, poseFrame, viewport, beat))
     stickFigure.js     MVP implementation: glowing stick figure, beat pulse
   net/poseChannel.js   networking seam: publish/subscribe of PoseFrames
+  share/sessionShare.js what the phone shares for the library (mic envelope, media)
   main.js              app state machine + render loop
 server/                dance-analysis server (Node, separate package.json)
   index.js             WebSocket ingest of PoseFrames → opinions out
   beatDetector.js      tempo + beats from motion alone (moved from the client)
+  tempo.js             autocorrelation tempo for any signal; music tempo from a mic envelope
+  style.js             body space + movement-style descriptor (keypoints only)
+  library.js           the dance library: descriptors, cache, tempo/style picking
+  aiDancer.js          AI dancer: retimed replay + borrowed moves, in body space
+  recorder.js          per-session recording into library/sessions/
   matcher.js           tempo-first pairing, half/double-tempo tolerant
   songs.js             stub BPM-labeled catalog for "next song" pairing
   test/synthetic.js    end-to-end: 2 synthetic dancers → profiled + matched
@@ -109,9 +173,11 @@ a TLS terminator (Caddy, a Cloudflare tunnel, fly.io, …) because the
 HTTPS app can only open `wss://`.
 
 `cd server && npm test` runs the unit tests (rooms registry, room tempo,
-envelope) and the synthetic end-to-end check: two fake dancers at 120/118
-BPM join a room, must receive each other's frames, be profiled, see the
-room tempo, and be matched.
+envelope; tempo/style/library/AI dancer/recorder) and the synthetic
+end-to-end check: two fake dancers at 120/118 BPM join a room, must
+receive each other's frames, be profiled, see the room tempo, and be
+matched; a third, solo, asks for one real person and one AI dancer and
+must receive both, hear its music tempo, and have its session recorded.
 
 ### Dance lab (BPM calibration)
 

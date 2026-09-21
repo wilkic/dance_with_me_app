@@ -6,3 +6,4 @@ dist/
 server/lab/out/
 server/recordings/
 server/recordings_web/
+server/library/
