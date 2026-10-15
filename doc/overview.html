@@ -266,7 +266,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <rect class="box" x="560" y="548" width="180" height="50" rx="8"/><text class="t" x="574" y="570">Dance floor</text><text class="s" x="574" y="587">floor.html · big screen</text>
     <rect class="box" x="750" y="548" width="190" height="50" rx="8"/><text class="t" x="764" y="570">Dance lab</text><text class="s" x="764" y="587">offline · server/lab/</text>
     <text class="lbl" x="20" y="560">Dev: Vite proxies /ws to the server on port 8901.</text>
-    <text class="lbl" x="20" y="578">Deployed site: needs a public wss:// server. None is hosted yet.</text>
+    <text class="lbl" x="20" y="578">Deployed site: wss://ws.wilkinscoffee.be/ws (Oracle VM, Caddy TLS).</text>
   </svg>
   </div>
   <p class="note">Traffic goes through the server as a star, about 16 KB/s per dancer. That is what lets the server form opinions on everyone. WebRTC could replace it if latency ever matters more.</p>
@@ -467,12 +467,12 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
     <thead><tr><th>Area</th><th>State</th><th>Detail</th></tr></thead>
     <tbody>
       <tr><td>Room capture, stick figure, delayed guests</td><td><span class="pill p-ok">works</span></td><td class="sub">Phone-tested over the summer; kids liked it. Live on the deployed site.</td></tr>
-      <tr><td>Rooms, lobby, LAN test script, dance floor</td><td><span class="pill p-ok">built</span></td><td class="sub">Tested with synthetic peers and in Chrome. A planned multi-phone session with real cameras has no recorded result.</td></tr>
+      <tr><td>Rooms, lobby, LAN test script, dance floor</td><td><span class="pill p-ok">built</span></td><td class="sub">Tested with synthetic peers and in Chrome. Multi-phone session with the kids on 13 Sep 2026 went perfectly.</td></tr>
       <tr><td>Other-people and AI guests, library, recorder</td><td><span class="pill p-ok">verified</span></td><td class="sub">40 automated checks pass. In Chrome with a stubbed camera, an AI guest loaded and drew, and a synthetic real dancer appeared as a guest and vanished when it stopped.</td></tr>
       <tr><td>Mic beat and audio, video sharing</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen.</td></tr>
       <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>
-      <tr><td>Public server for the deployed site</td><td><span class="pill p-todo">missing</span></td><td class="sub">Rooms and guests work only on the LAN stack until <code>server/</code> is hosted behind TLS and <code>DANCE_SERVER_URL</code> is set.</td></tr>
-      <tr><td>Branch</td><td><span class="pill p-todo">unpushed</span></td><td class="sub"><code>dance-rooms</code> is 11 commits ahead of <code>main</code> and has no remote. Merging it brings the lab along.</td></tr>
+      <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>
+      <tr><td>Branch</td><td><span class="pill p-ok">released</span></td><td class="sub"><code>dance-rooms</code> merged into <code>main</code> (lab included) and published to <code>release</code> on 15 Oct 2026.</td></tr>
       <tr><td>Room as music selector, shared audio</td><td><span class="pill p-plan">planned</span></td><td class="sub">Music matched to each dancer's taste and everyone's tempo. Audio sharing between phones is deliberately deferred.</td></tr>
     </tbody>
   </table></div>
