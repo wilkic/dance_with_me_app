@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Push the dance server to the Oracle VM and (re)start it.
 #   server/deploy/deploy.sh setup   # first time: install Node, Caddy, firewall, systemd
-#   server/deploy/deploy.sh         # code + dance library, restart
+#   server/deploy/deploy.sh         # code (the `release` branch) + dance library, restart
 #   server/deploy/deploy.sh pull    # fetch sessions recorded on the VM
 #   server/deploy/deploy.sh logs    # follow the server log
 # Settings (env or server/deploy/.env): DANCE_HOST (ssh target, e.g.
@@ -20,11 +20,16 @@ case "${1:-deploy}" in
     ssh -t "$DANCE_HOST" "DANCE_DOMAIN=$DANCE_DOMAIN bash /tmp/setup-vm.sh"
     ;;
   deploy)
-    echo "== code"
+    # Code comes from the `release` branch, not the working tree, so the VM
+    # runs the same version as the public site. DANCE_REF overrides it.
+    REF=${DANCE_REF:-release}
+    echo "== code ($REF @ $(git -C "$ROOT" rev-parse --short "$REF"))"
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
     # The server imports shared modules from src/, so both go up.
+    git -C "$ROOT" archive "$REF" server src | tar -x -C "$TMP"
     rsync -az --delete --exclude node_modules --exclude lab/out \
       --exclude recordings --exclude recordings_web --exclude library \
-      "$ROOT/server" "$ROOT/src" "$DANCE_HOST:$APP/"
+      "$TMP/server" "$TMP/src" "$DANCE_HOST:$APP/"
     echo "== dance library (add-only: sessions recorded on the VM are kept)"
     for d in recordings recordings_web library; do
       [ -d "$ROOT/server/$d" ] && rsync -az --exclude index.json "$ROOT/server/$d" "$DANCE_HOST:$APP/server/"

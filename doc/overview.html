@@ -458,7 +458,7 @@ cd server &amp;&amp; npm install &amp;&amp; npm start
 # tests and lab
 cd server &amp;&amp; npm test        # 40 checks: rooms, library, AI dancer, recorder, end-to-end
 cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</code></pre>
-  <p>Without a server the app still works offline, solo, with delayed-you guests only and no tempo readout. The site on GitHub Pages builds from <code>main</code> and is fully self-contained: the pose model and WebAssembly files are vendored.</p>
+  <p>Without a server the app still works offline, solo, with delayed-you guests only and no tempo readout. The site on GitHub Pages builds from the <code>release</code> branch (publish with <code>git push origin main:release</code>; <code>server/deploy/deploy.sh</code> ships the same branch to the server VM) and is fully self-contained: the pose model and WebAssembly files are vendored.</p>
 </section>
 
 <section id="status">

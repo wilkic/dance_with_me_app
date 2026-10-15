@@ -1,8 +1,10 @@
 name: Deploy to GitHub Pages
 
+# The public site follows the `release` branch; publish with
+#   git push origin main:release
 on:
   push:
-    branches: [main]
+    branches: [release]
   workflow_dispatch:
 
 permissions:
