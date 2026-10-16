@@ -25,8 +25,7 @@
  *   ← { type: 'label', clickBpm }                 dance-lab ground truth
  *   ← { type: 'watch' }                           become a spectator (dance floor)
  *
- * Guests. Three kinds can dance in someone's space. "Delayed you" is
- * client-side (their own frames replayed). "Other people" are real
+ * Guests. Two kinds can dance in someone's space. "Other people" are real
  * dancers online right now, assigned by the server (tempo-compatible
  * first) and relayed exactly like room-mates — you can be dancing in
  * someone's space while dancing alone in yours. "AI dancers" are built
@@ -59,7 +58,7 @@ import { StyleWindow } from './style.js';
 import { EnvelopeTempo, tempoGap } from './tempo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-export const MAX_GUESTS = 5;
+export const MAX_GUESTS = 3;
 const ACTIVE_MS = 6000;         // "dancing" = a frame arrived this recently
 const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often

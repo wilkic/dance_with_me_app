@@ -28,7 +28,8 @@ const LIMB_BONES = [
  * see bench.html):
  *  - 'blur' (default): true shadowBlur glow, one blur pass per figure.
  *  - 'halo': a wide translucent stroke under the bones, no blur at all —
- *    several times cheaper; used for guests.
+ *    several times cheaper.
+ *  - 'none': no glow at all; used for guests.
  */
 export class StickFigureAvatar extends Avatar {
   constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'blur' } = {}) {
@@ -126,7 +127,7 @@ export class StickFigureAvatar extends Avatar {
       ctx.stroke(bones);
       if (head) ctx.stroke(head); // a ring around the head
       ctx.globalAlpha = this.alpha;
-    } else {
+    } else if (this.glowStyle === 'blur') {
       ctx.shadowColor = this.glow;
       ctx.shadowBlur = lineWidth * (1.5 + pulse * 3);
     }

@@ -177,7 +177,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <div>
     <div class="eyebrow">Software overview · 21 Sep 2026</div>
     <h1>Dance With Me</h1>
-    <p class="lede">A phone app that removes you from your own room and puts a glowing stick figure in your place. Dance alone, or fill the room with a delayed copy of yourself, real people, and AI dancers built from real recordings.</p>
+    <p class="lede">A phone app that removes you from your own room and puts a glowing stick figure in your place. Dance alone, or fill the room with real people and AI dancers built from real recordings.</p>
     <div class="chips">
       <span class="chip">branch <b>dance-rooms</b></span>
       <span class="chip">commit <b>2f9cd2f</b></span>
@@ -205,7 +205,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <div class="steps">
     <div class="step"><h3>1. Pick room</h3><p>"Start a room" opens your own space. "Join a room" is the phone's own picker (a spinning wheel on iOS) listing open rooms, or a grey "None".</p></div>
     <div class="step"><h3>2. Capture the room</h3><p>Prop the phone up facing your dance space, step out of frame, tap the button. After a 3-second countdown the app averages several frames into a clean plate.</p></div>
-    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. The slider at the bottom sets how many guests (0–5) dance behind you at 90% opacity. The ☰ menu changes time between guests, opacity, AI variation and sharing on the fly.</p></div>
+    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. The slider at the bottom sets how many guests (0–3) dance behind you at 90% opacity. The ☰ menu changes time between guests, opacity, AI variation and sharing on the fly.</p></div>
   </div>
   <p class="note">Everything the app sends is the skeleton: 33 joints per frame. Camera video and microphone audio leave the phone only if the dancer turns those dials up.</p>
 </section>
@@ -227,7 +227,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <rect class="box" x="40" y="120" width="340" height="46" rx="8"/><text class="t" x="56" y="140">Pose detection</text><text class="s" x="56" y="157">MediaPipe pose_landmarker_lite · GPU delegate</text>
       <rect class="box" x="40" y="184" width="340" height="46" rx="8"/><text class="t" x="56" y="204">Smoothing → PoseFrame</text><text class="s" x="56" y="221">One Euro filter per joint · 33 keypoints × x, y, z, visibility</text>
       <rect class="box" x="40" y="248" width="340" height="46" rx="8"/><text class="t" x="56" y="268">PoseChannel</text><text class="s" x="56" y="285">publishes your frames · subscribes to everyone else's</text>
-      <rect class="box hi" x="40" y="312" width="340" height="46" rx="8"/><text class="t" x="56" y="332">Avatars over the clean-plate room</text><text class="s" x="56" y="349">you, delayed you, people, AI: one drawing path</text>
+      <rect class="box hi" x="40" y="312" width="340" height="46" rx="8"/><text class="t" x="56" y="332">Avatars over the clean-plate room</text><text class="s" x="56" y="349">you, people, AI: one drawing path</text>
       <rect class="box" x="40" y="376" width="340" height="46" rx="8"/><text class="t" x="56" y="396">SessionShare</text><text class="s" x="56" y="413">mic onset envelope · media chunks · the two dials</text>
       <rect class="box" x="40" y="440" width="340" height="46" rx="8"/><text class="t" x="56" y="460">Screens</text><text class="s" x="56" y="477">start · capture room · dance · ☰ menu</text>
     </g>
@@ -273,14 +273,14 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 </section>
 
 <section id="guests">
-  <h2>Guests: three kinds, one path</h2>
-  <p>Whoever else is in your space arrives through the same <code>PoseChannel.subscribe</code> path and is drawn as one more stick figure behind you. The dancer only chooses how many: one slider on the dance screen, 0–5 seats (default 1). <code>planGuests()</code> in <code>main.js</code> decides who sits where:</p>
+  <h2>Guests: two kinds, one path</h2>
+  <p>Whoever else is in your space arrives through the same <code>PoseChannel.subscribe</code> path and is drawn as one more stick figure behind you. The dancer only chooses how many: one slider on the dance screen, 0–3 seats (default 1), real guests included. <code>planGuests()</code> in <code>main.js</code> decides who sits where:</p>
   <ul>
-    <li><b>Real people first, live.</b> Other people the server finds take seats straight away.</li>
-    <li><b>Everyone else trickles in.</b> The remaining seats open one per "time between guests" (default 10 s): seat 1 after one interval, seat 2 after two, and so on. Odd seats are delayed you, even seats AI dancers (delayed you when no AI dancers are available). Nothing that isn't live appears the moment you start, in a room or not.</li>
-    <li><b>Room-mates don't take a seat.</b> Everyone in your room is always shown.</li>
+    <li><b>Room-mates sit first.</b> Everyone in your room is always shown, and each one uses a seat.</li>
+    <li><b>The rest phase in.</b> The other seats open one per "time between guests" (default 15 s): seat 1 after 15 s, seat 2 after 30 s, seat 3 after 45 s. Nobody appears the moment you start.</li>
+    <li><b>Real people before AI.</b> An open seat goes to a real person the server found, otherwise to an AI dancer. A real person arriving later takes over an AI seat.</li>
+    <li><b>No server, no guests.</b> The old "delayed you" replays are gone (16 Oct 2026).</li>
   </ul>
-  <p>Delayed-you seats all read one shared history on the phone (<code>DelayedLoopbackTransport</code>), each through its own cursor. A seat replays you from exactly when dancing started, so it appears right when its seat opens.</p>
   <h3>Keeping you quick</h3>
   <p>Your own figure is what has to feel immediate. Guests matter less, so they are drawn the cheap way. Measured with <code>bench.html</code> (desktop Chrome, 1280×720; open it on a phone under <code>npm run dev</code> for real numbers):</p>
   <div class="tbl"><table>
@@ -289,17 +289,16 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td>Before: blurred glow per bone, room photo redrawn every frame</td><td class="num">11.4 ms</td><td class="num">24.8 ms</td><td class="num">2.7 ms</td></tr>
       <tr><td>One blur per figure</td><td class="num">12.2 ms</td><td class="num">22.4 ms</td><td class="num">2.0 ms</td></tr>
       <tr><td>Guests with a halo glow (no blur)</td><td class="num">11.1 ms</td><td class="num">15.1 ms</td><td class="num">0.8 ms</td></tr>
-      <tr><td>Now: halo guests, room photo on its own layer</td><td class="num">4.2 ms</td><td class="num">6.5 ms</td><td class="num">0.5 ms</td></tr>
+      <tr><td>Halo guests, room photo on its own layer</td><td class="num">4.2 ms</td><td class="num">6.5 ms</td><td class="num">0.5 ms</td></tr>
     </tbody>
   </table></div>
-  <p class="sub">About 4 ms in every row is the benchmark's own per-frame readback. The room photo now sits on a canvas under the stage, drawn once at capture. You keep the real blurred glow, drawn in a single pass. Add <code>?perf=1</code> to the app URL and the HUD shows pose-detection, guest-drawing and loop times live.</p>
-  <div class="legend"><span><i class="dot d-you"></i>you</span><span><i class="dot d-delay"></i>delayed you</span><span><i class="dot d-people"></i>other people</span><span><i class="dot d-ai"></i>AI dancers</span><span>(colors on this page only, not the app's palette)</span></div>
+  <p class="sub">About 4 ms in every row is the benchmark's own per-frame readback. The room photo now sits on a canvas under the stage, drawn once at capture. Since 16 Oct 2026 guests have no glow at all (cheaper still than the halo); you keep the real blurred glow, drawn in a single pass. Add <code>?perf=1</code> to the app URL and the HUD shows pose-detection, guest-drawing and loop times live.</p>
+  <div class="legend"><span><i class="dot d-you"></i>you</span><span><i class="dot d-people"></i>other people</span><span><i class="dot d-ai"></i>AI dancers</span><span>(colors on this page only, not the app's palette)</span></div>
   <div class="tbl wrapfirst"><table>
     <thead><tr><th>Kind</th><th>Where the frames come from</th><th>In the app</th></tr></thead>
     <tbody>
-      <tr><td><i class="dot d-delay"></i>Delayed you</td><td>Your own frames, replayed on the phone. No server needed. Seat N replays you N × the time between guests back.</td><td class="sub">Tinted per slot, halo glow. Time-between-guests and opacity sliders.</td></tr>
       <tr><td><i class="dot d-people"></i>Other people</td><td>Real dancers online and moving in the last 6 seconds. The server picks the tempo-closest first, then whoever is in the fewest spaces. They see you only if they asked for people too, so you can dance in someone's space while alone in yours. Room-mates are never double-booked.</td><td class="sub">Own color, tempo tag above the head.</td></tr>
-      <tr><td><i class="dot d-ai"></i>AI dancers</td><td>Built by the server from the dance library (next sections). They fill the even seats as those open. Each moves on to another person's dance every two minutes, with a 1.2 s crossfade.</td><td class="sub">White. HUD shows the style and "borrowing arms". A plain-text style tag above the head (<code>salsa</code>) is off by default; switch it on in the ☰ menu.</td></tr>
+      <tr><td><i class="dot d-ai"></i>AI dancers</td><td>Built by the server from the dance library (next sections). They fill any open seat no real person is in. Each moves on to another person's dance every two minutes, with a 1.2 s crossfade.</td><td class="sub">White. HUD shows the style and "borrowing arms". A plain-text style tag above the head (<code>salsa</code>) is off by default; switch it on in the ☰ menu.</td></tr>
     </tbody>
   </table></div>
   <h3>Dance rooms</h3>
@@ -425,9 +424,9 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>src/pose/poseFormat.js</code></td><td>The PoseFrame contract, binary serialize and deserialize</td><td class="num">111</td></tr>
       <tr><td><code>src/pose/poseDetector.js</code></td><td>MediaPipe behind a swappable interface</td><td class="num">52</td></tr>
       <tr><td><code>src/pose/smoothing.js</code></td><td>One Euro filter per joint</td><td class="num">71</td></tr>
-      <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur or halo glow</td><td class="num">143</td></tr>
+      <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur, halo or no glow</td><td class="num">144</td></tr>
       <tr><td><code>src/room/roomModel.js</code></td><td>Clean-plate room capture, metadata, room for future 3D</td><td class="num">96</td></tr>
-      <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, delayed loopback, WebSocket and composite transports</td><td class="num">212</td></tr>
+      <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, WebSocket and composite transports</td><td class="num">147</td></tr>
       <tr><td><code>src/share/sessionShare.js</code></td><td>The sharing dials: mic envelope, media chunks</td><td class="num">179</td></tr>
       <tr><td><code>src/net/*.js</code></td><td>Envelope format, room names, server URL rules</td><td class="num">82</td></tr>
       <tr><td><code>src/floor.js</code>, <code>floor.html</code></td><td>The big-screen spectator page</td><td class="num">237</td></tr>
@@ -477,7 +476,7 @@ cd server &amp;&amp; npm install &amp;&amp; npm start
 # tests and lab
 cd server &amp;&amp; npm test        # 40 checks: rooms, library, AI dancer, recorder, end-to-end
 cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</code></pre>
-  <p>Without a server the app still works offline, solo, with delayed-you guests only and no tempo readout. The site on GitHub Pages builds from the <code>release</code> branch (publish with <code>git push origin main:release</code>; <code>server/deploy/deploy.sh</code> ships the same branch to the server VM) and is fully self-contained: the pose model and WebAssembly files are vendored.</p>
+  <p>Without a server the app still works offline, solo, with no guests and no tempo readout. The site on GitHub Pages builds from the <code>release</code> branch (publish with <code>git push origin main:release</code>; <code>server/deploy/deploy.sh</code> ships the same branch to the server VM) and is fully self-contained: the pose model and WebAssembly files are vendored.</p>
 </section>
 
 <section id="status">
@@ -485,10 +484,11 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
   <div class="tbl wrapfirst"><table>
     <thead><tr><th>Area</th><th>State</th><th>Detail</th></tr></thead>
     <tbody>
-      <tr><td>Room capture, stick figure, delayed guests</td><td><span class="pill p-ok">works</span></td><td class="sub">Phone-tested over the summer; kids liked it. Live on the deployed site.</td></tr>
+      <tr><td>Room capture, stick figure</td><td><span class="pill p-ok">works</span></td><td class="sub">Phone-tested over the summer; kids liked it. Live on the deployed site.</td></tr>
       <tr><td>Rooms, lobby, LAN test script, dance floor</td><td><span class="pill p-ok">built</span></td><td class="sub">Tested with synthetic peers and in Chrome. Multi-phone session with the kids on 13 Sep 2026 went perfectly.</td></tr>
       <tr><td>Other-people and AI guests, library, recorder</td><td><span class="pill p-ok">verified</span></td><td class="sub">40 automated checks pass. In Chrome with a stubbed camera, an AI guest loaded and drew, and a synthetic real dancer appeared as a guest and vanished when it stopped.</td></tr>
       <tr><td>Guest slider, trickle-in, cheap guest drawing</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 5 seats and 30 s spacing, nothing appeared at start, AI dancers arrived at 60 s and 121 s, sliding to 0 cleared them. Not yet phone-tested; use <code>?perf=1</code> to read the timings.</td></tr>
+      <tr><td>Max 3 guests, AI or real only, 15 s phase-in, no guest glow</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 3 seats the server was asked for 1, 2, then 3 guests, and three plain AI figures danced. Server caps guests at 3.</td></tr>
       <tr><td>Mic beat and audio, video sharing</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen.</td></tr>
       <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>
       <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>
