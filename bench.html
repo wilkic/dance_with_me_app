@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guest Render Bench</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #0b0b12; color: #e8e6f0; font: 14px system-ui, sans-serif; }
+    canvas { width: 100%; max-width: 640px; display: block; background: #222; }
+    table { border-collapse: collapse; margin-top: 12px; }
+    td, th { padding: 4px 10px; border-bottom: 1px solid #333; text-align: right; font-variant-numeric: tabular-nums; }
+    th:first-child, td:first-child { text-align: left; }
+    button { font: inherit; padding: 8px 14px; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <!--
+    Dev-only benchmark (not part of the build): how much does drawing guests
+    cost per frame? Draws the clean plate + N guests + you at camera size,
+    for each render strategy, and reports ms per frame. Open it on the phone
+    under `npm run dev` (https://<lan-ip>:5173/bench.html) for real numbers.
+  -->
+  <h1>Guest render bench</h1>
+  <p>ms per frame to draw the room + N guests + you at <span id="size"></span>. A 30 fps camera leaves 33 ms for everything (pose detection included).</p>
+  <button id="run">Run</button>
+  <canvas id="c"></canvas>
+  <div id="out"></div>
+  <script type="module">
+    import { StickFigureAvatar } from '/src/avatar/stickFigure.js';
+    import { emptyPoseFrame, KP, STRIDE } from '/src/pose/poseFormat.js';
+
+    const qs = new URLSearchParams(location.search);
+    const W = Number(qs.get('w')) || 1280;
+    const H = Number(qs.get('h')) || 720;
+    const FRAMES = Number(qs.get('frames')) || 90;
+    const c = document.getElementById('c');
+    c.width = W; c.height = H;
+    document.getElementById('size').textContent = `${W}×${H}`;
+    const ctx = c.getContext('2d');
+
+    // Stand-in clean plate: a noisy photo-like canvas.
+    const plate = document.createElement('canvas');
+    plate.width = W; plate.height = H;
+    const pctx = plate.getContext('2d');
+    const img = pctx.createImageData(W, H);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const y = (i / 4 / W) | 0;
+      const v = 60 + (y / H) * 80 + Math.random() * 30;
+      img.data[i] = v; img.data[i + 1] = v * 0.9; img.data[i + 2] = v * 0.8; img.data[i + 3] = 255;
+    }
+    pctx.putImageData(img, 0, 0);
+
+    // A dancing pose at time t (s), centred at cx.
+    function pose(t, cx, scale) {
+      const f = emptyPoseFrame();
+      const k = f.keypoints;
+      const set = (i, x, y) => { k[i * STRIDE] = cx + (x - 0.5) * scale; k[i * STRIDE + 1] = 0.5 + (y - 0.5) * scale; k[i * STRIDE + 3] = 1; };
+      const s = Math.sin(t * 2 * Math.PI * 2), q = Math.cos(t * 2 * Math.PI);
+      set(KP.NOSE, 0.5 + q * 0.01, 0.22);
+      set(KP.LEFT_EAR, 0.48, 0.21); set(KP.RIGHT_EAR, 0.52, 0.21);
+      set(KP.LEFT_SHOULDER, 0.45, 0.32); set(KP.RIGHT_SHOULDER, 0.55, 0.32);
+      set(KP.LEFT_ELBOW, 0.38, 0.38 - s * 0.05); set(KP.RIGHT_ELBOW, 0.62, 0.38 + s * 0.05);
+      set(KP.LEFT_WRIST, 0.34, 0.30 - s * 0.1); set(KP.RIGHT_WRIST, 0.66, 0.30 + s * 0.1);
+      set(KP.LEFT_HIP, 0.47 + q * 0.01, 0.58); set(KP.RIGHT_HIP, 0.53 + q * 0.01, 0.58);
+      set(KP.LEFT_KNEE, 0.45, 0.72); set(KP.RIGHT_KNEE, 0.55, 0.72);
+      set(KP.LEFT_ANKLE, 0.45, 0.86); set(KP.RIGHT_ANKLE, 0.55, 0.86);
+      set(KP.LEFT_FOOT, 0.42, 0.88); set(KP.RIGHT_FOOT, 0.58, 0.88);
+      return f;
+    }
+
+    const you = new StickFigureAvatar();
+    const palette = ['#ff7dc5', '#7dd3ff', '#ffd27d', '#7dffb0', '#e07dff'];
+
+    // background: 'draw' (drawImage the plate every frame, as main.js does) | 'css' (plate under a transparent canvas)
+    function runCase({ guests, glowStyle, background }) {
+      const avs = palette.slice(0, guests).map((color) => new StickFigureAvatar({ color, glow: '#ffffff', glowStyle, alpha: 0.9 }));
+      const t0 = performance.now();
+      for (let f = 0; f < FRAMES; f++) {
+        const t = f / 30;
+        if (background === 'draw') ctx.drawImage(plate, 0, 0, W, H);
+        else ctx.clearRect(0, 0, W, H);
+        avs.forEach((a, i) => a.render(ctx, pose(t + i * 0.3, 0.2 + i * 0.15, 0.8), { width: W, height: H }));
+        you.render(ctx, pose(t, 0.5, 1), { width: W, height: H });
+        // Read a pixel back every frame: forces each frame to actually be
+        // drawn (otherwise the browser drops overdrawn frames unrendered).
+        ctx.getImageData(W >> 1, H >> 1, 1, 1);
+      }
+      return (performance.now() - t0) / FRAMES;
+    }
+
+    const CASES = [
+      { label: 'blur glow, plate redrawn', glowStyle: 'blur', background: 'draw' },
+      { label: 'halo glow, plate redrawn', glowStyle: 'halo', background: 'draw' },
+      { label: 'halo glow, plate as CSS', glowStyle: 'halo', background: 'css' },
+    ];
+
+    async function run() {
+      const out = document.getElementById('out');
+      out.textContent = 'running…';
+      await new Promise((r) => setTimeout(r, 50));
+      runCase({ guests: 1, glowStyle: 'blur', background: 'draw' }); // warm-up
+      const results = [];
+      for (const cs of CASES) {
+        const row = { label: cs.label, ms: [] };
+        for (let n = 0; n <= 5; n++) {
+          const reps = [0, 1, 2].map(() => runCase({ guests: n, ...cs })).sort((a, b) => a - b);
+          row.ms.push(reps[1]);
+          await new Promise((r) => setTimeout(r, 0));
+        }
+        results.push(row);
+      }
+      window.benchResults = { W, H, ua: navigator.userAgent, results };
+      out.innerHTML = `<table><tr><th>strategy</th>${[0, 1, 2, 3, 4, 5].map((n) => `<th>${n} guests</th>`).join('')}</tr>${
+        results.map((r) => `<tr><td>${r.label}</td>${r.ms.map((m) => `<td>${m.toFixed(2)}</td>`).join('')}</tr>`).join('')}</table>`;
+    }
+    document.getElementById('run').addEventListener('click', run);
+    if (qs.has('auto')) run();
+  </script>
+</body>
+</html>

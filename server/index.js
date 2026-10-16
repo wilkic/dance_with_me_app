@@ -59,7 +59,7 @@ import { StyleWindow } from './style.js';
 import { EnvelopeTempo, tempoGap } from './tempo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-export const MAX_GUESTS = 3;
+export const MAX_GUESTS = 5;
 const ACTIVE_MS = 6000;         // "dancing" = a frame arrived this recently
 const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often

@@ -36,23 +36,20 @@ const room = new RoomModel();
 // Three kinds share one path:
 //   replay  — your own moves replayed on a delay (DelayedLoopbackTransport)
 //   people  — real dancers: room-mates, or anyone online the server brings
-//             into your space when you ask for "other people"
+//             into your space
 //   ai      — AI dancers the server builds from the dance library (a real
 //             person's recorded dance on your beat, with borrowed moves)
-// Settings are live-adjustable from the start screen and the burger menu.
+// The dancer only picks HOW MANY guests (one slider on the dance screen);
+// planGuests() decides who. Real people come in live, straight away; the
+// rest of the seats trickle in one per spacingSec, alternating delayed-you
+// and AI dancers. Room-mates are always shown and don't take a seat.
 const GUEST_FADE_MS = { replay: 12_000, peer: 2_000, ai: 4_000 };
 const PEER_STALE_MS = 6_000;
-const MAX_GUESTS = 3;
-const guestCfg = { replay: 1, people: 0, ai: 1, spacingSec: 60, opacity: 0.9, variation: 0.5 };
-const GUEST_KINDS = [
-  { key: 'replay', icon: '⏱', label: 'Delayed you', hint: 'your own moves, a minute later', local: true },
-  { key: 'people', icon: '👥', label: 'Other people', hint: 'real dancers online right now' },
-  { key: 'ai', icon: '✨', label: 'AI dancers', hint: 'real dances from the library, on your beat' },
-];
-const guestTransport = new DelayedLoopbackTransport({
-  guests: guestCfg.replay,
-  spacingMs: guestCfg.spacingSec * 1000,
-});
+const MAX_GUESTS = 5;
+const guestCfg = { count: 1, spacingSec: 60, opacity: 0.9, variation: 0.5 };
+const guestTransport = new DelayedLoopbackTransport();
+const guestPlan = { replayDelaysMs: [], ai: 0, nextAt: 0 }; // what planGuests() last decided
+let danceStartedAt = 0; // performance.now() when the dance screen opened
 
 // Dance server (rooms, guests, rhythm analysis, the dance library) — see
 // net/serverUrl.js for how the URL is chosen.
@@ -81,7 +78,8 @@ if (serverLink) {
     // Every (re)connect: resend session state.
     if (clickBpm > 0) serverLink.sendJSON({ type: 'label', clickBpm });
     share.announce();
-    sendGuestWants();
+    lastWants = '';
+    planGuests();
   };
 }
 
@@ -120,7 +118,7 @@ function onServerStatus(state) {
     lobby = [];
     renderRoomList(state === 'connecting' ? 'Looking for rooms…' : 'No dance server — rooms unavailable.');
   }
-  renderPickers();
+  planGuests();
 }
 
 /** Start screen: the list of open rooms (tap to join). */
@@ -184,7 +182,7 @@ function onServerMessage(msg) {
     for (const [id, g] of guests) if (g.kind === 'ai' && !aiInfo.has(id)) guests.delete(id);
     pruneReal();
     renderGuestLine();
-    renderPickers();
+    planGuests();
   } else if (msg.type === 'match') {
     $('hud-match').textContent =
       `♪ ${msg.song.title} (${Math.round(msg.song.bpm)} bpm) with ${msg.partner}`;
@@ -262,11 +260,13 @@ function onRemoteFrame(dancerId, frame) {
     const replay = /^guest-(\d+)-/.exec(dancerId);
     const ai = /^ai-(\d+)-/.exec(dancerId);
     const kind = replay ? 'replay' : ai ? 'ai' : 'peer';
-    if (kind === 'ai' && !aiInfo.has(dancerId) && parseInt(ai[1], 10) > guestCfg.ai) return; // no longer wanted
+    if (kind === 'ai' && !aiInfo.has(dancerId) && parseInt(ai[1], 10) > guestPlan.ai) return; // no longer wanted
     const slot = replay ? parseInt(replay[1], 10) : ai ? parseInt(ai[1], 10) : ++peersSeen;
     const palette = kind === 'replay' ? GUEST_COLORS : kind === 'ai' ? AI_COLORS : PEER_COLORS;
     g = {
-      avatar: new StickFigureAvatar(palette[(slot - 1) % palette.length]),
+      // Guests glow with a cheap halo instead of shadowBlur (bench.html):
+      // you stay crisp and quick however many guests are on the floor.
+      avatar: new StickFigureAvatar({ ...palette[(slot - 1) % palette.length], glowStyle: 'halo' }),
       pose: null,
       bornAt: performance.now(),
       lastSeen: 0,
@@ -299,11 +299,16 @@ const avatar = new StickFigureAvatar();
 let mode = 'start';        // start | capture | dance
 let ghostMode = true;      // true: show clean plate (user removed); false: live feed
 let pendingRoom = null;    // room chosen on the start screen (null = solo)
-let guestsTouched = false; // the user set guest counts themselves (don't override on room entry)
 let lastPose = null;
 let rafId = null;
 let fpsEma = 0;
 let lastFrameT = 0;
+
+// ?perf=1: HUD shows where each frame's time goes (pose detection, drawing
+// the guests, whole loop) so guest cost can be read off a real phone.
+const perfHud = urlParams.has('perf');
+const perf = { detect: 0, guests: 0, loop: 0, lastLoopAt: 0 };
+const ema = (prev, v) => (prev ? prev * 0.9 + v * 0.1 : v);
 
 // ---- Screen management ----
 function showScreen(name) {
@@ -341,19 +346,26 @@ function loop() {
   }
 
   if (mode !== 'dance') return;
+  const loopStart = performance.now();
+  if (perf.lastLoopAt) perf.loop = ema(perf.loop, loopStart - perf.lastLoopAt);
+  perf.lastLoopAt = loopStart;
 
-  // Background: the room model (user removed) or the live feed for debugging.
+  // Background: the room photo sits on its own canvas under the stage (drawn
+  // once at capture), so the stage only holds the dancers. Ghost off draws
+  // the live feed over it for debugging.
   if (ghostMode && room.isCaptured) {
-    ctx.drawImage(room.plate, 0, 0, W, H);
+    ctx.clearRect(0, 0, W, H);
   } else {
     drawVideo();
   }
 
   // Pose detection on the live feed (independent of what's displayed).
   const raw = detector.detect(video, camera.mirrored);
+  const detected = performance.now();
   if (raw) {
+    perf.detect = ema(perf.detect, detected - loopStart);
     lastPose = smoother.apply(raw);
-    channel.publish(lastPose); // → guest queues + dance server (relay, analysis, library)
+    channel.publish(lastPose); // → guest replay + dance server (relay, analysis, library)
     updateFps(raw.t);
   }
 
@@ -361,6 +373,7 @@ function loop() {
   // capped at guestCfg.opacity (default 90%) so they never crowd it out.
   channel.transport.tick?.();
   const now = performance.now();
+  if (now >= guestPlan.nextAt) planGuests();
   for (const [id, g] of guests) {
     if (!g.pose) continue;
     if (g.kind !== 'replay' && now - g.lastSeen > PEER_STALE_MS) { guests.delete(id); continue; }
@@ -377,6 +390,7 @@ function loop() {
       if (a?.tag) drawLabel(g.pose, `✨ ${a.tag}`, g.avatar.color, g.avatar.alpha, W, H);
     }
   }
+  perf.guests = ema(perf.guests, performance.now() - now);
 
   if (lastPose) {
     avatar.render(ctx, lastPose, { width: W, height: H });
@@ -387,7 +401,9 @@ function loop() {
   }
 
   // HUD (bpm/room/match come from server opinions via onServerMessage)
-  $('hud-fps').textContent = `${fpsEma.toFixed(0)} fps`;
+  $('hud-fps').textContent = perfHud
+    ? `${fpsEma.toFixed(0)} fps · pose ${perf.detect.toFixed(1)} · guests ${perf.guests.toFixed(1)} · loop ${perf.loop.toFixed(0)} ms`
+    : `${fpsEma.toFixed(0)} fps`;
 }
 
 /** Tag floating above a dancer's head (tempo, or an AI dancer's style), in that dancer's color. */
@@ -457,9 +473,6 @@ async function startCamera() {
 async function enter(roomName) {
   pendingRoom = roomName;
   setRoomInUrl(roomName);
-  // In a room, real people are the guests: replay guests default off
-  // (the picker brings them back). Solo keeps the one-replay default.
-  if (!guestsTouched) setGuestKind('replay', roomName ? 0 : 1, { quiet: true });
   if (roomName && serverLink) serverLink.join(roomName);
   const ok = await startCamera();
   if (!ok) leaveRoom();
@@ -491,8 +504,8 @@ function exitToStart() {
   share.stop();
   camera.stop();
   room.clear();
-  guestTransport.clear();
-  guests.clear();
+  showPlate(false);
+  resetGuests();
   leaveRoom();
   smoother.reset();
   lastPose = null;
@@ -504,7 +517,7 @@ function exitToStart() {
   $('hud-match').textContent = '';
   ctx.clearRect(0, 0, stage.width, stage.height);
   showScreen('start');
-  sendGuestWants(); // mode is 'start' → the server clears our guests
+  planGuests(); // mode is 'start' → the server clears our guests
   peopleGuests.clear();
   aiInfo.clear();
   renderGuestLine();
@@ -515,99 +528,113 @@ async function captureRoom() {
   // Countdown gives the user time to step out of frame.
   const cd = $('countdown');
   cd.classList.remove('hidden');
-  for (let n = 5; n > 0; n--) {
+  for (let n = 3; n > 0; n--) {
     cd.textContent = n;
     await new Promise((r) => setTimeout(r, 1000));
   }
   cd.textContent = '📷';
   await room.capture(video, { mirrored: camera.mirrored });
   cd.classList.add('hidden');
+  showPlate(true);
 
   smoother.reset();
   lastPose = null;
   fpsEma = 0;
   lastFrameT = 0;
   showScreen('dance');
+  resetGuests();
+  danceStartedAt = performance.now();
+  planGuests();
   metronome?.start();
-  sendGuestWants();
   share.start({ w: camera.width, h: camera.height });
 }
 
-// ---- Guests: what we want in our space ----
-/** Tell the server how many real people and AI dancers to bring in (0/0 off the dance screen). */
-function sendGuestWants() {
-  if (!serverLink) return;
-  const dancing = mode === 'dance';
-  serverLink.sendJSON({
-    type: 'guests',
-    people: dancing ? guestCfg.people : 0,
-    ai: dancing ? guestCfg.ai : 0,
-    aspect: camera.width && camera.height ? camera.width / camera.height : 9 / 16,
-    variation: guestCfg.variation,
-  });
-}
-
-function setGuestKind(kind, v, { quiet = false } = {}) {
-  v = Math.max(0, Math.min(MAX_GUESTS, v));
-  guestCfg[kind] = v;
-  if (!quiet) guestsTouched = true;
-  if (kind === 'replay') {
-    guestTransport.configure({ guests: v });
-    for (const [id, g] of guests) if (g.kind === 'replay' && g.slot > v) guests.delete(id);
-  } else if (kind === 'ai') {
-    for (const [id, g] of guests) if (g.kind === 'ai' && g.slot > v) guests.delete(id);
+/** The room photo layer under the stage (see loop()). */
+function showPlate(on) {
+  const el = $('plate');
+  if (on && room.isCaptured) {
+    el.width = room.plate.width;
+    el.height = room.plate.height;
+    el.getContext('2d').drawImage(room.plate, 0, 0);
   }
-  renderPickers();
-  if (kind !== 'replay' && mode === 'dance') sendGuestWants();
+  el.classList.toggle('hidden', !on);
 }
 
-/** The three-kind guest picker, rendered into every .guest-picker container. */
-function buildPickers() {
-  for (const box of document.querySelectorAll('.guest-picker')) {
-    box.replaceChildren();
-    for (const k of GUEST_KINDS) {
-      const row = document.createElement('div');
-      row.className = 'guest-row';
-      row.dataset.kind = k.key;
-      const kind = document.createElement('span');
-      kind.className = 'kind';
-      kind.innerHTML = `${k.icon} ${k.label}<small></small>`;
-      const stepper = document.createElement('span');
-      stepper.className = 'stepper';
-      const minus = document.createElement('button');
-      minus.type = 'button';
-      minus.textContent = '−';
-      minus.setAttribute('aria-label', `fewer ${k.label}`);
-      const val = document.createElement('span');
-      const plus = document.createElement('button');
-      plus.type = 'button';
-      plus.textContent = '+';
-      plus.setAttribute('aria-label', `more ${k.label}`);
-      minus.addEventListener('click', () => setGuestKind(k.key, guestCfg[k.key] - 1));
-      plus.addEventListener('click', () => setGuestKind(k.key, guestCfg[k.key] + 1));
-      stepper.append(minus, val, plus);
-      row.append(kind, stepper);
-      box.append(row);
+// ---- Guests: who dances in our space ----
+/**
+ * Decide who fills the guest seats, from the slider count and the time
+ * since dancing started. Real people the server found take seats first and
+ * show up live. Remaining seats open one every spacingSec — seat 1 after
+ * one spacing, seat 2 after two, … — alternating delayed-you and AI dancers
+ * (delayed-you only when there are no AI dancers to be had). A delayed-you
+ * seat replays you from exactly when dancing started, so it appears on time.
+ * Called on every input change and once a second from loop().
+ */
+function planGuests() {
+  const now = performance.now();
+  const dancing = mode === 'dance';
+  const seats = dancing ? guestCfg.count : 0;
+  const people = Math.min(peopleGuests.size, seats);
+  const aiOk = serverLink && serverOnline && libraryClips !== 0;
+  const spacing = guestCfg.spacingSec * 1000;
+  const elapsed = now - danceStartedAt;
+  const replayDelaysMs = [];
+  let ai = 0;
+  let nextAt = Infinity;
+  for (let seat = 1; seat <= seats - people; seat++) {
+    const opensAt = seat * spacing;
+    if (aiOk && seat % 2 === 0) {
+      if (elapsed >= opensAt) ai++;
+      else nextAt = Math.min(nextAt, opensAt);
+    } else {
+      replayDelaysMs.push(opensAt); // appears by itself once its delay has passed
+      if (elapsed < opensAt) nextAt = Math.min(nextAt, opensAt);
     }
   }
-  renderPickers();
+  guestPlan.replayDelaysMs = replayDelaysMs;
+  guestPlan.ai = ai;
+  guestPlan.nextAt = now + 1000;
+  guestPlan.opensIn = nextAt === Infinity ? 0 : nextAt - elapsed;
+
+  guestTransport.configure({ delaysMs: replayDelaysMs });
+  for (const [id, g] of guests) {
+    if (g.kind === 'replay' && g.slot > replayDelaysMs.length) guests.delete(id);
+    if (g.kind === 'ai' && g.slot > ai) guests.delete(id);
+  }
+  sendGuestWants(dancing ? seats : 0, ai);
+  renderGuestSlider();
 }
 
-function renderPickers() {
-  for (const row of document.querySelectorAll('.guest-row')) {
-    const k = GUEST_KINDS.find((x) => x.key === row.dataset.kind);
-    const available = k.local || (serverLink && serverOnline);
-    row.classList.toggle('unavailable', !available);
-    const small = row.querySelector('small');
-    if (!serverLink && !k.local) small.textContent = 'needs the dance server';
-    else if (!available) small.textContent = 'dance server offline';
-    else if (k.key === 'ai' && libraryClips === 0) small.textContent = 'library is empty — dance to fill it';
-    else if (k.key === 'ai' && libraryClips) small.textContent = `${k.hint} (${libraryClips} dances)`;
-    else small.textContent = k.hint;
-    row.querySelector('.stepper span').textContent = `${guestCfg[k.key]}`;
-    row.querySelector('.stepper button:first-child').disabled = guestCfg[k.key] <= 0;
-    row.querySelector('.stepper button:last-child').disabled = guestCfg[k.key] >= MAX_GUESTS || !available;
-  }
+let lastWants = '';
+/** Tell the server how many real people and AI dancers to bring in (sent only on change). */
+function sendGuestWants(people = 0, ai = 0) {
+  if (!serverLink) return;
+  const msg = {
+    type: 'guests',
+    people,
+    ai,
+    aspect: camera.width && camera.height ? camera.width / camera.height : 9 / 16,
+    variation: guestCfg.variation,
+  };
+  const key = JSON.stringify(msg);
+  if (key === lastWants) return;
+  lastWants = key;
+  serverLink.sendJSON(msg);
+}
+
+function resetGuests() {
+  guestTransport.clear();
+  guests.clear();
+  danceStartedAt = performance.now();
+}
+
+/** Bottom-of-screen guest slider: count, plus when the next seat opens. */
+function renderGuestSlider() {
+  const n = guestCfg.count;
+  const label = n === 0 ? 'no guests' : n === 1 ? '1 guest' : `${n} guests`;
+  const s = Math.ceil((guestPlan.opensIn ?? 0) / 1000);
+  const next = mode === 'dance' && s > 0 ? ` · next in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : '';
+  $('val-guests').textContent = label + next;
 }
 
 // ---- Sharing levels (what feeds the library) ----
@@ -661,7 +688,6 @@ $('btn-join').addEventListener('click', () => {
   enter(name);
 });
 $('btn-solo').addEventListener('click', () => enter(null));
-buildPickers();
 buildChips();
 if (!serverLink) {
   $('room-box').classList.add('hidden');
@@ -681,9 +707,10 @@ $('btn-flip').addEventListener('click', async () => {
 });
 $('btn-rescan').addEventListener('click', () => {
   room.clear();
-  guestTransport.clear();
-  guests.clear();
+  showPlate(false);
+  resetGuests();
   showScreen('capture');
+  planGuests(); // off the dance screen → no server guests until the next capture
 });
 $('btn-ghost').addEventListener('click', (e) => {
   ghostMode = !ghostMode;
@@ -712,14 +739,18 @@ function bindSlider(id, valId, format, apply) {
 
 bindSlider('sl-spacing', 'val-spacing', (v) => `${v}s`, (v) => {
   guestCfg.spacingSec = v;
-  guestTransport.configure({ spacingMs: v * 1000 });
+  planGuests();
 });
 bindSlider('sl-opacity', 'val-opacity', (v) => `${v}%`, (v) => {
   guestCfg.opacity = v / 100;
 });
 bindSlider('sl-variation', 'val-variation', (v) => `${v}%`, (v) => {
   guestCfg.variation = v / 100;
-  if (mode === 'dance') sendGuestWants();
+  planGuests();
+});
+bindSlider('sl-guests', 'val-guests', () => '', (v) => {
+  guestCfg.count = v;
+  planGuests(); // also rewrites the label
 });
 
 // Keep the camera alive across tab switches (mobile browsers may pause it).

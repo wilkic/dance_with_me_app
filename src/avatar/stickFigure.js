@@ -23,14 +23,21 @@ const LIMB_BONES = [
  *    neck, legs off the pelvis.
  *  - '2d': anatomical torso — shoulder line, hip line, and side bones
  *    forming a quad (the original MVP look).
+ *
+ * Glow styles (canvas shadowBlur is the expensive part of drawing a figure —
+ * see bench.html):
+ *  - 'blur' (default): true shadowBlur glow, one blur pass per figure.
+ *  - 'halo': a wide translucent stroke under the bones, no blur at all —
+ *    several times cheaper; used for guests.
  */
 export class StickFigureAvatar extends Avatar {
-  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1 } = {}) {
+  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'blur' } = {}) {
     super();
     this.color = color;
     this.glow = glow;
     this.torso = torso;
     this.alpha = alpha; // 0..1, lets guests fade into the room
+    this.glowStyle = glowStyle;
   }
 
   render(ctx, frame, viewport, beat = null) {
@@ -59,22 +66,18 @@ export class StickFigureAvatar extends Avatar {
       pulse = Math.max(0, 1 - since * 4); // fades over 250ms
     }
 
-    ctx.save();
-    ctx.globalAlpha = this.alpha;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = this.color;
-    ctx.lineWidth = lineWidth;
-    ctx.shadowColor = this.glow;
-    ctx.shadowBlur = lineWidth * (1.5 + pulse * 3);
-
-    // Segments to draw, as pixel-space point pairs.
-    const segments = [];
+    // The whole figure is one path for the bones and one for the head, so
+    // the glow is computed once per figure rather than once per bone.
+    const bones = new Path2D();
     const kpPx = (i) => {
       const k = getKeypoint(frame, i);
       return k.v < MIN_VISIBILITY ? null : { x: k.x * W, y: k.y * H };
     };
-    const push = (a, b) => { if (a && b) segments.push([a, b]); };
+    const push = (a, b) => {
+      if (!a || !b) return;
+      bones.moveTo(a.x, a.y);
+      bones.lineTo(b.x, b.y);
+    };
 
     if (this.torso === '2d') {
       // Anatomical: every detected bone, including the shoulder/hip quad.
@@ -89,40 +92,52 @@ export class StickFigureAvatar extends Avatar {
         push(pelvis, kpPx(KP.RIGHT_KNEE));
       }
     }
-    if (torsoVisible) segments.push([neck, pelvis]); // spine
-
-    for (const [a, b] of segments) {
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
 
     // Head: circle above the neck, positioned via ears/nose when visible.
+    let head = null;
     if (torsoVisible) {
+      push(neck, pelvis); // spine
       const nose = getKeypoint(frame, KP.NOSE);
       const le = getKeypoint(frame, KP.LEFT_EAR);
       const re = getKeypoint(frame, KP.RIGHT_EAR);
-      let head;
+      let c;
       if (le.v > MIN_VISIBILITY && re.v > MIN_VISIBILITY) {
-        head = { x: ((le.x + re.x) / 2) * W, y: ((le.y + re.y) / 2) * H };
+        c = { x: ((le.x + re.x) / 2) * W, y: ((le.y + re.y) / 2) * H };
       } else if (nose.v > MIN_VISIBILITY) {
-        head = { x: nose.x * W, y: nose.y * H };
+        c = { x: nose.x * W, y: nose.y * H };
       }
-      if (head) {
+      if (c) {
         const r = Math.max(6, torsoLen * 0.28);
-        // Neck line up to the chin
-        ctx.beginPath();
-        ctx.moveTo(neck.x, neck.y);
-        ctx.lineTo(head.x, head.y + r * 0.7);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.fillStyle = this.color;
-        ctx.arc(head.x, head.y, r, 0, Math.PI * 2);
-        ctx.fill();
+        push(neck, { x: c.x, y: c.y + r * 0.7 }); // neck line up to the chin
+        head = new Path2D();
+        head.arc(c.x, c.y, r, 0, Math.PI * 2);
       }
     }
 
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (this.glowStyle === 'halo') {
+      ctx.globalAlpha = this.alpha * (0.35 + pulse * 0.3);
+      ctx.strokeStyle = this.glow;
+      ctx.lineWidth = lineWidth * 2.6;
+      ctx.stroke(bones);
+      if (head) ctx.stroke(head); // a ring around the head
+      ctx.globalAlpha = this.alpha;
+    } else {
+      ctx.shadowColor = this.glow;
+      ctx.shadowBlur = lineWidth * (1.5 + pulse * 3);
+    }
+
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke(bones);
+    if (head) {
+      ctx.fillStyle = this.color;
+      ctx.fill(head);
+    }
     ctx.restore();
   }
 }

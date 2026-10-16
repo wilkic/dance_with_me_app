@@ -21,14 +21,16 @@ html, body {
   pointer-events: none;
 }
 
-#stage {
+#plate, #stage {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #000;
 }
+#plate { background: #000; }
+/* Transparent so the room photo shows through; black when it's hidden. */
+#plate.hidden + #stage { background: #000; }
 
 .screen {
   position: absolute;
@@ -196,50 +198,35 @@ button.danger {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---- Guests (start screen + menu) ---- */
-.guest-box {
+/* ---- Guests (dance screen slider + menu) ---- */
+.dance-bottom {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.7rem;
-  width: min(22rem, 100%);
-  padding: 1rem 1.1rem 0.9rem;
-  border: 1px solid #334;
-  border-radius: 16px;
-  background: rgba(10, 10, 20, 0.55);
+  gap: 0.6rem;
+  width: min(26rem, 100%);
 }
-.guest-box > label, .menu-title {
+.guest-slider {
+  display: grid;
+  grid-template-columns: auto 1fr 8.5rem;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  background: rgba(10, 10, 20, 0.6);
+  backdrop-filter: blur(6px);
+  font-size: 0.85rem;
+  color: #aab;
+  pointer-events: auto;
+}
+.guest-slider input { width: 100%; accent-color: #b84ce7; touch-action: manipulation; }
+.guest-slider span { text-align: left; color: #9fa8ff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.menu-title {
   font-size: 0.78rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #9fa8ff;
-}
-.guest-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  width: 100%;
-  pointer-events: auto;
-}
-.guest-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.92rem;
-  color: #dde;
-  text-align: left;
-}
-.guest-row.unavailable { opacity: 0.45; }
-.guest-row .kind small { display: block; color: #778; font-size: 0.72rem; }
-.stepper { display: inline-flex; align-items: center; gap: 0.15rem; }
-.stepper button { padding: 0.28rem 0.75rem; font-size: 1.05rem; line-height: 1; }
-.stepper span {
-  min-width: 1.6rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  color: #9fa8ff;
-  font-weight: 600;
 }
 .menu { max-height: calc(100vh - env(safe-area-inset-top, 0px) - 4.5rem); overflow-y: auto; }
 .menu-row.wide { grid-template-columns: 3.6rem 1fr; }

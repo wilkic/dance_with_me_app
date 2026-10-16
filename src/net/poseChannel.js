@@ -150,49 +150,63 @@ export class CompositeTransport {
 /**
  * DelayedLoopbackTransport: re-emits every published frame under different
  * dancer ids, one per guest slot — stand-ins for network peers that happen
- * to be dancing your moves from a while ago. Guest N's frames arrive
- * spacingMs * N after the original. Powers the "guest dancer" feature, and
- * exercises the full serialize → transmit → deserialize path a real
+ * to be dancing your moves from a while ago. Slot N (1-based) replays the
+ * frames delaysMs[N-1] after the original. Powers the "delayed you" guests,
+ * and exercises the full serialize → transmit → deserialize path a real
  * transport will use.
  *
- * Entries store their send time rather than a due time, so configure() can
- * change guests/spacing mid-dance and already-queued frames retime too.
+ * All slots read one shared history (send time + bytes) through their own
+ * cursor, so configure() can change the delays mid-dance and every slot
+ * simply retimes. History older than the longest delay is dropped.
  *
  * Call tick() regularly (once per render frame) to flush due frames.
  */
 export class DelayedLoopbackTransport {
-  constructor({ guests = 1, spacingMs = 60000 } = {}) {
-    this.guests = guests;
-    this.spacingMs = spacingMs;
-    this.queues = []; // per guest slot: [{ sentAt, id, buf }]
+  constructor({ delaysMs = [] } = {}) {
+    this.delaysMs = delaysMs;
+    this.history = []; // [{ sentAt, id, buf }], oldest first
+    this.base = 0;     // sequence number of history[0]
+    this.cursors = []; // per slot: sequence number of the next frame to emit
     this.onReceive = null;
   }
 
-  configure({ guests, spacingMs } = {}) {
-    if (guests !== undefined) this.guests = guests;
-    if (spacingMs !== undefined) this.spacingMs = spacingMs;
-    if (this.queues.length > this.guests) this.queues.length = this.guests;
+  configure({ delaysMs } = {}) {
+    if (delaysMs === undefined) return;
+    this.delaysMs = delaysMs;
+    this.cursors.length = Math.min(this.cursors.length, delaysMs.length);
   }
 
   send(dancerId, buf) {
-    const sentAt = performance.now();
-    for (let g = 0; g < this.guests; g++) {
-      (this.queues[g] ??= []).push({ sentAt, id: `guest-${g + 1}-of-${dancerId}`, buf });
-    }
+    if (this.delaysMs.length) this.history.push({ sentAt: performance.now(), id: dancerId, buf });
   }
 
   tick(now = performance.now()) {
-    for (let g = 0; g < this.queues.length; g++) {
-      const q = this.queues[g];
-      const delay = this.spacingMs * (g + 1);
-      while (q.length && q[0].sentAt + delay <= now) {
-        const { id, buf } = q.shift();
-        this.onReceive?.(id, buf);
+    const h = this.history;
+    if (!h.length) return;
+    for (let g = 0; g < this.delaysMs.length; g++) {
+      const due = now - this.delaysMs[g];
+      // A slot re-finds its place in time whenever its delay changed.
+      let seq = this.cursors[g] ?? this.base;
+      if (seq < this.base) seq = this.base;
+      while (seq > this.base && h[seq - this.base - 1].sentAt > due) seq--;
+      // Skip anything far past due (e.g. a delay shrank): keep the last 1 s.
+      while (seq - this.base < h.length && h[seq - this.base].sentAt < due - 1000) seq++;
+      for (; seq - this.base < h.length && h[seq - this.base].sentAt <= due; seq++) {
+        const { id, buf } = h[seq - this.base];
+        this.onReceive?.(`guest-${g + 1}-of-${id}`, buf);
       }
+      this.cursors[g] = seq;
     }
+    // Drop history no slot can reach any more.
+    const keepFrom = now - Math.max(0, ...this.delaysMs) - 1000;
+    let drop = 0;
+    while (drop < h.length && h[drop].sentAt < keepFrom) drop++;
+    if (drop) { h.splice(0, drop); this.base += drop; }
   }
 
   clear() {
-    this.queues.length = 0;
+    this.history.length = 0;
+    this.cursors.length = 0;
+    this.base = 0;
   }
 }

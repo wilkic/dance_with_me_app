@@ -203,9 +203,9 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <h2>What it does</h2>
   <p>The app never shows the camera feed. It photographs your empty room once, then uses the live camera only to find your joints. What you see is that photo with a stick figure moving where you are. That makes "removing" you perfect and free, with no segmentation and no 3D scan.</p>
   <div class="steps">
-    <div class="step"><h3>1. Pick your guests</h3><p>Choose 0–3 of each kind: delayed you, other people, AI dancers. Or join an open dance room from the list, or start one with a name like <code>funky-otter</code>.</p></div>
-    <div class="step"><h3>2. Capture the room</h3><p>Prop the phone up facing your dance space, step out of frame, tap the button. After a 5-second countdown the app averages several frames into a clean plate.</p></div>
-    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears, guests dance behind you at 90% opacity, and the HUD shows your tempo. The ☰ menu changes guests, delay, opacity, AI variation and sharing on the fly.</p></div>
+    <div class="step"><h3>1. Dance, or pick a room</h3><p>Tap Dance. Or join an open dance room from the list, or start one with a name like <code>funky-otter</code>.</p></div>
+    <div class="step"><h3>2. Capture the room</h3><p>Prop the phone up facing your dance space, step out of frame, tap the button. After a 3-second countdown the app averages several frames into a clean plate.</p></div>
+    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. The slider at the bottom sets how many guests (0–5) dance behind you at 90% opacity. The ☰ menu changes time between guests, opacity, AI variation and sharing on the fly.</p></div>
   </div>
   <p class="note">Everything the app sends is the skeleton: 33 joints per frame. Camera video and microphone audio leave the phone only if the dancer turns those dials up.</p>
 </section>
@@ -274,14 +274,32 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 
 <section id="guests">
   <h2>Guests: three kinds, one path</h2>
-  <p>Whoever else is in your space arrives through the same <code>PoseChannel.subscribe</code> path and is drawn as one more stick figure behind you. The picker on the start screen and in the ☰ menu sets 0–3 of each kind.</p>
+  <p>Whoever else is in your space arrives through the same <code>PoseChannel.subscribe</code> path and is drawn as one more stick figure behind you. The dancer only chooses how many: one slider on the dance screen, 0–5 seats (default 1). <code>planGuests()</code> in <code>main.js</code> decides who sits where:</p>
+  <ul>
+    <li><b>Real people first, live.</b> Other people the server finds take seats straight away.</li>
+    <li><b>Everyone else trickles in.</b> The remaining seats open one per "time between guests" (default 60 s): seat 1 after one interval, seat 2 after two, and so on. Odd seats are delayed you, even seats AI dancers (delayed you when no AI dancers are available). Nothing that isn't live appears the moment you start, in a room or not.</li>
+    <li><b>Room-mates don't take a seat.</b> Everyone in your room is always shown.</li>
+  </ul>
+  <p>Delayed-you seats all read one shared history on the phone (<code>DelayedLoopbackTransport</code>), each through its own cursor. A seat replays you from exactly when dancing started, so it appears right when its seat opens.</p>
+  <h3>Keeping you quick</h3>
+  <p>Your own figure is what has to feel immediate. Guests matter less, so they are drawn the cheap way. Measured with <code>bench.html</code> (desktop Chrome, 1280×720; open it on a phone under <code>npm run dev</code> for real numbers):</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Drawing strategy</th><th class="num">0 guests</th><th class="num">5 guests</th><th class="num">per guest</th></tr></thead>
+    <tbody>
+      <tr><td>Before: blurred glow per bone, room photo redrawn every frame</td><td class="num">11.4 ms</td><td class="num">24.8 ms</td><td class="num">2.7 ms</td></tr>
+      <tr><td>One blur per figure</td><td class="num">12.2 ms</td><td class="num">22.4 ms</td><td class="num">2.0 ms</td></tr>
+      <tr><td>Guests with a halo glow (no blur)</td><td class="num">11.1 ms</td><td class="num">15.1 ms</td><td class="num">0.8 ms</td></tr>
+      <tr><td>Now: halo guests, room photo on its own layer</td><td class="num">4.2 ms</td><td class="num">6.5 ms</td><td class="num">0.5 ms</td></tr>
+    </tbody>
+  </table></div>
+  <p class="sub">About 4 ms in every row is the benchmark's own per-frame readback. The room photo now sits on a canvas under the stage, drawn once at capture. You keep the real blurred glow, drawn in a single pass. Add <code>?perf=1</code> to the app URL and the HUD shows pose-detection, guest-drawing and loop times live.</p>
   <div class="legend"><span><i class="dot d-you"></i>you</span><span><i class="dot d-delay"></i>delayed you</span><span><i class="dot d-people"></i>other people</span><span><i class="dot d-ai"></i>AI dancers</span><span>(colors on this page only, not the app's palette)</span></div>
   <div class="tbl wrapfirst"><table>
     <thead><tr><th>Kind</th><th>Where the frames come from</th><th>In the app</th></tr></thead>
     <tbody>
-      <tr><td><i class="dot d-delay"></i>Delayed you</td><td>Your own frames, replayed on the phone after a delay you set. No server needed. Defaults to 1 when you are solo, 0 in a room.</td><td class="sub">Tinted per slot. Delay slider, opacity slider.</td></tr>
+      <tr><td><i class="dot d-delay"></i>Delayed you</td><td>Your own frames, replayed on the phone. No server needed. Seat N replays you N × the time between guests back.</td><td class="sub">Tinted per slot, halo glow. Time-between-guests and opacity sliders.</td></tr>
       <tr><td><i class="dot d-people"></i>Other people</td><td>Real dancers online and moving in the last 6 seconds. The server picks the tempo-closest first, then whoever is in the fewest spaces. They see you only if they asked for people too, so you can dance in someone's space while alone in yours. Room-mates are never double-booked.</td><td class="sub">Own color, tempo tag above the head.</td></tr>
-      <tr><td><i class="dot d-ai"></i>AI dancers</td><td>Built by the server from the dance library (next sections). Default 1 whenever a server is reachable. Each moves on to another person's dance every two minutes, with a 1.2 s crossfade.</td><td class="sub">White, style tag such as <code>✨ salsa</code>, HUD shows "borrowing arms".</td></tr>
+      <tr><td><i class="dot d-ai"></i>AI dancers</td><td>Built by the server from the dance library (next sections). They fill the even seats as those open. Each moves on to another person's dance every two minutes, with a 1.2 s crossfade.</td><td class="sub">White, style tag such as <code>✨ salsa</code>, HUD shows "borrowing arms".</td></tr>
     </tbody>
   </table></div>
   <h3>Dance rooms</h3>
@@ -403,13 +421,13 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <thead><tr><th>File</th><th>Role</th><th class="num">Lines</th></tr></thead>
     <tbody>
       <tr class="grp"><td colspan="3">Phone app</td></tr>
-      <tr><td><code>src/main.js</code></td><td>App state machine (start, capture, dance), render loop, guest and room state, menu</td><td class="num">728</td></tr>
+      <tr><td><code>src/main.js</code></td><td>App state machine (start, capture, dance), render loop, guest planning, room state, menu</td><td class="num">759</td></tr>
       <tr><td><code>src/pose/poseFormat.js</code></td><td>The PoseFrame contract, binary serialize and deserialize</td><td class="num">111</td></tr>
       <tr><td><code>src/pose/poseDetector.js</code></td><td>MediaPipe behind a swappable interface</td><td class="num">52</td></tr>
       <tr><td><code>src/pose/smoothing.js</code></td><td>One Euro filter per joint</td><td class="num">71</td></tr>
-      <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso</td><td class="num">128</td></tr>
+      <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur or halo glow</td><td class="num">143</td></tr>
       <tr><td><code>src/room/roomModel.js</code></td><td>Clean-plate room capture, metadata, room for future 3D</td><td class="num">96</td></tr>
-      <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, delayed loopback, WebSocket and composite transports</td><td class="num">198</td></tr>
+      <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, delayed loopback, WebSocket and composite transports</td><td class="num">212</td></tr>
       <tr><td><code>src/share/sessionShare.js</code></td><td>The sharing dials: mic envelope, media chunks</td><td class="num">179</td></tr>
       <tr><td><code>src/net/*.js</code></td><td>Envelope format, room names, server URL rules</td><td class="num">82</td></tr>
       <tr><td><code>src/floor.js</code>, <code>floor.html</code></td><td>The big-screen spectator page</td><td class="num">237</td></tr>
@@ -426,6 +444,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr class="grp"><td colspan="3">Tests and tooling</td></tr>
       <tr><td><code>server/test/*.js</code></td><td>Rooms, library and AI dancer, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
       <tr><td><code>server/lab/*</code></td><td>Dance lab: scenarios, waterfalls, harvesting, video ingestion</td><td class="num">~1,760</td></tr>
+      <tr><td><code>bench.html</code></td><td>Dev-only guest-drawing benchmark (not in the build)</td><td class="num">120</td></tr>
       <tr><td><code>dance-lan.sh</code></td><td>Starts server and Vite, prints a phone QR code, opens the dance floor</td><td class="num">90</td></tr>
     </tbody>
   </table></div>
@@ -469,6 +488,7 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Room capture, stick figure, delayed guests</td><td><span class="pill p-ok">works</span></td><td class="sub">Phone-tested over the summer; kids liked it. Live on the deployed site.</td></tr>
       <tr><td>Rooms, lobby, LAN test script, dance floor</td><td><span class="pill p-ok">built</span></td><td class="sub">Tested with synthetic peers and in Chrome. Multi-phone session with the kids on 13 Sep 2026 went perfectly.</td></tr>
       <tr><td>Other-people and AI guests, library, recorder</td><td><span class="pill p-ok">verified</span></td><td class="sub">40 automated checks pass. In Chrome with a stubbed camera, an AI guest loaded and drew, and a synthetic real dancer appeared as a guest and vanished when it stopped.</td></tr>
+      <tr><td>Guest slider, trickle-in, cheap guest drawing</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 5 seats and 30 s spacing, nothing appeared at start, AI dancers arrived at 60 s and 121 s, sliding to 0 cleared them. Not yet phone-tested; use <code>?perf=1</code> to read the timings.</td></tr>
       <tr><td>Mic beat and audio, video sharing</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen.</td></tr>
       <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>
       <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>

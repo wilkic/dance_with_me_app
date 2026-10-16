@@ -12,18 +12,16 @@
     <!-- Live camera feed (hidden; used as the pose-detection source) -->
     <video id="video" playsinline muted autoplay></video>
 
-    <!-- Main output: room background + avatar composited here -->
+    <!-- Room photo (clean plate), drawn once at capture -->
+    <canvas id="plate" class="hidden"></canvas>
+    <!-- Main output: dancers drawn here, over the room photo -->
     <canvas id="stage"></canvas>
 
     <!-- ===== Screen: start ===== -->
     <section id="screen-start" class="screen">
       <h1>Dance&nbsp;With&nbsp;Me</h1>
-      <p class="tagline">Scan your room. Step in. Dance as a stick figure &mdash; with guests in your space: delayed you, other people, AI dancers.</p>
-      <div class="guest-box">
-        <label>Guests in your space</label>
-        <div class="guest-picker" data-picker="start"></div>
-        <button id="btn-solo" class="primary">Dance</button>
-      </div>
+      <p class="tagline">Scan your room. Step in. Dance as a stick figure &mdash; guests drop into your space while you dance: other people, delayed you, AI dancers.</p>
+      <button id="btn-solo" class="primary">Dance</button>
       <div id="room-box" class="room-box">
         <label>Or dance in a room &mdash; tap one to join</label>
         <div id="room-list" class="room-list" role="listbox" aria-label="Open dance rooms">
@@ -72,9 +70,8 @@
       <button id="btn-menu" class="burger" aria-label="Menu">&#9776;</button>
       <div id="menu-panel" class="menu hidden">
         <p class="menu-title">Guests in your space</p>
-        <div class="guest-picker" data-picker="menu"></div>
         <div class="menu-row">
-          <label for="sl-spacing">Guest delay</label>
+          <label for="sl-spacing" title="A new guest seat opens this often; delayed-you guests replay you this far back">Time between guests</label>
           <input type="range" id="sl-spacing" min="30" max="180" step="15" value="60" />
           <span id="val-spacing">60s</span>
         </div>
@@ -102,10 +99,17 @@
         </div>
         <button id="btn-exit" class="danger">Exit to start</button>
       </div>
+      <div class="dance-bottom">
+        <div class="guest-slider">
+          <label for="sl-guests">Guests</label>
+          <input type="range" id="sl-guests" min="0" max="5" step="1" value="1" />
+          <span id="val-guests">1 guest</span>
+        </div>
       <div class="bottom-bar">
         <button id="btn-rescan">&#8617; Rescan</button>
         <button id="btn-ghost" title="Toggle between clean room and live feed">Ghost: ON</button>
         <button id="btn-torso" title="Toggle stick (1D) vs anatomical (2D) torso">Torso: 1D</button>
+      </div>
       </div>
     </section>
 
