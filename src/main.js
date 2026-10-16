@@ -706,6 +706,11 @@ $('btn-torso').addEventListener('click', (e) => {
 $('btn-menu').addEventListener('click', () => {
   $('menu-panel').classList.toggle('hidden');
 });
+// A tap anywhere on the dance floor opens (or closes) the menu too. The
+// controls catch their own taps; everything else falls through to the stage.
+stage.addEventListener('click', () => {
+  if (mode === 'dance') $('menu-panel').classList.toggle('hidden');
+});
 $('btn-exit').addEventListener('click', exitToStart);
 
 function bindSlider(id, valId, format, apply) {
