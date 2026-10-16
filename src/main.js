@@ -46,7 +46,7 @@ const room = new RoomModel();
 const GUEST_FADE_MS = { replay: 12_000, peer: 2_000, ai: 4_000 };
 const PEER_STALE_MS = 6_000;
 const MAX_GUESTS = 5;
-const guestCfg = { count: 1, spacingSec: 60, opacity: 0.9, variation: 0.5 };
+const guestCfg = { count: 1, spacingSec: 60, opacity: 0.9, variation: 0.5, styleLabels: false };
 const guestTransport = new DelayedLoopbackTransport();
 const guestPlan = { replayDelaysMs: [], ai: 0, nextAt: 0 }; // what planGuests() last decided
 let danceStartedAt = 0; // performance.now() when the dance screen opened
@@ -387,7 +387,7 @@ function loop() {
       }
     } else if (g.kind === 'ai') {
       const a = aiInfo.get(id);
-      if (a?.tag) drawLabel(g.pose, `✨ ${a.tag}`, g.avatar.color, g.avatar.alpha, W, H);
+      if (guestCfg.styleLabels && a?.tag) drawLabel(g.pose, a.tag, g.avatar.color, g.avatar.alpha, W, H);
     }
   }
   perf.guests = ema(perf.guests, performance.now() - now);
@@ -406,22 +406,22 @@ function loop() {
     : `${fpsEma.toFixed(0)} fps`;
 }
 
-/** Tag floating above a dancer's head (tempo, or an AI dancer's style), in that dancer's color. */
+/**
+ * Tag floating above a dancer's head (tempo, or an AI dancer's style), in
+ * that dancer's color. Bare-bones on purpose: plain text, no shadow or emoji.
+ */
 function drawLabel(pose, text, color, alpha, W, H) {
   const kp = pose.keypoints;
   const nose = { x: kp[KP.NOSE * STRIDE], y: kp[KP.NOSE * STRIDE + 1], v: kp[KP.NOSE * STRIDE + 3] };
   if (nose.v < 0.4) return;
   const size = Math.max(14, H * 0.03);
-  ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.font = `700 ${size}px system-ui, sans-serif`;
+  ctx.font = `${size}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = size * 0.4;
   ctx.fillStyle = color;
   ctx.fillText(text, nose.x * W, nose.y * H - size * 1.2);
-  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 function drawVideo() {
@@ -747,6 +747,9 @@ bindSlider('sl-opacity', 'val-opacity', (v) => `${v}%`, (v) => {
 bindSlider('sl-variation', 'val-variation', (v) => `${v}%`, (v) => {
   guestCfg.variation = v / 100;
   planGuests();
+});
+$('cb-style-labels').addEventListener('change', (e) => {
+  guestCfg.styleLabels = e.target.checked;
 });
 bindSlider('sl-guests', 'val-guests', () => '', (v) => {
   guestCfg.count = v;
