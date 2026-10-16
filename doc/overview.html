@@ -292,7 +292,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td>Halo guests, room photo on its own layer</td><td class="num">4.2 ms</td><td class="num">6.5 ms</td><td class="num">0.5 ms</td></tr>
     </tbody>
   </table></div>
-  <p class="sub">About 4 ms in every row is the benchmark's own per-frame readback. The room photo now sits on a canvas under the stage, drawn once at capture. Since 16 Oct 2026 guests have no glow at all (cheaper still than the halo); you keep the real blurred glow, drawn in a single pass. Add <code>?perf=1</code> to the app URL and the HUD shows pose-detection, guest-drawing and loop times live.</p>
+  <p class="sub">About 4 ms in every row is the benchmark's own per-frame readback. The room photo now sits on a canvas under the stage, drawn once at capture. Since 16 Oct 2026 guests have no glow at all (cheaper still than the halo); you keep the real blurred glow, drawn in a single pass. Add <code>?perf=1</code> to the app URL and the HUD shows pose-detection, guest-drawing and loop times live. It also shows a box with where the loading time went: camera, engine and model download, model start, first frame, and the GPU's name. <code>?cpu=1</code> runs pose detection on the CPU, to compare (issue #1). The model loads once per page, and a warm-up detection runs behind the loading screen so dancing starts without a hitch.</p>
   <div class="legend"><span><i class="dot d-you"></i>you</span><span><i class="dot d-people"></i>other people</span><span><i class="dot d-ai"></i>AI dancers</span><span>(colors on this page only, not the app's palette)</span></div>
   <div class="tbl wrapfirst"><table>
     <thead><tr><th>Kind</th><th>Where the frames come from</th><th>In the app</th></tr></thead>
@@ -422,7 +422,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr class="grp"><td colspan="3">Phone app</td></tr>
       <tr><td><code>src/main.js</code></td><td>App state machine (start, capture, dance), render loop, guest planning, room state, menu</td><td class="num">759</td></tr>
       <tr><td><code>src/pose/poseFormat.js</code></td><td>The PoseFrame contract, binary serialize and deserialize</td><td class="num">111</td></tr>
-      <tr><td><code>src/pose/poseDetector.js</code></td><td>MediaPipe behind a swappable interface</td><td class="num">52</td></tr>
+      <tr><td><code>src/pose/poseDetector.js</code></td><td>MediaPipe behind a swappable interface; timed loading, warm-up</td><td class="num">112</td></tr>
       <tr><td><code>src/pose/smoothing.js</code></td><td>One Euro filter per joint</td><td class="num">71</td></tr>
       <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur, halo or no glow</td><td class="num">144</td></tr>
       <tr><td><code>src/room/roomModel.js</code></td><td>Clean-plate room capture, metadata, room for future 3D</td><td class="num">96</td></tr>
@@ -488,6 +488,7 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Rooms, lobby, LAN test script, dance floor</td><td><span class="pill p-ok">built</span></td><td class="sub">Tested with synthetic peers and in Chrome. Multi-phone session with the kids on 13 Sep 2026 went perfectly.</td></tr>
       <tr><td>Other-people and AI guests, library, recorder</td><td><span class="pill p-ok">verified</span></td><td class="sub">40 automated checks pass. In Chrome with a stubbed camera, an AI guest loaded and drew, and a synthetic real dancer appeared as a guest and vanished when it stopped.</td></tr>
       <tr><td>Guest slider, trickle-in, cheap guest drawing</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 5 seats and 30 s spacing, nothing appeared at start, AI dancers arrived at 60 s and 121 s, sliding to 0 cleared them. Not yet phone-tested; use <code>?perf=1</code> to read the timings.</td></tr>
+      <tr><td>Slow pose-model loading on some phones (issue #1)</td><td><span class="pill p-todo">measuring</span></td><td class="sub">Branch <code>pose-load-timing</code>: <code>?perf=1</code> shows per-step load times, <code>?cpu=1</code> compares CPU vs GPU. Next: load it on Chris's phone and a kid's phone, then fix the slow step.</td></tr>
       <tr><td>Max 3 guests, AI or real only, 15 s phase-in, no guest glow</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 3 seats the server was asked for 1, 2, then 3 guests, and three plain AI figures danced. Server caps guests at 3.</td></tr>
       <tr><td>Mic beat and audio, video sharing</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen.</td></tr>
       <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>

@@ -329,3 +329,18 @@ button.danger {
   gap: 0.3rem 1rem;
   max-width: 100%;
 }
+
+/* ?perf=1 loading timings, bottom left over every screen; tap to hide. */
+.perf-load {
+  position: absolute;
+  left: 0.6rem;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 7rem);
+  z-index: 15;
+  max-width: calc(100vw - 1.2rem);
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(10, 10, 20, 0.8);
+  color: #9fa8ff;
+  font: 0.72rem/1.35 ui-monospace, monospace;
+  white-space: pre-wrap;
+}

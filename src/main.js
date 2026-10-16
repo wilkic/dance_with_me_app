@@ -301,6 +301,36 @@ const perfHud = urlParams.has('perf');
 const perf = { detect: 0, guests: 0, loop: 0, lastLoopAt: 0 };
 const ema = (prev, v) => (prev ? prev * 0.9 + v * 0.1 : v);
 
+// ?perf=1 also shows where the loading time went (issue #1); ?cpu=1 runs
+// pose detection on the CPU instead of the GPU, to compare.
+let cameraMs = 0;
+detector.onTimings = (t) => {
+  const s = (ms) => `${(ms / 1000).toFixed(1)} s`;
+  const lines = [`camera      ${s(cameraMs)}`];
+  if (t.wasm) lines.push(`engine      ${s(t.wasm.ms)} (${t.wasm.mb.toFixed(1)} MB)`);
+  if (t.model) lines.push(`model       ${s(t.model.ms)} (${t.model.mb.toFixed(1)} MB)`);
+  if (t.download !== undefined) lines.push(`download    ${s(t.download)} total`);
+  lines.push(`start ${t.delegate}   ${s(t.start)}`);
+  lines.push(`1st frame   ${s(t.firstDetect)}`);
+  lines.push(`gpu: ${gpuName()}`);
+  const text = lines.join('\n');
+  console.log(`[load]\n${text}`);
+  if (!perfHud) return;
+  $('perf-load').textContent = text;
+  $('perf-load').classList.remove('hidden');
+};
+
+/** The graphics chip's name, when the browser tells (iOS often says just "Apple GPU"). */
+function gpuName() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+    return (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER)) ?? 'no WebGL';
+  } catch {
+    return 'unknown';
+  }
+}
+
 // ---- Screen management ----
 function showScreen(name) {
   mode = name;
@@ -438,6 +468,7 @@ function updateFps(t) {
 // ---- Flows ----
 async function startCamera() {
   setLoading('Starting camera…');
+  const t0 = performance.now();
   try {
     await camera.start();
   } catch (err) {
@@ -445,9 +476,14 @@ async function startCamera() {
     alert(`Camera access failed: ${err.message}\n\nCheck browser permissions and reload.`);
     return false;
   }
+  cameraMs = performance.now() - t0;
   setLoading('Loading pose model…');
   try {
-    await detector.init();
+    // Loaded once per page: coming back from the start screen reuses it.
+    if (!detector.landmarker) {
+      await detector.init({ delegate: urlParams.has('cpu') ? 'CPU' : 'GPU', timed: perfHud });
+      detector.warmUp(video);
+    }
   } catch (err) {
     setLoading(null);
     alert(`Could not load the pose model (network needed on first run): ${err.message}`);
@@ -701,6 +737,8 @@ $('btn-torso').addEventListener('click', (e) => {
   avatar.torso = avatar.torso === '1d' ? '2d' : '1d';
   e.target.textContent = `Torso: ${avatar.torso.toUpperCase()}`;
 });
+
+$('perf-load').addEventListener('click', (e) => e.target.classList.add('hidden'));
 
 // ---- Burger menu ----
 $('btn-menu').addEventListener('click', () => {
