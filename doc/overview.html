@@ -277,7 +277,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <p>Whoever else is in your space arrives through the same <code>PoseChannel.subscribe</code> path and is drawn as one more stick figure behind you. The dancer only chooses how many: one slider on the dance screen, 0–5 seats (default 1). <code>planGuests()</code> in <code>main.js</code> decides who sits where:</p>
   <ul>
     <li><b>Real people first, live.</b> Other people the server finds take seats straight away.</li>
-    <li><b>Everyone else trickles in.</b> The remaining seats open one per "time between guests" (default 60 s): seat 1 after one interval, seat 2 after two, and so on. Odd seats are delayed you, even seats AI dancers (delayed you when no AI dancers are available). Nothing that isn't live appears the moment you start, in a room or not.</li>
+    <li><b>Everyone else trickles in.</b> The remaining seats open one per "time between guests" (default 10 s): seat 1 after one interval, seat 2 after two, and so on. Odd seats are delayed you, even seats AI dancers (delayed you when no AI dancers are available). Nothing that isn't live appears the moment you start, in a room or not.</li>
     <li><b>Room-mates don't take a seat.</b> Everyone in your room is always shown.</li>
   </ul>
   <p>Delayed-you seats all read one shared history on the phone (<code>DelayedLoopbackTransport</code>), each through its own cursor. A seat replays you from exactly when dancing started, so it appears right when its seat opens.</p>
