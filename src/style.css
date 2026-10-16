@@ -239,83 +239,79 @@ button.danger {
 #share-status { font-size: 0.75rem; }
 #hud-guests { color: #fff; }
 
-/* ---- Dance rooms (start screen) ---- */
-.room-box {
+/* ---- Start screen: two buttons ---- */
+.start-buttons {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.7rem;
-  width: min(22rem, 100%);
-  padding: 1rem 1.1rem 0.9rem;
-  border: 1px solid #334;
-  border-radius: 16px;
-  background: rgba(10, 10, 20, 0.55);
+  gap: 0.9rem;
+  width: min(18rem, 100%);
 }
-.room-box > label {
-  font-size: 0.8rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.start-buttons > * { width: 100%; }
+.join-wrap { position: relative; }
+.join-wrap::after { /* the dropdown chevron */
+  content: '▾';
+  position: absolute;
+  right: 1.3rem;
+  top: 50%;
+  transform: translateY(-50%);
   color: #9fa8ff;
+  pointer-events: none;
 }
-.room-list {
+#sel-join {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
-  max-height: 11.5rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.3rem;
-  border: 1px solid #445;
-  border-radius: 14px;
-  background: rgba(20, 20, 35, 0.9);
-  pointer-events: auto;
-}
-.room-list-empty {
-  color: #667;
-  font-size: 0.85rem;
-  padding: 0.8rem 0.5rem;
-}
-.room-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-  width: 100%;
-  text-align: left;
-  border-radius: 10px;
-  border-color: transparent;
-  background: rgba(40, 40, 70, 0.6);
-  padding: 0.6rem 0.9rem;
-  backdrop-filter: none;
-}
-.room-row:hover, .room-row:focus-visible { border-color: #b84ce7; outline: none; }
-.room-row.current { border-color: #6c5ce7; background: rgba(108, 92, 231, 0.25); }
-.room-row-name { font-weight: 600; font-size: 1.05rem; color: #fff; }
-.room-row-meta { color: #9fa8ff; font-size: 0.8rem; white-space: nowrap; }
-.room-input {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-}
-.room-input input {
-  flex: 1;
-  min-width: 0;
   font: inherit;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  font-weight: 600;
   text-align: center;
-  color: #fff;
-  background: rgba(20, 20, 35, 0.9);
+  text-align-last: center;
+  color: #eee;
+  background: rgba(20, 20, 35, 0.75);
   border: 1px solid #556;
   border-radius: 999px;
-  padding: 0.6rem 1rem;
-  -webkit-user-select: text;
-  user-select: text;
+  padding: 0.9rem 2.4rem;
+  cursor: pointer;
 }
-.room-input input:focus { outline: none; border-color: #b84ce7; }
-.room-input button { padding: 0.5rem 0.8rem; font-size: 1.2rem; }
-.room-box .hint { margin-top: 0.1rem; }
+#sel-join:focus { outline: none; border-color: #b84ce7; }
+#sel-join option { color: #111; }
+#sel-join option:disabled { color: #999; }
+#sel-join.empty { color: #aab; }
+
+/* ---- Dance screen: room button (top left) + confirm pop-up ---- */
+.room-btn {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 0.6rem);
+  left: 0.8rem;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.room-btn.shared { color: #fff; font-weight: 600; border-color: #6c5ce7; }
+.room-btn:disabled { opacity: 0.45; }
+.modal {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(5, 5, 10, 0.6);
+}
+.modal-box {
+  width: min(20rem, 100%);
+  padding: 1.2rem;
+  border: 1px solid #334;
+  border-radius: 16px;
+  background: #14141f;
+  text-align: center;
+}
+.modal-box p { margin-bottom: 1rem; }
+.modal-buttons { display: flex; gap: 0.8rem; justify-content: center; }
 .status { min-height: 1.2em; }
 .status.online { color: #7dffb0; }
 .status.offline { color: #f9a; }
@@ -325,3 +321,11 @@ button.danger {
   margin-bottom: 0.4rem;
 }
 #hud-room { color: #fff; font-weight: 600; }
+/* The HUD sits under the room button and the burger, so it never runs beneath them. */
+#screen-dance .hud {
+  margin-top: calc(env(safe-area-inset-top, 0px) + 3rem);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.3rem 1rem;
+  max-width: 100%;
+}

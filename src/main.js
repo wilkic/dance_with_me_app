@@ -9,7 +9,7 @@ import {
   WebSocketTransport,
   CompositeTransport,
 } from './net/poseChannel.js';
-import { randomRoomName, normalizeRoomName } from './net/roomNames.js';
+import { randomRoomName } from './net/roomNames.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
@@ -110,49 +110,48 @@ function onServerStatus(state) {
   } else if (state === 'connecting') {
     el.textContent = 'connecting to dance server…';
   } else {
-    el.textContent = '○ dance server unreachable — rooms, other people and AI dancers unavailable; delayed you works';
+    el.textContent = '○ dance server unreachable — no rooms for now; delayed you still dances with you';
     el.classList.add('offline');
   }
-  $('btn-join').disabled = state !== 'open';
-  if (state !== 'open') {
-    lobby = [];
-    renderRoomList(state === 'connecting' ? 'Looking for rooms…' : 'No dance server — rooms unavailable.');
-  }
+  if (state !== 'open') lobby = [];
+  renderJoinPicker();
+  renderRoomButton();
   planGuests();
 }
 
-/** Start screen: the list of open rooms (tap to join). */
-function renderRoomList(emptyText = 'No rooms open yet — start one below and tell your friends its name.') {
-  const list = $('room-list');
-  list.replaceChildren();
+/**
+ * Start screen: "Join a room" is a native <select> of the open rooms, so
+ * each phone shows its own picker (a spinning wheel on iOS). Rebuilt only
+ * when the rooms or their head counts change, so an open picker isn't
+ * yanked around by the server's regular lobby updates.
+ */
+let joinKey = null;
+function renderJoinPicker() {
+  const sel = $('sel-join');
+  const key = JSON.stringify(lobby.map((r) => [r.name, r.dancers]));
+  if (key === joinKey) return;
+  joinKey = key;
+  const placeholder = new Option('Join a room', '', true, true);
+  placeholder.disabled = true;
+  placeholder.hidden = true;
+  const opts = [placeholder];
   if (!lobby.length) {
-    const p = document.createElement('p');
-    p.className = 'room-list-empty';
-    p.textContent = emptyText;
-    list.append(p);
-    return;
+    const none = new Option('None', '');
+    none.disabled = true;
+    opts.push(none);
   }
-  const typed = normalizeRoomName($('room-name').value);
-  for (const r of lobby) {
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'room-row';
-    row.setAttribute('role', 'option');
-    if (r.name === typed) row.classList.add('current');
-    const name = document.createElement('span');
-    name.className = 'room-row-name';
-    name.textContent = r.name;
-    const meta = document.createElement('span');
-    meta.className = 'room-row-meta';
-    const who = r.dancers === 1 ? '1 dancing' : `${r.dancers} dancing`;
-    meta.textContent = r.bpm > 0 ? `${who} · ${Math.round(r.bpm)} bpm` : who;
-    row.append(name, meta);
-    row.addEventListener('click', () => {
-      $('room-name').value = r.name;
-      enter(r.name);
-    });
-    list.append(row);
-  }
+  for (const r of lobby) opts.push(new Option(`${r.name} · ${r.dancers} dancing`, r.name));
+  sel.replaceChildren(...opts);
+  sel.classList.toggle('empty', !lobby.length);
+}
+
+/** Dance screen, top left: "Share your room", or the room's name once you're in one. */
+function renderRoomButton() {
+  const btn = $('btn-room');
+  const name = roomState.name ?? pendingRoom;
+  btn.textContent = name ? `⌂ ${name}` : 'Share your room';
+  btn.classList.toggle('shared', !!name);
+  btn.disabled = !name && !(serverLink && serverOnline);
 }
 
 function onServerMessage(msg) {
@@ -162,10 +161,11 @@ function onServerMessage(msg) {
     renderBpm();
   } else if (msg.type === 'rooms') {
     lobby = msg.rooms;
-    if (mode === 'start') renderRoomList();
+    renderJoinPicker();
   } else if (msg.type === 'joined') {
     roomState.name = msg.room;
     renderRoomLine();
+    renderRoomButton();
   } else if (msg.type === 'room') {
     if (msg.name !== roomState.name) return;
     roomState.bpm = msg.bpm;
@@ -215,7 +215,7 @@ function renderRoomLine() {
   const n = roomState.members.length;
   const who = n <= 1 ? 'just you' : `${n} dancing`;
   const tempo = roomState.bpm > 0 ? ` · room ${Math.round(roomState.bpm)} bpm` : '';
-  hud.textContent = `⌂ ${roomState.name} · ${who}${tempo}`;
+  hud.textContent = `${who}${tempo}`; // the name is on the room button
   hud.classList.remove('hidden');
   cap.textContent = `Room “${roomState.name}” · ${who}`;
   cap.classList.remove('hidden');
@@ -298,7 +298,7 @@ const avatar = new StickFigureAvatar();
 
 let mode = 'start';        // start | capture | dance
 let ghostMode = true;      // true: show clean plate (user removed); false: live feed
-let pendingRoom = null;    // room chosen on the start screen (null = solo)
+let pendingRoom = null;    // room asked for (joined from the start screen, or shared) until the server confirms
 let lastPose = null;
 let rafId = null;
 let fpsEma = 0;
@@ -472,7 +472,7 @@ async function startCamera() {
 /** Start screen → camera, entering a dance room first if one was chosen. */
 async function enter(roomName) {
   pendingRoom = roomName;
-  setRoomInUrl(roomName);
+  renderRoomButton();
   if (roomName && serverLink) serverLink.join(roomName);
   const ok = await startCamera();
   if (!ok) leaveRoom();
@@ -487,13 +487,33 @@ function leaveRoom() {
   pruneReal();
   pendingRoom = null;
   renderRoomLine();
+  renderRoomButton();
 }
 
-function setRoomInUrl(roomName) {
-  const url = new URL(location.href);
-  if (roomName) url.searchParams.set('room', roomName);
-  else url.searchParams.delete('room');
-  history.replaceState(null, '', url);
+/** Open your own space to others: a fresh room name nobody is using. */
+function shareRoom() {
+  if (!serverLink || !serverOnline) return;
+  const taken = new Set(lobby.map((r) => r.name));
+  let name = randomRoomName();
+  for (let i = 0; i < 20 && taken.has(name); i++) name = randomRoomName();
+  pendingRoom = name;
+  serverLink.join(name);
+  renderRoomButton();
+}
+
+/** The in-app confirm pop-up. Resolves true for the confirming button. */
+function confirmPopup(message) {
+  return new Promise((resolve) => {
+    $('confirm-msg').textContent = message;
+    $('confirm').classList.remove('hidden');
+    const done = (answer) => {
+      $('confirm').classList.add('hidden');
+      $('confirm-yes').onclick = $('confirm-no').onclick = null;
+      resolve(answer);
+    };
+    $('confirm-yes').onclick = () => done(true);
+    $('confirm-no').onclick = () => done(false);
+  });
 }
 
 function exitToStart() {
@@ -521,7 +541,7 @@ function exitToStart() {
   peopleGuests.clear();
   aiInfo.clear();
   renderGuestLine();
-  if (serverLink) renderRoomList();
+  $('sel-join').value = '';
 }
 
 async function captureRoom() {
@@ -665,32 +685,20 @@ function renderChips() {
 }
 
 // ---- Wire up UI ----
-const roomInput = $('room-name');
-roomInput.value = normalizeRoomName(urlParams.get('room')) || randomRoomName();
-roomInput.addEventListener('input', () => {
-  const cur = roomInput.value;
-  const norm = normalizeRoomName(cur);
-  // Keep typing fluid: only rewrite when the normalized form differs in
-  // more than a trailing dash (the user may be mid-word).
-  if (norm !== cur && norm !== cur.replace(/-$/, '')) roomInput.value = norm;
-  if (lobby.length) renderRoomList();
+$('btn-start-room').addEventListener('click', () => enter(null));
+$('sel-join').addEventListener('change', (e) => {
+  if (e.target.value) enter(e.target.value);
 });
-roomInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') $('btn-join').click();
+$('btn-room').addEventListener('click', async () => {
+  if (!roomState.name && !pendingRoom) return shareRoom();
+  if (await confirmPopup('Exit room and return to main menu?')) exitToStart();
 });
-$('btn-shuffle').addEventListener('click', () => {
-  roomInput.value = randomRoomName();
-  if (lobby.length) renderRoomList();
-});
-$('btn-join').addEventListener('click', () => {
-  const name = normalizeRoomName(roomInput.value) || randomRoomName();
-  roomInput.value = name;
-  enter(name);
-});
-$('btn-solo').addEventListener('click', () => enter(null));
+renderJoinPicker();
+renderRoomButton();
 buildChips();
 if (!serverLink) {
-  $('room-box').classList.add('hidden');
+  $('sel-join').disabled = true;
+  $('btn-room').classList.add('hidden');
   $('share-box').classList.add('hidden');
   $('server-status').textContent = 'No dance server configured — delayed-you guests only.';
 }
