@@ -13,6 +13,7 @@ import { resolveServerUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
 import { SessionShare, VIDEO_LEVELS, MUSIC_LEVELS } from './share/sessionShare.js';
+import { joinable, phase, whenText, FINE_PRINT } from './net/schedule.js';
 
 // ---- DOM ----
 const $ = (id) => document.getElementById(id);
@@ -90,6 +91,7 @@ channel.subscribe(onRemoteFrame);
 // room's consensus BPM, arrive in the server's 'room' opinions.
 const roomState = { name: null, bpm: 0, members: [] };
 let lobby = []; // open rooms from the server: [{ name, dancers, bpm }]
+let bookings = []; // DJ sets booked ahead (see net/schedule.js), soonest first
 const peerBpm = new Map(); // dancerId -> { bpm, confidence } (room-mates + people guests)
 const peopleGuests = new Set(); // dancer ids the server brought into my space
 const aiInfo = new Map(); // ai dancer id -> { tag, title, bpm, base, moves, borrowing }
@@ -112,6 +114,7 @@ function onServerStatus(state) {
   }
   if (state !== 'open') lobby = [];
   renderJoinPicker();
+  renderUpcoming();
   renderRoomButton();
   planGuests();
 }
@@ -125,21 +128,88 @@ function onServerStatus(state) {
 let joinKey = null;
 function renderJoinPicker() {
   const sel = $('sel-join');
-  const key = JSON.stringify(lobby.map((r) => [r.name, r.dancers]));
+  // DJ sets that are open (10 min before) or live join the list even
+  // before anyone is in them.
+  const now = Date.now();
+  const sets = bookings.filter((b) => joinable(b, now) && !lobby.some((r) => r.name === b.room));
+  const key = JSON.stringify([lobby.map((r) => [r.name, r.dancers]), sets.map((b) => b.id)]);
   if (key === joinKey) return;
   joinKey = key;
   const placeholder = new Option('Join a room', '', true, true);
   placeholder.disabled = true;
   placeholder.hidden = true;
   const opts = [placeholder];
-  if (!lobby.length) {
+  if (!lobby.length && !sets.length) {
     const none = new Option('None', '');
     none.disabled = true;
     opts.push(none);
   }
-  for (const r of lobby) opts.push(new Option(`${r.name} · ${r.dancers} dancing`, r.name));
+  for (const r of lobby) {
+    const dj = bookings.find((b) => b.room === r.name && joinable(b, now));
+    opts.push(new Option(`${r.name} · ${r.dancers} dancing${dj ? ' · DJ set' : ''}`, r.name));
+  }
+  for (const b of sets) opts.push(new Option(`${b.room} · DJ set`, b.room));
   sel.replaceChildren(...opts);
-  sel.classList.toggle('empty', !lobby.length);
+  sel.classList.toggle('empty', !lobby.length && !sets.length);
+}
+
+/**
+ * Start screen, below the buttons: DJ sets booked at /schedule. Tap one for
+ * the DJ bio and set info; from 10 min before the start it has a Join
+ * button. Rebuilt when the schedule changes and once a minute (phases move
+ * on with the clock), keeping whichever sets were open.
+ */
+let upcomingKey = null;
+function renderUpcoming() {
+  const list = $('upcoming-list');
+  const now = Date.now();
+  const key = JSON.stringify([bookings, bookings.map((b) => phase(b, now)), serverOnline]);
+  if (key === upcomingKey) return;
+  upcomingKey = key;
+  const open = new Set([...list.querySelectorAll('details[open]')].map((d) => d.dataset.id));
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  };
+  const items = bookings.map((b) => {
+    const p = phase(b, now);
+    const li = el('li');
+    const d = el('details', `set ${p}`);
+    d.dataset.id = b.id;
+    d.open = open.has(b.id);
+    const sum = el('summary');
+    const head = el('div', 'set-head');
+    const dj = el('div', 'set-dj', b.dj);
+    if (p === 'live') dj.append(el('span', 'set-badge', 'LIVE'));
+    const when = el('div', 'set-when', `${whenText(b)} · `);
+    when.append(el('span', 'set-room', `⌂ ${b.room}`));
+    head.append(dj, when);
+    sum.append(head);
+    if (joinable(b, now)) {
+      const btn = el('button', 'primary', 'Join');
+      btn.disabled = !serverOnline;
+      btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); enter(b.room); });
+      sum.append(btn);
+    }
+    const body = el('div', 'set-body');
+    if (b.setInfo) body.append(el('h3', '', 'The set'), el('p', '', b.setInfo));
+    if (b.bio) body.append(el('h3', '', `About ${b.dj}`), el('p', '', b.bio));
+    if (b.link) {
+      const a = el('a', '', b.link.replace(/^https?:\/\//, ''));
+      a.href = b.link;
+      a.target = '_blank';
+      a.rel = 'noopener nofollow';
+      body.append(el('h3', '', 'Link'), a);
+    }
+    if (!body.childElementCount) body.append(el('p', '', 'No details yet.'));
+    d.append(sum, body);
+    li.append(d);
+    return li;
+  });
+  if (!items.length) items.push(el('li', 'none', serverOnline ? 'No DJ sets booked yet.' : 'Schedule unavailable while the dance server is offline.'));
+  list.replaceChildren(...items);
 }
 
 /** Dance screen, top left: "Share your room", or the room's name once you're in one. */
@@ -159,6 +229,10 @@ function onServerMessage(msg) {
   } else if (msg.type === 'rooms') {
     lobby = msg.rooms;
     renderJoinPicker();
+  } else if (msg.type === 'schedule') {
+    bookings = msg.bookings;
+    renderJoinPicker();
+    renderUpcoming();
   } else if (msg.type === 'joined') {
     roomState.name = msg.room;
     renderRoomLine();
@@ -691,6 +765,8 @@ function renderChips() {
   for (const dial of ['video', 'music']) {
     for (const b of $(`chips-${dial}`).querySelectorAll('.chip')) b.classList.toggle('on', b.dataset.level === share.level[dial]);
   }
+  // Sharing the actual sound: remind about whose music it is.
+  $('audio-fine-print').classList.toggle('hidden', share.level.music !== 'audio');
 }
 
 // ---- Wire up UI ----
@@ -703,9 +779,13 @@ $('btn-room').addEventListener('click', async () => {
   if (await confirmPopup('Exit room and return to main menu?')) exitToStart();
 });
 renderJoinPicker();
+renderUpcoming();
+setInterval(() => { renderUpcoming(); renderJoinPicker(); }, 30_000);
 renderRoomButton();
 buildChips();
+for (const el of document.querySelectorAll('[data-fine-print]')) el.textContent = FINE_PRINT;
 if (!serverLink) {
+  $('upcoming').classList.add('hidden');
   $('sel-join').disabled = true;
   $('btn-room').classList.add('hidden');
   $('share-box').classList.add('hidden');

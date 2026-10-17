@@ -48,7 +48,14 @@ html, body {
 
 #screen-start {
   background: radial-gradient(ellipse at 50% 30%, #1b1b33, #0b0b12 70%);
+  /* Scrolls when Upcoming rooms gets long; the auto margins centre it when it doesn't. */
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1.5rem);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
 }
+#screen-start > :first-child { margin-top: auto; }
+#screen-start > :last-child { margin-bottom: auto; }
 
 #screen-start h1 { font-size: 2.4rem; letter-spacing: 0.04em; }
 .tagline { color: #aab; max-width: 26rem; }
@@ -344,3 +351,69 @@ button.danger {
   font: 0.72rem/1.35 ui-monospace, monospace;
   white-space: pre-wrap;
 }
+
+/* ---- Start screen: Upcoming rooms (DJ sets booked at /schedule) ---- */
+.upcoming {
+  width: min(22rem, 100%);
+  text-align: left;
+}
+.upcoming h2 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #889;
+  margin-bottom: 0.5rem;
+}
+.upcoming ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+.upcoming .none { color: #667; font-size: 0.85rem; }
+.set {
+  border: 1px solid #334;
+  border-radius: 12px;
+  background: rgba(20, 20, 35, 0.6);
+}
+.set.live { border-color: #b84ce7; }
+.set summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  cursor: pointer;
+  list-style: none;
+}
+.set summary::-webkit-details-marker { display: none; }
+.set-head { flex: 1; min-width: 0; }
+.set-dj { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-when { font-size: 0.8rem; color: #9fa8ff; }
+.set-room { white-space: nowrap; }
+.set-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  background: #b84ce7;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.3rem;
+  vertical-align: 0.1em;
+}
+.set summary button { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+.set-body {
+  padding: 0 0.8rem 0.7rem;
+  font-size: 0.85rem;
+  color: #ccd;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.set-body h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: #889; margin: 0.5rem 0 0.15rem; }
+.set-body a, .book-link { color: #b9a6ff; }
+.book-link { display: inline-block; margin-top: 0.7rem; font-size: 0.85rem; }
+
+.fine-print {
+  max-width: 24rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: #667;
+}
+.menu .fine-print { font-size: 0.7rem; color: #a99; }

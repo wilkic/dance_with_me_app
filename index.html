@@ -32,6 +32,13 @@
         </div>
       </div>
       <p id="server-status" class="hint status"></p>
+      <!-- DJ sets booked ahead at /schedule; tap one for the bio and set info. -->
+      <section id="upcoming" class="upcoming">
+        <h2>Upcoming rooms</h2>
+        <ul id="upcoming-list"></ul>
+        <a class="book-link" href="schedule/">DJs: book a room &rarr;</a>
+      </section>
+      <p class="fine-print" data-fine-print></p>
     </section>
 
     <!-- ===== Screen: room capture ===== -->
@@ -94,6 +101,7 @@
             <label>Music</label>
             <div class="chips" id="chips-music"></div>
           </div>
+          <p id="audio-fine-print" class="fine-print hidden" data-fine-print></p>
           <p id="share-status" class="hint">Points + motion tempo are always kept; the rest is your call.</p>
         </div>
         <button id="btn-exit" class="danger">Exit to start</button>

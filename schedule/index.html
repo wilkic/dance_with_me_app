@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0b12" />
+  <title>Book a Room — Dance With Me</title>
+  <link rel="stylesheet" href="/src/schedule.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <a class="back" href="../">&larr; Dance With Me</a>
+      <h1>Book a room</h1>
+      <p class="lede">DJs: pick a time and your room opens on the start page. Dancers see your
+        set under <b>Upcoming rooms</b> and can join from 10 minutes before you start.</p>
+      <p id="status" class="status">connecting to the dance server…</p>
+    </header>
+
+    <form id="book" autocomplete="on">
+      <label>DJ name
+        <input id="f-dj" name="dj" required maxlength="40" placeholder="DJ Funk" />
+        <span class="hint">Your room: <b id="room-preview">—</b></span>
+      </label>
+      <div class="row">
+        <label>Date
+          <input id="f-date" type="date" required />
+        </label>
+        <label>Start time
+          <input id="f-time" type="time" required />
+        </label>
+        <label>Length
+          <select id="f-minutes"></select>
+        </label>
+      </div>
+      <p class="hint" id="tz-hint"></p>
+      <label>Set info <span class="opt">optional</span>
+        <textarea id="f-set" maxlength="1000" rows="3" placeholder="Disco and house, 118–124 bpm. Requests welcome."></textarea>
+      </label>
+      <label>About you <span class="opt">optional</span>
+        <textarea id="f-bio" maxlength="1000" rows="3" placeholder="A few lines for the dancers."></textarea>
+      </label>
+      <label>Link <span class="opt">optional</span>
+        <input id="f-link" type="text" inputmode="url" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="https://soundcloud.com/…" />
+      </label>
+      <p class="fine-print" data-fine-print></p>
+      <button id="btn-book" type="submit" class="primary" disabled>Book the room</button>
+      <p id="form-msg" class="msg" role="status"></p>
+    </form>
+
+    <section id="mine" class="hidden">
+      <h2>Your bookings</h2>
+      <p class="hint">Booked from this browser — only you can cancel them.</p>
+      <ul id="mine-list"></ul>
+    </section>
+
+    <section>
+      <h2>Coming up</h2>
+      <ul id="all-list"><li class="none">Loading…</li></ul>
+    </section>
+  </main>
+
+  <script type="module" src="/src/schedule.js"></script>
+</body>
+</html>

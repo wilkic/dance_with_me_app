@@ -11,8 +11,8 @@ export default defineConfig({
   plugins: [basicSsl()],
   build: {
     rollupOptions: {
-      // Two pages: the phone app and the big-screen dance floor.
-      input: { main: 'index.html', floor: 'floor.html' },
+      // Three pages: the phone app, the big-screen dance floor, DJ booking.
+      input: { main: 'index.html', floor: 'floor.html', schedule: 'schedule/index.html' },
     },
   },
   server: {

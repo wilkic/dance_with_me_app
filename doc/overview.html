@@ -203,7 +203,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <h2>What it does</h2>
   <p>The app never shows the camera feed. It photographs your empty room once, then uses the live camera only to find your joints. What you see is that photo with a stick figure moving where you are. That makes "removing" you perfect and free, with no segmentation and no 3D scan.</p>
   <div class="steps">
-    <div class="step"><h3>1. Pick room</h3><p>"Start a room" opens your own space. "Join a room" is the phone's own picker (a spinning wheel on iOS) listing open rooms, or a grey "None".</p></div>
+    <div class="step"><h3>1. Pick room</h3><p>"Start a room" opens your own space. "Join a room" is the phone's own picker (a spinning wheel on iOS) listing open rooms, or a grey "None". Below the buttons, <b>Upcoming rooms</b> lists DJ sets booked at <code>/schedule</code>.</p></div>
     <div class="step"><h3>2. Capture the room</h3><p>Prop the phone up facing your dance space, step out of frame, tap the button. After a 3-second countdown the app averages several frames into a clean plate.</p></div>
     <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. The slider at the bottom sets how many guests (0–3) dance behind you at 90% opacity. Tapping anywhere else on the screen (or ☰) opens the menu, which changes time between guests, opacity, AI variation and sharing on the fly.</p></div>
   </div>
@@ -303,6 +303,10 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   </table></div>
   <h3>Dance rooms</h3>
   <p>A room is just a name. The first person in creates it, the last out closes it. Every frame a member sends goes to the other members. Your space becomes a room when you tap "Share your room" (top left while dancing): the app picks a name no open room is using, like <code>funky-otter</code> and the button turns into it. Others then find it under "Join a room" on the start screen, with its dancer count. Tapping the room name asks "Exit room and return to main menu?". Room links (<code>?room=</code>) are gone. The server publishes each member's tempo and a confidence-weighted room tempo every two seconds. That number is where a future "room picks the music" feature will start.</p>
+  <h3>DJ schedule (issue #2)</h3>
+  <p>DJs book a room ahead at <code>dance.wilkinscoffee.be/schedule</code> with a DJ name, a date and start time in their own time zone, a length (30 min to 4 h), and optional set info, a bio and a link. The room is the DJ name run through the usual room-name rules, so "DJ Funk" plays in <code>dj-funk</code>. One room can't be booked twice for overlapping times. Two different DJs can overlap. There are no accounts. The booking comes back with a secret cancel token that stays in that browser, and "Your bookings" offers a Cancel button for each one.</p>
+  <p>Bookings live on the dance server in <code>server/data/schedule.json</code>. The deploy script leaves that file alone, and ended sets are dropped on the next scan. Every phone gets the list on connect and whenever it changes. On the start screen, tapping a set shows its info, bio and link. From 10 minutes before the start until the end, the set has a Join button and appears in "Join a room" as <code>dj-funk · DJ set</code>, even before anyone is in it. Limits: 500 bookings in total, 10 per connection, at most 90 days ahead.</p>
+  <p>Fine print appears at the bottom of the start screen, on <code>/schedule</code>, and in the ☰ menu while Music is set to <b>audio</b>: "Please don't share music you don't own. wilkinscoffee is not liable for your public broadcasting of unlicensed copyrighted material. We're here to dance to music, not steal it."</p>
   <h3>How an AI dancer is made</h3>
   <p>No choreography is generated. An AI dancer is a real person's recorded dance, retimed to your beat, with moves borrowed from another dancer of similar tempo and style.</p>
   <ol class="flow">
@@ -395,6 +399,8 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>media</code></td><td class="sub">a base64 media chunk</td></tr>
         <tr><td><code>label</code></td><td class="sub">ground-truth click BPM, for the lab</td></tr>
         <tr><td><code>watch</code></td><td class="sub">become a spectator, for the dance floor</td></tr>
+        <tr><td><code>book</code></td><td class="sub">book a DJ set: dj, start, minutes, set info, bio, link</td></tr>
+        <tr><td><code>cancel</code></td><td class="sub">cancel a booking with its token</td></tr>
       </tbody>
     </table></div>
     <div class="tbl"><table>
@@ -408,6 +414,8 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>guests</code></td><td class="sub">who is dancing in your space, library size</td></tr>
         <tr><td><code>match</code> / <code>unmatch</code></td><td class="sub">a tempo-compatible partner and a song</td></tr>
         <tr><td><code>floor</code></td><td class="sub">to spectators: everyone online, per-room tempo</td></tr>
+        <tr><td><code>schedule</code></td><td class="sub">DJ sets booked ahead, soonest first</td></tr>
+        <tr><td><code>booked</code> / <code>cancelled</code> / <code>error</code></td><td class="sub">the answer to <code>book</code> or <code>cancel</code></td></tr>
       </tbody>
     </table></div>
   </div>
@@ -420,7 +428,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <thead><tr><th>File</th><th>Role</th><th class="num">Lines</th></tr></thead>
     <tbody>
       <tr class="grp"><td colspan="3">Phone app</td></tr>
-      <tr><td><code>src/main.js</code></td><td>App state machine (start, capture, dance), render loop, guest planning, room state, menu</td><td class="num">759</td></tr>
+      <tr><td><code>src/main.js</code></td><td>App state machine (start, capture, dance), render loop, guest planning, room state, Upcoming rooms, menu</td><td class="num">866</td></tr>
       <tr><td><code>src/pose/poseFormat.js</code></td><td>The PoseFrame contract, binary serialize and deserialize</td><td class="num">111</td></tr>
       <tr><td><code>src/pose/poseDetector.js</code></td><td>MediaPipe behind a swappable interface; timed loading, warm-up</td><td class="num">112</td></tr>
       <tr><td><code>src/pose/smoothing.js</code></td><td>One Euro filter per joint</td><td class="num">71</td></tr>
@@ -430,18 +438,21 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>src/share/sessionShare.js</code></td><td>The sharing dials: mic envelope, media chunks</td><td class="num">179</td></tr>
       <tr><td><code>src/net/*.js</code></td><td>Envelope format, room names, server URL rules</td><td class="num">82</td></tr>
       <tr><td><code>src/floor.js</code>, <code>floor.html</code></td><td>The big-screen spectator page</td><td class="num">237</td></tr>
+      <tr><td><code>src/schedule.js</code>, <code>schedule/index.html</code></td><td>The DJ booking page at <code>/schedule</code></td><td class="num">220</td></tr>
+      <tr><td><code>src/net/schedule.js</code></td><td>What a booking is, shared by both sides: validation, phases, fine print</td><td class="num">70</td></tr>
       <tr><td><code>src/audio/metronome.js</code></td><td>Accented click for lab sessions (<code>?click=BPM</code>)</td><td class="num">47</td></tr>
       <tr class="grp"><td colspan="3">Dance server</td></tr>
-      <tr><td><code>server/index.js</code></td><td>WebSocket server: sessions, rooms, guests, AI streaming, recording</td><td class="num">428</td></tr>
+      <tr><td><code>server/index.js</code></td><td>WebSocket server: sessions, rooms, DJ schedule, guests, AI streaming, recording</td><td class="num">462</td></tr>
       <tr><td><code>server/aiDancer.js</code></td><td>Retimed replay with borrowed limbs, in body space</td><td class="num">324</td></tr>
       <tr><td><code>server/library.js</code></td><td>Descriptors, cache, tempo/style/tag picking</td><td class="num">233</td></tr>
       <tr><td><code>server/style.js</code></td><td>Body space and the movement-style vector</td><td class="num">171</td></tr>
       <tr><td><code>server/beatDetector.js</code></td><td>Tempo and beats from motion alone</td><td class="num">159</td></tr>
       <tr><td><code>server/recorder.js</code></td><td>Per-session JSONL plus optional media files</td><td class="num">116</td></tr>
       <tr><td><code>server/tempo.js</code></td><td>Autocorrelation for any signal, music tempo from the mic envelope</td><td class="num">99</td></tr>
+      <tr><td><code>server/schedule.js</code></td><td>DJ bookings: JSON file, clashes, cancel tokens</td><td class="num">84</td></tr>
       <tr><td><code>server/rooms.js</code>, <code>matcher.js</code>, <code>songs.js</code></td><td>Room registry, tempo pairing, 14-song stub catalog (65–174 BPM)</td><td class="num">181</td></tr>
       <tr class="grp"><td colspan="3">Tests and tooling</td></tr>
-      <tr><td><code>server/test/*.js</code></td><td>Rooms, library and AI dancer, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
+      <tr><td><code>server/test/*.js</code></td><td>Rooms, DJ schedule, library and AI dancer, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
       <tr><td><code>server/lab/*</code></td><td>Dance lab: scenarios, waterfalls, harvesting, video ingestion</td><td class="num">~1,760</td></tr>
       <tr><td><code>bench.html</code></td><td>Dev-only guest-drawing benchmark (not in the build)</td><td class="num">120</td></tr>
       <tr><td><code>dance-lan.sh</code></td><td>Starts server and Vite, prints a phone QR code, opens the dance floor</td><td class="num">90</td></tr>
@@ -490,6 +501,7 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Guest slider, trickle-in, cheap guest drawing</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 5 seats and 30 s spacing, nothing appeared at start, AI dancers arrived at 60 s and 121 s, sliding to 0 cleared them. Not yet phone-tested; use <code>?perf=1</code> to read the timings.</td></tr>
       <tr><td>Slow pose-model loading on some phones (issue #1)</td><td><span class="pill p-todo">measuring</span></td><td class="sub">Branch <code>pose-load-timing</code>: <code>?perf=1</code> shows per-step load times, <code>?cpu=1</code> compares CPU vs GPU. Next: load it on Chris's phone and a kid's phone, then fix the slow step.</td></tr>
       <tr><td>Max 3 guests, AI or real only, 15 s phase-in, no guest glow</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 3 seats the server was asked for 1, 2, then 3 guests, and three plain AI figures danced. Server caps guests at 3.</td></tr>
+      <tr><td>DJ schedule, Upcoming rooms, fine print (issue #2)</td><td><span class="pill p-ok">verified</span></td><td class="sub">17 Oct 2026, on branch <code>dj-schedule</code>: 5 server tests pass, including a booking over a real socket. In headless Chrome at phone size: three sets booked, a clash refused, Upcoming showed details, Join opened <code>dj-funk</code>, and the audio fine print toggled. Not yet phone-tested.</td></tr>
       <tr><td>Mic beat and audio, video sharing</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen.</td></tr>
       <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>
       <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>

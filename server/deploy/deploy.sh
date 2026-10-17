@@ -28,7 +28,7 @@ case "${1:-deploy}" in
     # The server imports shared modules from src/, so both go up.
     git -C "$ROOT" archive "$REF" server src | tar -x -C "$TMP"
     rsync -az --delete --exclude node_modules --exclude lab/out \
-      --exclude recordings --exclude recordings_web --exclude library \
+      --exclude recordings --exclude recordings_web --exclude library --exclude data \
       "$TMP/server" "$TMP/src" "$DANCE_HOST:$APP/"
     echo "== dance library (add-only: sessions recorded on the VM are kept)"
     for d in recordings recordings_web library; do

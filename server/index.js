@@ -14,6 +14,10 @@
  *   → { type: 'profile', bpm, confidence, musicBpm, musicConfidence }
  *   → { type: 'guests', people, ai, library }     who is dancing in your space
  *   → { type: 'match', partner, bpm, song }       tempo-compatible pairing
+ *   → { type: 'schedule', bookings }              DJ sets booked ahead (see schedule.js)
+ *   → { type: 'booked', booking, token }          your booking went through
+ *   → { type: 'cancelled', id }                   your booking was cancelled
+ *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
  *   → { type: 'unmatch' }                         pairing dissolved
  *
  *   ← { type: 'join', room }                      enter a room (creates it)
@@ -24,6 +28,8 @@
  *   ← { type: 'media', kind, mime, data }         MediaRecorder chunk, base64 (level audio/video)
  *   ← { type: 'label', clickBpm }                 dance-lab ground truth
  *   ← { type: 'watch' }                           become a spectator (dance floor)
+ *   ← { type: 'book', dj, start, minutes, setInfo, bio, link }   book a DJ set (/schedule)
+ *   ← { type: 'cancel', id, token }               cancel one of your bookings
  *
  * Guests. Two kinds can dance in someone's space. "Other people" are real
  * dancers online right now, assigned by the server (tempo-compatible
@@ -56,12 +62,14 @@ import { AiDancer } from './aiDancer.js';
 import { SessionRecorder } from './recorder.js';
 import { StyleWindow } from './style.js';
 import { EnvelopeTempo, tempoGap } from './tempo.js';
+import { Schedule } from './schedule.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const MAX_GUESTS = 3;
 const ACTIVE_MS = 6000;         // "dancing" = a frame arrived this recently
 const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often
+const MAX_BOOKINGS_PER_SESSION = 10;
 const LEVELS = { video: ['points', 'video'], music: ['motion', 'beat', 'audio'] };
 
 export function startServer({
@@ -73,12 +81,15 @@ export function startServer({
   // The dance library behind AI dancers: a Library, null = load the
   // default one (recordings, recordings_web, library/sessions), false = none.
   library = null,
+  // DJ bookings (JSON file). SCHEDULE_FILE=0 keeps them in memory only.
+  scheduleFile = process.env.SCHEDULE_FILE === '0' ? null : (process.env.SCHEDULE_FILE || join(HERE, 'data', 'schedule.json')),
   log = console.log,
 } = {}) {
   const wss = new WebSocketServer({ port });
   const sessions = new Map(); // id -> session (see connection handler)
   const rooms = new Rooms();
   const matcher = new Matcher();
+  const schedule = new Schedule(scheduleFile, { log });
   const lib = library === false ? null : (library ?? new Library({ log }).load());
   const now = () => performance.now();
 
@@ -119,6 +130,14 @@ export function startServer({
     const msg = lobby();
     for (const s of sessions.values()) send(s, msg);
     broadcastFloor();
+  };
+
+  // DJ schedule: everyone gets the list on connect and whenever it changes
+  // (a booking, a cancellation, a set ending — checked on every scan).
+  const scheduleMsg = () => ({ type: 'schedule', bookings: schedule.list() });
+  const broadcastSchedule = () => {
+    const msg = scheduleMsg();
+    for (const s of sessions.values()) send(s, msg);
   };
 
   // Dance floor: what a spectator screen shows — every dancer (with room
@@ -249,10 +268,12 @@ export function startServer({
       hosts: new Set(),    // sessions whose space I dance in
       ai: [],              // AiDancer[]
       rec: recordDir ? new SessionRecorder(recordDir, { id }) : null,
+      booked: 0,           // bookings made on this connection (rate limit)
     };
     sessions.set(id, s);
     send(s, { type: 'welcome', id });
     send(s, lobby());
+    send(s, scheduleMsg());
     log(`+ ${id} connected (${sessions.size} online)`);
     broadcastFloor();
 
@@ -283,6 +304,19 @@ export function startServer({
           s.watching = true;
           log(`* ${id} is watching the dance floor`);
           if (left) { broadcastRoom(left); broadcastLobby(); } else broadcastFloor();
+        } else if (msg.type === 'book') {
+          if (s.booked >= MAX_BOOKINGS_PER_SESSION) return send(s, { type: 'error', for: 'book', error: 'That’s a lot of bookings — reload the page to book more.' });
+          const res = schedule.book(msg);
+          if (res.error) return send(s, { type: 'error', for: 'book', error: res.error });
+          s.booked++;
+          log(`♫ ${id} booked ${res.booking.dj} (${res.booking.room}) at ${new Date(res.booking.start).toISOString()} for ${res.booking.minutes} min`);
+          send(s, { type: 'booked', booking: res.booking, token: res.token });
+          broadcastSchedule();
+        } else if (msg.type === 'cancel') {
+          if (!schedule.cancel(String(msg.id), String(msg.token))) return send(s, { type: 'error', for: 'cancel', error: 'That booking is already gone.' });
+          log(`♫ ${id} cancelled booking ${msg.id}`);
+          send(s, { type: 'cancelled', id: msg.id });
+          broadcastSchedule();
         } else if (msg.type === 'guests') {
           const n = (v) => Math.max(0, Math.min(MAX_GUESTS, Math.round(Number(v) || 0)));
           s.wants.people = n(msg.people);
@@ -373,6 +407,7 @@ export function startServer({
       }
     }
     broadcastLobby();
+    if (schedule.prune()) broadcastSchedule();
     assignPeople();
     for (const s of sessions.values()) {
       if (!s.wants.ai && !s.wants.people) continue;
@@ -414,7 +449,7 @@ export function startServer({
   };
   wss.on('close', () => { clearInterval(timer); clearInterval(aiTimer); });
 
-  return { wss, sessions, rooms, library: lib, close, get port() { return wss.address().port; } };
+  return { wss, sessions, rooms, schedule, library: lib, close, get port() { return wss.address().port; } };
 }
 
 // Run directly: node index.js [port]

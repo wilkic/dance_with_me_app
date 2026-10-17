@@ -8,3 +8,4 @@ server/recordings/
 server/recordings_web/
 server/library/
 server/deploy/.env
+server/data/

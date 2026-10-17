@@ -132,7 +132,7 @@ writeClip('waltz-b', 90, { clickBpm: 90 });
 const library = new Library({ dirs: [tmp], cacheFile: null, log: () => {} }).load();
 const recordDir = join(tmp, 'sessions');
 
-const server = startServer({ port: 0, scanIntervalMs: 500, library, recordDir, log: () => {} });
+const server = startServer({ port: 0, scanIntervalMs: 500, library, recordDir, scheduleFile: null, log: () => {} });
 await new Promise((r) => server.wss.on('listening', r));
 console.log(`server on port ${server.port}`);
 
