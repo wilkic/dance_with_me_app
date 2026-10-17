@@ -4,6 +4,7 @@
 #   server/deploy/deploy.sh         # code (the `release` branch) + dance library, restart
 #   server/deploy/deploy.sh pull    # fetch sessions recorded on the VM
 #   server/deploy/deploy.sh logs    # follow the server log
+#   server/deploy/deploy.sh admin   # print the link that approves DJ bookings (secret!)
 # Settings (env or server/deploy/.env): DANCE_HOST (ssh target, e.g.
 # ubuntu@1.2.3.4), DANCE_DOMAIN (e.g. ws.wilkinscoffee.be).
 set -euo pipefail
@@ -42,8 +43,14 @@ case "${1:-deploy}" in
   pull)
     rsync -az "$DANCE_HOST:$APP/server/library/sessions/" "$ROOT/server/library/sessions/"
     ;;
+  admin)
+    # The key is made by the server on first start (server/data/admin-key).
+    KEY=$(ssh "$DANCE_HOST" "cat $APP/server/data/admin-key") || { echo "no admin key yet — deploy and start the server first" >&2; exit 1; }
+    echo "Approve DJ bookings at (keep this link private):"
+    echo "  https://${DANCE_SITE:-dance.wilkinscoffee.be}/schedule/#admin=$KEY"
+    ;;
   logs)
     ssh -t "$DANCE_HOST" "journalctl -u dance -f -n 50"
     ;;
-  *) echo "usage: $0 [setup|deploy|pull|logs]" >&2; exit 2 ;;
+  *) echo "usage: $0 [setup|deploy|pull|logs|admin]" >&2; exit 2 ;;
 esac

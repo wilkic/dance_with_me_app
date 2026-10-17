@@ -12,10 +12,18 @@
     <header>
       <a class="back" href="../">&larr; Dance With Me</a>
       <h1>Book a room</h1>
-      <p class="lede">DJs: pick a time and your room opens on the start page. Dancers see your
-        set under <b>Upcoming rooms</b> and can join from 10 minutes before you start.</p>
+      <p class="lede">DJs: ask for a time slot. Once it's approved, your set shows on the start page
+        under <b>Upcoming rooms</b>, and dancers can join from 10 minutes before you start.</p>
       <p id="status" class="status">connecting to the dance server…</p>
     </header>
+
+    <!-- #admin=KEY: the approval queue (the key is kept in this browser) -->
+    <section id="admin" class="admin hidden">
+      <h2>Waiting for approval</h2>
+      <p id="admin-msg" class="msg" role="status"></p>
+      <ul id="waiting-list"></ul>
+      <button id="btn-admin-out" type="button" class="link">Sign out of admin</button>
+    </section>
 
     <form id="book" autocomplete="on">
       <label>DJ name
@@ -44,13 +52,13 @@
         <input id="f-link" type="text" inputmode="url" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="https://soundcloud.com/…" />
       </label>
       <p class="fine-print" data-fine-print></p>
-      <button id="btn-book" type="submit" class="primary" disabled>Book the room</button>
+      <button id="btn-book" type="submit" class="primary" disabled>Request the room</button>
       <p id="form-msg" class="msg" role="status"></p>
     </form>
 
     <section id="mine" class="hidden">
       <h2>Your bookings</h2>
-      <p class="hint">Booked from this browser — only you can cancel them.</p>
+      <p class="hint">Requested from this browser — only you can cancel them.</p>
       <ul id="mine-list"></ul>
     </section>
 

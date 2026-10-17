@@ -106,4 +106,28 @@ ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
 .set .when { font-size: 0.8rem; color: #9fa8ff; }
 .set p { font-size: 0.85rem; color: #ccd; white-space: pre-wrap; }
 
+.status-pill {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+}
+.status-pill.pending { background: #3a3320; color: #ffd27d; }
+.status-pill.approved { background: #1d3a2b; color: #7dffb0; }
+.status-pill.rejected { background: #3a1d24; color: #f9a; }
+
+.admin {
+  border: 1px solid #b84ce7;
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgba(40, 20, 60, 0.4);
+}
+.admin .set { gap: 0.4rem; }
+.admin h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: #889; margin-top: 0.2rem; }
+.set > .actions { flex-direction: row; gap: 0.5rem; margin-top: 0.2rem; }
+button.ok { border-color: #2a6; color: #7dffb0; font-size: 0.8rem; padding: 0.3rem 0.9rem; }
+.actions button.danger { align-self: auto; }
+button.link { border: none; background: none; color: #889; font-size: 0.8rem; padding: 0.6rem 0 0; text-decoration: underline; }
+
 .hidden { display: none !important; }

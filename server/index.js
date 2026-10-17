@@ -14,9 +14,11 @@
  *   → { type: 'profile', bpm, confidence, musicBpm, musicConfidence }
  *   → { type: 'guests', people, ai, library }     who is dancing in your space
  *   → { type: 'match', partner, bpm, song }       tempo-compatible pairing
- *   → { type: 'schedule', bookings }              DJ sets booked ahead (see schedule.js)
- *   → { type: 'booked', booking, token }          your booking went through
+ *   → { type: 'schedule', bookings }              approved DJ sets (see schedule.js)
+ *   → { type: 'booked', booking, token }          your request is in, waiting for approval
+ *   → { type: 'mine', bookings }                  your own requests, with status
  *   → { type: 'cancelled', id }                   your booking was cancelled
+ *   → { type: 'waiting', bookings }               admin only: requests to approve
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
  *   → { type: 'unmatch' }                         pairing dissolved
  *
@@ -30,6 +32,9 @@
  *   ← { type: 'watch' }                           become a spectator (dance floor)
  *   ← { type: 'book', dj, start, minutes, setInfo, bio, link }   book a DJ set (/schedule)
  *   ← { type: 'cancel', id, token }               cancel one of your bookings
+ *   ← { type: 'mine', tokens }                    follow your own bookings ({ id: token })
+ *   ← { type: 'admin', key }                      sign in to approve bookings
+ *   ← { type: 'approve' | 'reject', id }          admin: decide on a request
  *
  * Guests. Two kinds can dance in someone's space. "Other people" are real
  * dancers online right now, assigned by the server (tempo-compatible
@@ -48,7 +53,8 @@
  * ([id][PoseFrame], see src/net/envelope.js) carrying other dancers' poses.
  */
 import { WebSocketServer } from 'ws';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deserializePoseFrame, serializePoseFrame } from '../src/pose/poseFormat.js';
@@ -70,6 +76,27 @@ const ACTIVE_MS = 6000;         // "dancing" = a frame arrived this recently
 const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often
 const MAX_BOOKINGS_PER_SESSION = 10;
+const MAX_ADMIN_TRIES = 5;
+
+/**
+ * The key that approves DJ bookings: ADMIN_KEY, else server/data/admin-key,
+ * created on first start (deploy.sh leaves data/ alone; `deploy.sh admin`
+ * prints the admin link).
+ */
+function loadAdminKey(file, log) {
+  if (process.env.ADMIN_KEY) return process.env.ADMIN_KEY;
+  try { return readFileSync(file, 'utf8').trim(); } catch { /* first start */ }
+  const key = randomBytes(18).toString('base64url');
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${key}\n`, { mode: 0o600 });
+    log(`admin key created in ${file}`);
+  } catch (e) {
+    log(`could not save the admin key (${e.message}) — booking approval is off`);
+    return null;
+  }
+  return key;
+}
 const LEVELS = { video: ['points', 'video'], music: ['motion', 'beat', 'audio'] };
 
 export function startServer({
@@ -83,6 +110,8 @@ export function startServer({
   library = null,
   // DJ bookings (JSON file). SCHEDULE_FILE=0 keeps them in memory only.
   scheduleFile = process.env.SCHEDULE_FILE === '0' ? null : (process.env.SCHEDULE_FILE || join(HERE, 'data', 'schedule.json')),
+  // Approves DJ bookings; null = read or create server/data/admin-key.
+  adminKey = null,
   log = console.log,
 } = {}) {
   const wss = new WebSocketServer({ port });
@@ -90,6 +119,13 @@ export function startServer({
   const rooms = new Rooms();
   const matcher = new Matcher();
   const schedule = new Schedule(scheduleFile, { log });
+  const theAdminKey = adminKey ?? loadAdminKey(join(HERE, 'data', 'admin-key'), log);
+  const isAdminKey = (k) => {
+    if (!theAdminKey || typeof k !== 'string') return false;
+    const a = Buffer.from(k);
+    const b = Buffer.from(theAdminKey);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
   const lib = library === false ? null : (library ?? new Library({ log }).load());
   const now = () => performance.now();
 
@@ -134,10 +170,17 @@ export function startServer({
 
   // DJ schedule: everyone gets the list on connect and whenever it changes
   // (a booking, a cancellation, a set ending — checked on every scan).
+  // Approved sets go to everyone; each DJ also follows their own requests
+  // (any status), and signed-in admins get the queue waiting for approval.
   const scheduleMsg = () => ({ type: 'schedule', bookings: schedule.list() });
   const broadcastSchedule = () => {
     const msg = scheduleMsg();
-    for (const s of sessions.values()) send(s, msg);
+    let waiting = null;
+    for (const s of sessions.values()) {
+      send(s, msg);
+      if (s.myBookings) send(s, { type: 'mine', bookings: schedule.mine(s.myBookings) });
+      if (s.admin) send(s, (waiting ??= { type: 'waiting', bookings: schedule.waiting() }));
+    }
   };
 
   // Dance floor: what a spectator screen shows — every dancer (with room
@@ -269,6 +312,8 @@ export function startServer({
       ai: [],              // AiDancer[]
       rec: recordDir ? new SessionRecorder(recordDir, { id }) : null,
       booked: 0,           // bookings made on this connection (rate limit)
+      myBookings: null,    // { id: token } — this DJ's requests, followed for status
+      admin: false, adminTries: 0,
     };
     sessions.set(id, s);
     send(s, { type: 'welcome', id });
@@ -309,12 +354,38 @@ export function startServer({
           const res = schedule.book(msg);
           if (res.error) return send(s, { type: 'error', for: 'book', error: res.error });
           s.booked++;
-          log(`♫ ${id} booked ${res.booking.dj} (${res.booking.room}) at ${new Date(res.booking.start).toISOString()} for ${res.booking.minutes} min`);
+          (s.myBookings ??= {})[res.booking.id] = res.token;
+          log(`♫ ${id} asked for ${res.booking.dj} (${res.booking.room}) at ${new Date(res.booking.start).toISOString()} for ${res.booking.minutes} min — waiting for approval`);
           send(s, { type: 'booked', booking: res.booking, token: res.token });
+          broadcastSchedule();
+        } else if (msg.type === 'mine') {
+          s.myBookings = msg.tokens && typeof msg.tokens === 'object' ? { ...msg.tokens } : null;
+          send(s, { type: 'mine', bookings: schedule.mine(s.myBookings) });
+        } else if (msg.type === 'admin') {
+          if (s.adminTries >= MAX_ADMIN_TRIES) return;
+          if (!isAdminKey(msg.key)) {
+            s.adminTries++;
+            log(`! ${id} wrong admin key`);
+            return send(s, { type: 'error', for: 'admin', error: 'That admin key isn’t right.' });
+          }
+          s.admin = true;
+          log(`♛ ${id} signed in as admin`);
+          send(s, { type: 'waiting', bookings: schedule.waiting() });
+        } else if (msg.type === 'approve' || msg.type === 'reject') {
+          if (!s.admin) return;
+          const bid = String(msg.id);
+          if (msg.type === 'approve') {
+            const res = schedule.approve(bid);
+            if (res.error) return send(s, { type: 'error', for: 'approve', error: res.error });
+            log(`♫ ${id} approved ${res.booking.dj} (${res.booking.room})`);
+          } else if (schedule.reject(bid)) {
+            log(`♫ ${id} rejected booking ${bid}`);
+          }
           broadcastSchedule();
         } else if (msg.type === 'cancel') {
           if (!schedule.cancel(String(msg.id), String(msg.token))) return send(s, { type: 'error', for: 'cancel', error: 'That booking is already gone.' });
           log(`♫ ${id} cancelled booking ${msg.id}`);
+          if (s.myBookings) delete s.myBookings[msg.id];
           send(s, { type: 'cancelled', id: msg.id });
           broadcastSchedule();
         } else if (msg.type === 'guests') {
