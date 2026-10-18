@@ -12,7 +12,7 @@ import { randomRoomName } from './net/roomNames.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
-import { SessionShare, MUSIC_LEVELS } from './share/sessionShare.js';
+import { SessionShare } from './share/sessionShare.js';
 import { joinable, phase, whenText, FINE_PRINT } from './net/schedule.js';
 import { RoomMusic, canShareScreenAudio } from './net/roomMusic.js';
 
@@ -66,9 +66,10 @@ if (serverLink) {
 const clickBpm = Number(urlParams.get('click')) || 0;
 const metronome = clickBpm > 0 ? new Metronome(clickBpm) : null;
 
-// Where the tempo comes from: movement, or the mic's beat (see share/sessionShare.js).
+// Tempo comes from movement; ?beat=1 adds the mic's beat (testing; see share/sessionShare.js).
 const share = new SessionShare(serverLink, {
-  onStatus: (m) => { $('share-status').textContent = m; renderChips(); },
+  music: urlParams.has('beat') ? 'beat' : 'motion',
+  onStatus: (m) => console.info(`[tempo] ${m}`),
 });
 
 if (serverLink) {
@@ -823,32 +824,6 @@ function renderGuestSlider() {
   $('val-guests').textContent = label + next;
 }
 
-// ---- Tempo source (nothing here is kept; sharing for AI dancers is "coming soon") ----
-const LEVEL_LABELS = {
-  music: { motion: 'my moves', beat: 'the beat (mic)' },
-};
-function buildChips() {
-  for (const [dial, levels] of [['music', MUSIC_LEVELS]]) {
-    const box = $(`chips-${dial}`);
-    box.replaceChildren();
-    for (const lv of levels) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.dataset.level = lv;
-      b.textContent = LEVEL_LABELS[dial][lv];
-      b.addEventListener('click', () => { share.configure({ [dial]: lv }); renderChips(); });
-      box.append(b);
-    }
-  }
-  renderChips();
-}
-function renderChips() {
-  for (const dial of ['music']) {
-    for (const b of $(`chips-${dial}`).querySelectorAll('.chip')) b.classList.toggle('on', b.dataset.level === share.level[dial]);
-  }
-}
-
 // The pose engine and model download while the start screen is up (and
 // come from the phone's own storage after the first visit).
 PoseDetector.prefetch();
@@ -884,7 +859,6 @@ renderJoinPicker();
 renderUpcoming();
 setInterval(() => { renderUpcoming(); renderJoinPicker(); }, 30_000);
 renderRoomButton();
-buildChips();
 for (const el of document.querySelectorAll('[data-fine-print]')) el.textContent = FINE_PRINT;
 if (!serverLink) {
   $('upcoming').classList.add('hidden');

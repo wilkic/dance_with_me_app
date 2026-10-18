@@ -11,26 +11,27 @@
  * comes back as an explicit opt-in. The video level stays 'points' (the
  * PoseFrames already streamed for rooms and guests).
  *
+ * Everyone uses motion; ?beat=1 switches the mic on (testing only — not
+ * in the menu).
+ *
  * Goes over the existing server link as JSON control messages ('level',
  * 'music'); see server/index.js.
  */
 export const VIDEO_LEVELS = ['points'];
 export const MUSIC_LEVELS = ['motion', 'beat'];
-const STORE_KEY = 'dwm.share';
 const ENVELOPE_HZ = 30;
 
 export class SessionShare {
   /**
    * @param link       WebSocketTransport (sendJSON) — null when offline
+   * @param music      'motion' or 'beat'
    */
-  constructor(link, { onStatus = () => {} } = {}) {
+  constructor(link, { music = 'motion', onStatus = () => {} } = {}) {
     this.link = link;
     this.onStatus = onStatus;
-    this.level = { video: 'points', music: 'motion' };
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-      if (saved && VIDEO_LEVELS.includes(saved.video) && MUSIC_LEVELS.includes(saved.music)) this.level = saved;
-    } catch { /* storage unavailable */ }
+    this.level = { video: 'points', music: MUSIC_LEVELS.includes(music) ? music : 'motion' };
+    // The old menu dials were remembered here; they're gone.
+    try { localStorage.removeItem('dwm.share'); } catch { /* storage unavailable */ }
     this.active = false;
     this.mic = null;        // { stream, ctx, analyser, timer, prev, batch, t0 }
     this.dims = null;
@@ -40,7 +41,6 @@ export class SessionShare {
   configure(level) {
     if (level.video && VIDEO_LEVELS.includes(level.video)) this.level.video = level.video;
     if (level.music && MUSIC_LEVELS.includes(level.music)) this.level.music = level.music;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(this.level)); } catch { /* ignore */ }
     this.announce();
     if (this.active) this.#apply();
   }
