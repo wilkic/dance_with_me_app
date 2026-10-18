@@ -77,6 +77,8 @@ else
   echo "(no QR generator found — install one with:  sudo apt install qrencode)"
 fi
 echo
+echo "  Serving: branch $(git branch --show-current) @ $(git rev-parse --short HEAD) — $(git log -1 --format=%s | cut -c1-60)"
+echo
 echo "  Phones on this wifi:  $URL"
 echo "  Accept the certificate warning once per phone, then Dance in room."
 echo
