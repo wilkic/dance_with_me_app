@@ -61,6 +61,7 @@ export class WebSocketTransport {
     this.onOpen = null;   // fires on every (re)connect — resend session state here
     this.onStatus = null; // 'connecting' | 'open' | 'closed'
     this.room = null;     // room to (re)join on connect
+    this.joinExtra = {};  // sent with every join: { hostKey, bookingToken }
     this.ws = null;
     this.closed = false;
     this.#connect();
@@ -76,7 +77,7 @@ export class WebSocketTransport {
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       this.onStatus?.('open');
-      if (this.room) this.sendJSON({ type: 'join', room: this.room });
+      if (this.room) this.sendJSON({ type: 'join', room: this.room, ...this.joinExtra });
       this.onOpen?.();
     };
     ws.onmessage = (ev) => {
@@ -105,10 +106,14 @@ export class WebSocketTransport {
     if (this.connected) this.ws.send(JSON.stringify(obj));
   }
 
-  /** Enter a dance room (created if it doesn't exist). Sticky across reconnects. */
-  join(room) {
+  /**
+   * Enter a dance room (created if it doesn't exist). Sticky across
+   * reconnects. extra: { hostKey, bookingToken } — who may host it.
+   */
+  join(room, extra = {}) {
     this.room = room;
-    this.sendJSON({ type: 'join', room });
+    this.joinExtra = extra;
+    this.sendJSON({ type: 'join', room, ...extra });
   }
 
   /** Back to solo dancing. */

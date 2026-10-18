@@ -65,6 +65,7 @@
         <span id="hud-bpm">-- bpm</span>
         <span id="hud-guests" class="hidden"></span>
         <span id="hud-match"></span>
+        <span id="hud-music" class="hidden"></span>
         <span id="hud-status"></span>
       </div>
       <!-- "Share your room" until shared; then the room name (tap to leave). -->
@@ -107,6 +108,9 @@
         <button id="btn-exit" class="danger">Exit to start</button>
       </div>
       <div class="dance-bottom">
+        <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
+        <button id="btn-music" class="music-btn hidden">&#9835; Play music</button>
+        <button id="btn-hear" class="music-btn hidden">&#128264; Tap to hear the music</button>
         <div class="guest-slider">
           <label for="sl-guests">Guests</label>
           <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" />
@@ -119,6 +123,21 @@
       </div>
       </div>
     </section>
+
+    <div id="music-sheet" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="music-title">
+      <div class="modal-box music-box">
+        <p id="music-title">Play music to your room</p>
+        <div class="music-sources">
+          <button id="src-file" class="primary">A file on this device</button>
+          <button id="src-mic">Microphone</button>
+          <button id="src-screen" class="hidden">Tab or computer sound</button>
+        </div>
+        <input type="file" id="music-file" accept="audio/*" multiple hidden />
+        <p id="music-msg" class="hint"></p>
+        <p class="fine-print" data-fine-print></p>
+        <button id="music-cancel">Cancel</button>
+      </div>
+    </div>
 
     <div id="confirm" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-msg">
       <div class="modal-box">

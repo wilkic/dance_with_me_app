@@ -9,8 +9,10 @@
  *
  *   → { type: 'welcome', id }                     on connect
  *   → { type: 'rooms', rooms }                    lobby: open rooms to pick from
- *   → { type: 'joined', room, created }           after a join
- *   → { type: 'room', name, bpm, members }        who's in your room + tempo
+ *   → { type: 'joined', room, created, host }     after a join (host: you can play music)
+ *   → { type: 'room', name, bpm, members, host, music }   who's in your room + tempo;
+ *                                                 host = the host's id, music = { label } while playing
+ *   → { type: 'rtc', from, data }                 WebRTC signalling for room music (host ↔ member)
  *   → { type: 'profile', bpm, confidence, musicBpm, musicConfidence }
  *   → { type: 'guests', people, ai, library }     who is dancing in your space
  *   → { type: 'match', partner, bpm, song }       tempo-compatible pairing
@@ -22,9 +24,11 @@
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
  *   → { type: 'unmatch' }                         pairing dissolved
  *
- *   ← { type: 'join', room }                      enter a room (creates it)
+ *   ← { type: 'join', room, hostKey, bookingToken }   enter a room (creates it; see Rooms)
  *   ← { type: 'leave' }                           back to solo
  *   ← { type: 'guests', people, ai, aspect, variation }   guests wanted in my space
+ *   ← { type: 'room-music', on, label }           host: music to the room started/stopped
+ *   ← { type: 'rtc', to, data }                   WebRTC signalling, relayed host ↔ member only
  *   ← { type: 'level', video, music, w, h }       what this session shares (see recorder.js)
  *   ← { type: 'music', t0, hz, e }                mic onset envelope (music level beat/audio)
  *   ← { type: 'media', kind, mime, data }         MediaRecorder chunk, base64 (level audio/video)
@@ -77,6 +81,7 @@ const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often
 const MAX_BOOKINGS_PER_SESSION = 10;
 const MAX_ADMIN_TRIES = 5;
+const MAX_RTC_BYTES = 16_000; // one SDP or ICE candidate
 
 /**
  * The key that approves DJ bookings: ADMIN_KEY, else server/data/admin-key,
@@ -148,6 +153,22 @@ export function startServer({
     return d.bpm > 0 && d.confidence >= 0.3 ? d.bpm : 0;
   };
   const dancing = (s) => !s.watching && now() - s.lastFrameAt < ACTIVE_MS;
+
+  // Room host: the one member who can play music to the room. During a
+  // booked set it is the DJ (whoever holds the booking's token); otherwise
+  // the room's creator (see Rooms.createdBy).
+  const isHost = (s, name = s.room) => {
+    if (!name || s.room !== name) return false;
+    const dj = schedule.djToken(name);
+    return dj ? s.bookingToken === dj : rooms.createdBy(s, name);
+  };
+  const hostOf = (name) => rooms.members(name).find((m) => isHost(m, name)) ?? null;
+  const roomMusic = new Map(); // room name -> { label } while its host plays music
+  const musicOf = (name) => {
+    const m = roomMusic.get(name);
+    if (m && !hostOf(name)) roomMusic.delete(name); // host left: the music stopped with them
+    return roomMusic.get(name) ?? null;
+  };
   const roomMates = (a, b) => !!a.room && a.room === b.room;
 
   // Lobby: every open room with how many are dancing and its tempo, so the
@@ -210,12 +231,16 @@ export function startServer({
     if (!members.length) return;
     const profiles = members.map(profileOf);
     const bpm = roomTempo(profiles);
+    const host = hostOf(name);
+    const music = musicOf(name);
     for (const s of members) {
       send(s, {
         type: 'room',
         name,
         bpm,
-        members: profiles.map((p) => ({ ...p, you: p.id === s.id })),
+        host: host?.id ?? null,
+        music,
+        members: profiles.map((p) => ({ ...p, you: p.id === s.id, host: p.id === host?.id })),
       });
     }
   };
@@ -331,16 +356,33 @@ export function startServer({
           if (msg.clickBpm > 0) s.rec?.label({ clickBpm: msg.clickBpm });
         } else if (msg.type === 'join') {
           const before = s.room;
+          const str = (v) => (typeof v === 'string' && v ? v.slice(0, 64) : null);
+          s.hostKey = str(msg.hostKey);
+          s.bookingToken = str(msg.bookingToken);
           const res = rooms.join(s, msg.room);
           if (!res) return send(s, { type: 'error', error: 'bad room name' });
-          send(s, { type: 'joined', room: res.name, created: res.created });
+          send(s, { type: 'joined', room: res.name, created: res.created, host: isHost(s) });
           log(`> ${id} ${res.created ? 'opened' : 'joined'} room ${res.name} (${rooms.members(res.name).length} dancing)`);
           s.rec?.label({ room: res.name });
           if (before && before !== res.name) broadcastRoom(before);
           broadcastRoom(res.name);
           if (res.created || before !== res.name) broadcastLobby();
+        } else if (msg.type === 'room-music') {
+          if (!isHost(s)) return;
+          if (msg.on) roomMusic.set(s.room, { label: String(msg.label ?? '').slice(0, 80) });
+          else roomMusic.delete(s.room);
+          log(`♪ ${id} ${msg.on ? `plays music to room ${s.room}` : `stopped the music in room ${s.room}`}`);
+          broadcastRoom(s.room);
+        } else if (msg.type === 'rtc') {
+          // Signalling for room music: only between a room's host and its members.
+          const to = sessions.get(String(msg.to));
+          if (!to || !s.room || to.room !== s.room || !(isHost(s) || isHost(to))) return;
+          if (JSON.stringify(msg.data ?? null).length > MAX_RTC_BYTES) return;
+          send(to, { type: 'rtc', from: id, data: msg.data });
         } else if (msg.type === 'leave') {
+          const wasHost = isHost(s);
           const left = rooms.leave(s);
+          if (left && wasHost) roomMusic.delete(left);
           if (left) { log(`< ${id} left room ${left}`); broadcastRoom(left); broadcastLobby(); }
           if (s.matchKey) { s.matchKey = null; send(s, { type: 'unmatch' }); }
         } else if (msg.type === 'watch') {
@@ -436,6 +478,7 @@ export function startServer({
       }
     });
     ws.on('close', () => {
+      if (isHost(s)) roomMusic.delete(s.room);
       const left = rooms.leave(s);
       sessions.delete(id);
       for (const p of s.people) p.hosts.delete(s);
