@@ -417,9 +417,12 @@ let cameraMs = 0;
 detector.onTimings = (t) => {
   const s = (ms) => `${(ms / 1000).toFixed(1)} s`;
   const lines = [`camera      ${s(cameraMs)}`];
-  if (t.wasm) lines.push(`engine      ${s(t.wasm.ms)} (${t.wasm.mb.toFixed(1)} MB)`);
-  if (t.model) lines.push(`model       ${s(t.model.ms)} (${t.model.mb.toFixed(1)} MB)`);
-  if (t.download !== undefined) lines.push(`download    ${s(t.download)} total`);
+  // Each file: its own fetch time (it starts on page load) and where from;
+  // "waited" is how long tapping Start actually waited for the two.
+  const file = (f) => `${s(f.ms)} (${f.mb.toFixed(1)} MB${f.cached ? ', saved' : ''})`;
+  if (t.wasm) lines.push(`engine      ${file(t.wasm)}`);
+  if (t.model) lines.push(`model       ${file(t.model)}`);
+  if (t.download !== undefined) lines.push(`waited      ${s(t.download)}`);
   lines.push(`start ${t.delegate}   ${s(t.start)}`);
   lines.push(`1st frame   ${s(t.firstDetect)}`);
   lines.push(`gpu: ${gpuName()}`);
@@ -591,7 +594,7 @@ async function startCamera() {
   try {
     // Loaded once per page: coming back from the start screen reuses it.
     if (!detector.landmarker) {
-      await detector.init({ delegate: urlParams.has('cpu') ? 'CPU' : 'GPU', timed: perfHud });
+      await detector.init({ delegate: urlParams.has('cpu') ? 'CPU' : 'GPU' });
       detector.warmUp(video);
     }
   } catch (err) {
@@ -844,6 +847,10 @@ function renderChips() {
   // Sharing the actual sound: remind about whose music it is.
   $('audio-fine-print').classList.toggle('hidden', share.level.music !== 'audio');
 }
+
+// The pose engine and model download while the start screen is up (and
+// come from the phone's own storage after the first visit).
+PoseDetector.prefetch();
 
 // ---- Wire up UI ----
 $('btn-start-room').addEventListener('click', () => enter(null));
