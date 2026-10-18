@@ -196,7 +196,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 </header>
 
 <nav><div class="in">
-  <a href="#what">What it does</a><a href="#arch">Architecture</a><a href="#guests">Guests</a><a href="#tempo">Tempo</a><a href="#library">Library</a><a href="#sharing">Sharing</a><a href="#protocol">Protocol</a><a href="#code">Code map</a><a href="#lab">Lab</a><a href="#run">Run it</a><a href="#status">Status</a>
+  <a href="#what">What it does</a><a href="#arch">Architecture</a><a href="#guests">Guests</a><a href="#tempo">Tempo</a><a href="#library">Library</a><a href="#sharing">Privacy</a><a href="#protocol">Protocol</a><a href="#code">Code map</a><a href="#lab">Lab</a><a href="#run">Run it</a><a href="#status">Status</a>
 </div></nav>
 
 <section id="what">
@@ -205,7 +205,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <div class="steps">
     <div class="step"><h3>1. Pick room</h3><p>"Start a room" opens your own space. "Join a room" is the phone's own picker (a spinning wheel on iOS) listing open rooms, or a grey "None". Below the buttons is a "DJs: book a room →" link, then a dividing line, then <b>Upcoming rooms</b>: DJ sets booked at <code>/schedule</code>. The start screen says nothing about the server while it's online; it only shows a line when the server can't be reached.</p></div>
     <div class="step"><h3>2. Capture the room</h3><p>Prop the phone up facing your dance space, step out of frame, tap the button. After a 3-second countdown the app averages several frames into a clean plate.</p></div>
-    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. The slider at the bottom sets how many guests (0–3) dance behind you at 90% opacity. Tapping anywhere else on the screen (or ☰) opens the menu, which changes time between guests, opacity, AI variation and sharing on the fly.</p></div>
+    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. The slider at the bottom sets how many guests (0–3) dance behind you at 90% opacity. Tapping anywhere else on the screen (or ☰) opens the menu, which changes time between guests, opacity, AI variation and where the tempo comes from on the fly.</p></div>
   </div>
   <p class="note">Everything the app sends is the skeleton: 33 joints per frame. Camera video and microphone audio leave the phone only if the dancer turns those dials up.</p>
 </section>
@@ -243,7 +243,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <rect class="box" x="580" y="248" width="340" height="46" rx="8"/><text class="t" x="596" y="268">Matcher + songs</text><text class="s" x="596" y="285">tempo-first pairing · half/double time · 6% tolerance</text>
       <rect class="box ai" x="580" y="312" width="340" height="46" rx="8"/><text class="t" x="596" y="332">Guests</text><text class="s" x="596" y="349">real people by tempo · AI dancers from the library</text>
       <rect class="box" x="580" y="376" width="340" height="46" rx="8"/><text class="t" x="596" y="396">Library</text><text class="s" x="596" y="413">81 clips + new sessions · tempo, style, tag</text>
-      <rect class="box" x="580" y="440" width="340" height="46" rx="8"/><text class="t" x="596" y="460">Recorder</text><text class="s" x="596" y="477">every session → library/sessions/ (300+ frames kept)</text>
+      <rect class="box" x="580" y="440" width="340" height="46" rx="8"/><text class="t" x="596" y="460">Recorder</text><text class="s" x="596" y="477">off unless RECORD_DIR is set (lab only)</text>
     </g>
     <g class="ln">
       <path d="M750 230V246" marker-end="url(#ah)"/><path d="M750 376V360" marker-end="url(#ah)"/><path d="M750 440V424" marker-end="url(#ah)"/>
@@ -308,7 +308,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <p>DJs book a room ahead at <code>dance.wilkinscoffee.be/schedule</code> with a DJ name, a date and start time in their own time zone, a length (30 min to 4 h), and optional set info, a bio and a link. The room is the DJ name run through the usual room-name rules, so "DJ Funk" plays in <code>dj-funk</code>. <b>Every request waits for approval</b> before it shows anywhere public. There are no accounts. Each request comes back with a secret token that stays in that browser, so "Your bookings" shows it as <i>Waiting for approval</i>, <i>Approved</i> or <i>Not approved</i> and offers Cancel. Requests waiting for approval don't hold the room, so a prank request can't block a real DJ. Clashes with approved sets (same room, overlapping times) are checked when a DJ asks and again when you approve. Two different rooms can overlap.</p>
   <p><b>Approving:</b> run <code>server/deploy/deploy.sh admin</code> to print the private link <code>…/schedule/#admin=KEY</code>. Opening it once stores the key in that browser and removes it from the address. Because the key sits after the <code>#</code>, GitHub Pages never sees it, and it only goes over the WebSocket to the dance server. The page then shows a <b>Waiting for approval</b> box with the full details of each request and Approve and Reject buttons, which update live. The server makes the key on first start and saves it in <code>server/data/admin-key</code>, or reads it from <code>ADMIN_KEY</code>. A connection gets 5 wrong tries and is then ignored.</p>
   <p>Bookings live on the dance server in <code>server/data/schedule.json</code>. The deploy script leaves <code>server/data/</code> alone, and ended sets are dropped on the next scan. Every phone gets the approved list on connect and whenever it changes. On the start screen, tapping a set shows its info, bio and link. From 10 minutes before the start until the end, the set has a Join button and appears in "Join a room" as <code>dj-funk · DJ set</code>, even before anyone is in it. Limits: 500 approved sets, 100 requests waiting, 10 requests per connection, at most 90 days ahead.</p>
-  <p>Fine print appears at the bottom of the start screen, on <code>/schedule</code>, in the ☰ menu while Music is set to <b>record audio</b>, and in the room-music picker: "Please don't share music you don't own. wilkinscoffee is not liable for your public broadcasting of unlicensed copyrighted material. We're here to dance to music, not steal it."</p>
+  <p>Fine print appears at the bottom of the start screen, on <code>/schedule</code>, and in the room-music picker: "Please don't share music you don't own. wilkinscoffee is not liable for your public broadcasting of unlicensed copyrighted material. We're here to dance to music, not steal it. To report a room, email Chris@wilkinscoffee.be."</p>
   <h3>Room music (issue #4)</h3>
   <p>The room's <b>host</b> plays music to everyone else in the room. That's the only difference between sharing a room and joining one. The host is whoever tapped "Share your room". The server recognises them by a key their browser tab made (<code>hostKey</code>), so they get the role back after a reconnect or reload. During a booked set the host is the DJ instead: the browser that holds the booking's token, which <code>/schedule</code> saved. The host sees <b>♫ Play music</b> above the Guests slider, which opens a picker:</p>
   <ul>
@@ -317,7 +317,6 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><b>Tab or computer sound:</b> shown only on desktop browsers. Chrome or Edge can share a tab's sound ("Also share tab audio"), and on Windows or ChromeOS the whole system's sound. Phone browsers can't capture other apps' sound at all; only a native app could.</li>
   </ul>
   <p>The sound goes straight from the host to each member over <b>WebRTC</b>, with Opus tuned for music: stereo, 128 kb/s, silence suppression off. The dance server only relays the signalling (<code>rtc</code> messages), and only between a room's host and its members. The host makes one connection per member and retries a failed one up to 3 times. Members see "♫ &lt;what's playing&gt;" in the HUD, plus "Tap to hear the music" if the browser blocks autoplay. Connections are found through Google's public STUN server only, with no TURN relay. Phones on the same wifi or ordinary home networks connect, but some mobile-data networks (carrier-grade NAT) may not. A TURN server on the VM (coturn) would fix that if it turns out to matter.</p>
-  <p>The ☰ menu's Music <b>record audio</b> option (it used to say "audio") is something else: it records the mic for the dance library and never plays to other phones.</p>
   <h3>How an AI dancer is made</h3>
   <p>No choreography is generated. An AI dancer is a real person's recorded dance, retimed to your beat, with moves borrowed from another dancer of similar tempo and style.</p>
   <ol class="flow">
@@ -365,7 +364,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <tbody>
       <tr><td><code>recordings_web/</code></td><td>Clips harvested from web videos across 30 dance genres. Keypoints only, the video is deleted after pose extraction. Each is tagged with URL, title and genre.</td></tr>
       <tr><td><code>recordings/</code></td><td>Metronome sessions from the lab, labelled with a known BPM.</td></tr>
-      <tr><td><code>library/sessions/</code></td><td>Every session danced through the server from now on. Sessions under 300 frames are dropped.</td></tr>
+      <tr><td><code>library/sessions/</code></td><td>Sessions recorded with <code>RECORD_DIR</code> set (your own lab sessions; off on the public server, see <a href="#sharing">privacy</a>). Sessions under 300 frames are dropped.</td></tr>
     </tbody>
   </table></div>
   <p>A clip's <b>descriptor</b> holds its tempo, a six-number style vector, pose coverage and the source's aspect ratio. Tempo prefers the metronome label, then the music tempo, then the motion tempo. The style vector says how far arms, legs, hips and head travel and how fast arms and legs move, all in torso lengths. That is enough to tell a hip-led groove from arm-led popping without any music.</p>
@@ -383,16 +382,16 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 </section>
 
 <section id="sharing">
-  <h2>What the phone shares</h2>
-  <p>Every session is library material, but how much of it beyond the skeleton is the dancer's call. Two dials in the ☰ menu, remembered on the device. Only a tempo number leaves the phone at the lowest music level.</p>
-  <div class="tbl"><table>
-    <thead><tr><th>Dial</th><th>Minimal</th><th>Middle</th><th>Full</th></tr></thead>
-    <tbody>
-      <tr><td>Video</td><td><b>points</b><br><span class="sub">the PoseFrames only</span></td><td>—</td><td><b>video</b><br><span class="sub">the camera feed, in chunks</span></td></tr>
-      <tr><td>Music</td><td><b>motion</b><br><span class="sub">no microphone at all</span></td><td><b>beat</b><br><span class="sub">mic on, only a 30 Hz onset envelope leaves the phone, never the sound</span></td><td><b>record audio</b><br><span class="sub">the mic recording, for the library only; music to the room is <a href="#guests">room music</a></span></td></tr>
-    </tbody>
-  </table></div>
-  <p>At <b>beat</b> the server hears the tempo (<code>♫ 120</code> in the HUD) and uses it for AI dancers and matching. Full media lands beside the session file as <code>.audio.webm</code> or <code>.video.webm</code> for later use. The idea behind the dials: dance should work even in a world with no sound, and music makes style matching sharper.</p>
+  <h2>What the phone shares (privacy)</h2>
+  <p>Nothing a dancer does is kept. The public promise is the page at <code>/privacy/</code> (<code>privacy/index.html</code>, linked from the start-screen footer); keep it true whenever data handling changes. Since 18 Oct 2026 (issues #5–#9):</p>
+  <ul>
+    <li><b>No server-side recording by default.</b> The server keeps a session (frames, tempo, mic beat) in <code>library/sessions/</code> only when <code>RECORD_DIR</code> is set. That is for your own lab sessions; the VM leaves it unset. Uploading camera video or mic audio is gone from the app.</li>
+    <li><b>☰ menu:</b> one dial, <b>Tempo from</b>: <b>my moves</b> (no microphone) or <b>the beat (mic)</b> (only a 30 Hz onset envelope leaves the phone, used live, never the sound). Below it, "Share for the AI dancers" is marked <b>coming soon</b>. Training AI dancers on people's dances comes back later as an explicit opt-in, and the privacy page has to change first.</li>
+    <li><b>Logs:</b> the dance server logs random session ids, never IPs. Caddy has no access log. <code>deploy.sh</code> caps the VM's journal at 3 days and stops copying it into <code>/var/log/syslog</code>.</li>
+    <li><b>DJ bookings</b> are deleted when the set ends (<code>Schedule.prune</code>). Rejected and still-pending requests are deleted once their time has passed.</li>
+    <li><b>Third parties</b> named on the page: GitHub Pages (website), Oracle Cloud Frankfurt (dance server), Google STUN (room music). Room music is peer-to-peer, so the phones in it see each other's IP.</li>
+    <li><b>Reports:</b> the music fine print ends "To report a room, email Chris@wilkinscoffee.be."</li>
+  </ul>
 </section>
 
 <section id="protocol">
@@ -455,7 +454,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>src/room/roomModel.js</code></td><td>Clean-plate room capture, metadata, room for future 3D</td><td class="num">96</td></tr>
       <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, WebSocket and composite transports</td><td class="num">147</td></tr>
       <tr><td><code>src/net/roomMusic.js</code></td><td>Room music: file, mic or tab sound from the host to each member over WebRTC</td><td class="num">280</td></tr>
-      <tr><td><code>src/share/sessionShare.js</code></td><td>The sharing dials: mic envelope, media chunks</td><td class="num">179</td></tr>
+      <tr><td><code>src/share/sessionShare.js</code></td><td>Tempo source: mic onset envelope (nothing recorded)</td><td class="num">179</td></tr>
       <tr><td><code>src/net/*.js</code></td><td>Envelope format, room names, server URL rules</td><td class="num">82</td></tr>
       <tr><td><code>src/floor.js</code>, <code>floor.html</code></td><td>The big-screen spectator page</td><td class="num">237</td></tr>
       <tr><td><code>src/schedule.js</code>, <code>schedule/index.html</code></td><td>The DJ booking page at <code>/schedule</code>, and its admin approval queue</td><td class="num">308</td></tr>
@@ -522,7 +521,8 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Slow pose-model loading on some phones (issue #1)</td><td><span class="pill p-ok">fixed</span></td><td class="sub">Chris's phone (Mali-G715) on <code>dance-lan.sh</code>, 18 Oct 2026: download 17 s, GPU start 0.7 s, first frame 0.7 s. The time was all download: the dev server sends the 17 MB uncompressed, and Chrome won't cache a self-signed site. The live site sends 8.3 MB gzipped. Fix on branch <code>pose-load-cache</code>: the engine and model download as soon as the start page opens, and are kept in Cache Storage (<code>dwm-pose-v1:…</code>, bump it when either changes). With the network throttled to 1 MB/s, the wait after Start went from 16.4 s to 0 s, both after 20 s on the start page and on any later visit. <code>?perf=1</code> shows "waited" and marks files "saved".</td></tr>
       <tr><td>Max 3 guests, AI or real only, 15 s phase-in, no guest glow</td><td><span class="pill p-ok">verified</span></td><td class="sub">16 Oct 2026, in Chrome with a stubbed camera: with 3 seats the server was asked for 1, 2, then 3 guests, and three plain AI figures danced. Server caps guests at 3.</td></tr>
       <tr><td>DJ schedule with approval, Upcoming rooms, fine print (issue #2)</td><td><span class="pill p-ok">verified</span></td><td class="sub">18 Oct 2026, on branch <code>dj-schedule</code>: 6 schedule tests pass, including request → admin approve → public over a real socket. In headless Chrome at phone size: requests stayed private until approved, a wrong admin key was refused, approve and reject updated the DJ's statuses live, the approved set reached Upcoming and "Join a room", Join opened <code>dj-funk</code>, and the audio fine print toggled. Not yet phone-tested.</td></tr>
-      <tr><td>Mic beat and audio, video sharing</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen.</td></tr>
+      <tr><td>Mic beat</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen. Video and audio uploads were removed on 18 Oct 2026 (privacy).</td></tr>
+      <tr><td>Privacy page, nothing stored (issues #5–#9)</td><td><span class="pill p-ok">built</span></td><td class="sub">18 Oct 2026, branch <code>privacy</code>: <code>/privacy/</code> page plus footer link, recording off by default, "Share for the AI dancers" marked coming soon, report email in the fine print, 3-day journal cap in <code>deploy.sh</code>. 48 server tests pass. The VM's existing <code>library/sessions/</code> still holds sessions from before; Chris decides whether to delete them.</td></tr>
       <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>
       <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>
       <tr><td>Branch</td><td><span class="pill p-ok">released</span></td><td class="sub"><code>dance-rooms</code> merged into <code>main</code> (lab included) and published to <code>release</code> on 15 Oct 2026.</td></tr>

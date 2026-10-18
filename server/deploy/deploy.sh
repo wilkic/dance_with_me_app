@@ -2,7 +2,7 @@
 # Push the dance server to the Oracle VM and (re)start it.
 #   server/deploy/deploy.sh setup   # first time: install Node, Caddy, firewall, systemd
 #   server/deploy/deploy.sh         # code (the `release` branch) + dance library, restart
-#   server/deploy/deploy.sh pull    # fetch sessions recorded on the VM
+#   server/deploy/deploy.sh pull    # fetch sessions recorded on the VM (only if RECORD_DIR is set there)
 #   server/deploy/deploy.sh logs    # follow the server log
 #   server/deploy/deploy.sh admin   # print the link that approves DJ bookings (secret!)
 # Settings (env or server/deploy/.env): DANCE_HOST (ssh target, e.g.
@@ -14,6 +14,13 @@ ROOT=$(cd "$HERE/../.." && pwd)
 : "${DANCE_HOST:?set DANCE_HOST, e.g. ubuntu@1.2.3.4 (or put it in server/deploy/.env)}"
 DANCE_DOMAIN=${DANCE_DOMAIN:-ws.wilkinscoffee.be}
 APP=/opt/dance
+# /privacy/ says server logs are wiped after 3 days. The dance server never
+# logs IPs and Caddy has no access log; this caps anything else: the journal
+# keeps 3 days and no longer copies into /var/log/syslog (kept for weeks).
+JOURNAL_CAP='D=/etc/systemd/journald.conf.d; sudo mkdir -p $D
+printf "[Journal]\nMaxRetentionSec=3day\nForwardToSyslog=no\n" | sudo tee $D/privacy.conf.new >/dev/null
+if cmp -s $D/privacy.conf.new $D/privacy.conf; then sudo rm $D/privacy.conf.new
+else sudo mv $D/privacy.conf.new $D/privacy.conf && sudo systemctl restart systemd-journald && sudo journalctl --vacuum-time=3d -q; fi'
 
 case "${1:-deploy}" in
   setup)
@@ -37,6 +44,8 @@ case "${1:-deploy}" in
     for d in recordings recordings_web library; do
       [ -d "$ROOT/server/$d" ] && rsync -az --exclude index.json "$ROOT/server/$d" "$DANCE_HOST:$APP/server/"
     done
+    echo "== logs: keep system logs at most 3 days (privacy page promise)"
+    ssh "$DANCE_HOST" "$JOURNAL_CAP"
     echo "== install + restart"
     ssh "$DANCE_HOST" "cd $APP/server && npm ci --omit=dev --no-audit --no-fund && sudo systemctl restart dance && sleep 2 && systemctl is-active dance"
     echo "== check: https://$DANCE_DOMAIN/"

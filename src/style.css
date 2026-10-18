@@ -420,6 +420,17 @@ button.danger {
   color: #667;
 }
 .menu .fine-print { font-size: 0.7rem; color: #a99; }
+.legal { font-size: 0.75rem; }
+.legal a { color: #889; }
+.menu-title .soon {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #2a2a44;
+  color: #aab;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+}
 
 /* ---- Room music (host: play/stop; others: tap to hear) ---- */
 .music-btn {

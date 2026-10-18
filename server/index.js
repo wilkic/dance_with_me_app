@@ -4,8 +4,9 @@
  * Ingests raw PoseFrames from clients over WebSocket (binary frames in the
  * exact serialize format the app already uses), runs a per-dancer
  * BeatDetector server-side, relays frames between the members of a dance
- * room, brings guests into a dancer's space, records every session into
- * the dance library, and periodically forms opinions:
+ * room, brings guests into a dancer's space (and, only when RECORD_DIR is
+ * set, records sessions into the dance library), and periodically forms
+ * opinions:
  *
  *   → { type: 'welcome', id }                     on connect
  *   → { type: 'rooms', rooms }                    lobby: open rooms to pick from
@@ -107,9 +108,10 @@ const LEVELS = { video: ['points', 'video'], music: ['motion', 'beat', 'audio'] 
 export function startServer({
   port = 8901,
   scanIntervalMs = 2000,
-  // Every session is library material: frames + tempo (+ what the dancer
-  // chose to share) go to library/sessions/. RECORD_DIR=0 turns it off.
-  recordDir = process.env.RECORD_DIR === '0' ? null : (process.env.RECORD_DIR || join(HERE, 'library', 'sessions')),
+  // Nothing a dancer does is kept by default (see /privacy/). RECORD_DIR=dir
+  // records sessions (frames + tempo + what they chose to share) as library
+  // material — for your own test sessions; the public server leaves it unset.
+  recordDir = process.env.RECORD_DIR && process.env.RECORD_DIR !== '0' ? process.env.RECORD_DIR : null,
   // The dance library behind AI dancers: a Library, null = load the
   // default one (recordings, recordings_web, library/sessions), false = none.
   library = null,

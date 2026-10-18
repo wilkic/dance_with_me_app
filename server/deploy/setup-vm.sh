@@ -60,6 +60,7 @@ sudo systemctl enable dance.service
 echo "== caddy (automatic TLS for $DANCE_DOMAIN)"
 sudo tee /etc/caddy/Caddyfile >/dev/null <<CADDY
 $DANCE_DOMAIN {
+	# No log directive on purpose: no access log, no IPs kept (see /privacy/).
 	reverse_proxy /ws* 127.0.0.1:8901
 	respond / "dance server" 200
 }

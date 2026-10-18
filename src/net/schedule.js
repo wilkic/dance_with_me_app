@@ -67,4 +67,4 @@ export function whenText(b, locale = undefined) {
 export const FINE_PRINT =
   'Please don’t share music you don’t own. wilkinscoffee is not liable for your ' +
   'public broadcasting of unlicensed copyrighted material. We’re here to dance to ' +
-  'music, not steal it.';
+  'music, not steal it. To report a room, email Chris@wilkinscoffee.be.';

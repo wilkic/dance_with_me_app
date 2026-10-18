@@ -12,7 +12,7 @@ import { randomRoomName } from './net/roomNames.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
-import { SessionShare, VIDEO_LEVELS, MUSIC_LEVELS } from './share/sessionShare.js';
+import { SessionShare, MUSIC_LEVELS } from './share/sessionShare.js';
 import { joinable, phase, whenText, FINE_PRINT } from './net/schedule.js';
 import { RoomMusic, canShareScreenAudio } from './net/roomMusic.js';
 
@@ -66,9 +66,8 @@ if (serverLink) {
 const clickBpm = Number(urlParams.get('click')) || 0;
 const metronome = clickBpm > 0 ? new Metronome(clickBpm) : null;
 
-// What this phone shares for the library (see share/sessionShare.js).
+// Where the tempo comes from: movement, or the mic's beat (see share/sessionShare.js).
 const share = new SessionShare(serverLink, {
-  videoTrack: () => camera.stream?.getVideoTracks()[0] ?? null,
   onStatus: (m) => { $('share-status').textContent = m; renderChips(); },
 });
 
@@ -819,13 +818,12 @@ function renderGuestSlider() {
   $('val-guests').textContent = label + next;
 }
 
-// ---- Sharing levels (what feeds the library) ----
+// ---- Tempo source (nothing here is kept; sharing for AI dancers is "coming soon") ----
 const LEVEL_LABELS = {
-  video: { points: 'points', video: 'video' },
-  music: { motion: 'motion', beat: 'beat (mic only)', audio: 'record audio' },
+  music: { motion: 'my moves', beat: 'the beat (mic)' },
 };
 function buildChips() {
-  for (const [dial, levels] of [['video', VIDEO_LEVELS], ['music', MUSIC_LEVELS]]) {
+  for (const [dial, levels] of [['music', MUSIC_LEVELS]]) {
     const box = $(`chips-${dial}`);
     box.replaceChildren();
     for (const lv of levels) {
@@ -841,11 +839,9 @@ function buildChips() {
   renderChips();
 }
 function renderChips() {
-  for (const dial of ['video', 'music']) {
+  for (const dial of ['music']) {
     for (const b of $(`chips-${dial}`).querySelectorAll('.chip')) b.classList.toggle('on', b.dataset.level === share.level[dial]);
   }
-  // Sharing the actual sound: remind about whose music it is.
-  $('audio-fine-print').classList.toggle('hidden', share.level.music !== 'audio');
 }
 
 // The pose engine and model download while the start screen is up (and
