@@ -22,6 +22,9 @@
  *   → { type: 'mine', bookings }                  your own requests, with status
  *   → { type: 'cancelled', id }                   your booking was cancelled
  *   → { type: 'waiting', bookings }               admin only: requests to approve
+ *   → { type: 'live-rooms', rooms }               admin only: open rooms, dancers, music
+ *   → { type: 'music-stopped' }                   host: an admin stopped your room's music
+ *   → { type: 'room-ended' }                      an admin closed your room (you're solo now)
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
  *   → { type: 'unmatch' }                         pairing dissolved
  *
@@ -40,6 +43,8 @@
  *   ← { type: 'mine', tokens }                    follow your own bookings ({ id: token })
  *   ← { type: 'admin', key }                      sign in to approve bookings
  *   ← { type: 'approve' | 'reject', id }          admin: decide on a request
+ *   ← { type: 'stop-music', room }                admin: stop a room's music, no more until it closes
+ *   ← { type: 'end-room', room }                  admin: send everyone in a room back to solo
  *
  * Guests. Two kinds can dance in someone's space. "Other people" are real
  * dancers online right now, assigned by the server (tempo-compatible
@@ -74,10 +79,12 @@ import { SessionRecorder } from './recorder.js';
 import { StyleWindow } from './style.js';
 import { EnvelopeTempo, tempoGap } from './tempo.js';
 import { Schedule } from './schedule.js';
+import { normalizeRoomName } from '../src/net/roomNames.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const MAX_GUESTS = 3;
 const ACTIVE_MS = 6000;         // "dancing" = a frame arrived this recently
+const ENDED_ROOM_MS = 60 * 60_000; // an ended room's name stays closed this long
 const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often
 const MAX_BOOKINGS_PER_SESSION = 10;
@@ -172,6 +179,12 @@ export function startServer({
     return roomMusic.get(name) ?? null;
   };
   const roomMates = (a, b) => !!a.room && a.room === b.room;
+  // Acting on reports (see /terms/): an admin can silence a room (no music
+  // until it closes) or end it (everyone back to solo; the name stays
+  // closed for ENDED_ROOM_MS so it can't simply be reopened).
+  const silenced = new Set();   // room names
+  const endedRooms = new Map(); // room name -> closed until (ms)
+  const roomClosed = (name) => (endedRooms.get(name) ?? 0) > Date.now();
 
   // Lobby: every open room with how many are dancing and its tempo, so the
   // start screen can list rooms to join. Sent to everyone on connect, on
@@ -189,6 +202,22 @@ export function startServer({
     const msg = lobby();
     for (const s of sessions.values()) send(s, msg);
     broadcastFloor();
+    broadcastLiveRooms();
+  };
+
+  // Admin: every open room with its dancers and music, to act on reports.
+  const liveRooms = () => ({
+    type: 'live-rooms',
+    rooms: rooms.names.map((name) => ({
+      name,
+      dancers: rooms.members(name).length,
+      music: musicOf(name)?.label ?? null,
+      silenced: silenced.has(name),
+    })),
+  });
+  const broadcastLiveRooms = () => {
+    let msg = null;
+    for (const s of sessions.values()) if (s.admin) send(s, (msg ??= liveRooms()));
   };
 
   // DJ schedule: everyone gets the list on connect and whenever it changes
@@ -361,6 +390,9 @@ export function startServer({
           const str = (v) => (typeof v === 'string' && v ? v.slice(0, 64) : null);
           s.hostKey = str(msg.hostKey);
           s.bookingToken = str(msg.bookingToken);
+          if (roomClosed(normalizeRoomName(msg.room))) {
+            return send(s, { type: 'error', for: 'join', error: 'That room was closed. Try another one.' });
+          }
           const res = rooms.join(s, msg.room);
           if (!res) return send(s, { type: 'error', error: 'bad room name' });
           send(s, { type: 'joined', room: res.name, created: res.created, host: isHost(s) });
@@ -371,14 +403,16 @@ export function startServer({
           if (res.created || before !== res.name) broadcastLobby();
         } else if (msg.type === 'room-music') {
           if (!isHost(s)) return;
+          if (msg.on && silenced.has(s.room)) return send(s, { type: 'music-stopped' });
           if (msg.on) roomMusic.set(s.room, { label: String(msg.label ?? '').slice(0, 80) });
           else roomMusic.delete(s.room);
           log(`♪ ${id} ${msg.on ? `plays music to room ${s.room}` : `stopped the music in room ${s.room}`}`);
           broadcastRoom(s.room);
+          broadcastLiveRooms();
         } else if (msg.type === 'rtc') {
           // Signalling for room music: only between a room's host and its members.
           const to = sessions.get(String(msg.to));
-          if (!to || !s.room || to.room !== s.room || !(isHost(s) || isHost(to))) return;
+          if (!to || !s.room || to.room !== s.room || !(isHost(s) || isHost(to)) || silenced.has(s.room)) return;
           if (JSON.stringify(msg.data ?? null).length > MAX_RTC_BYTES) return;
           send(to, { type: 'rtc', from: id, data: msg.data });
         } else if (msg.type === 'leave') {
@@ -415,6 +449,7 @@ export function startServer({
           s.admin = true;
           log(`♛ ${id} signed in as admin`);
           send(s, { type: 'waiting', bookings: schedule.waiting() });
+          send(s, liveRooms());
         } else if (msg.type === 'approve' || msg.type === 'reject') {
           if (!s.admin) return;
           const bid = String(msg.id);
@@ -426,6 +461,29 @@ export function startServer({
             log(`♫ ${id} rejected booking ${bid}`);
           }
           broadcastSchedule();
+        } else if (msg.type === 'stop-music' || msg.type === 'end-room') {
+          if (!s.admin) return;
+          const name = String(msg.room ?? '');
+          const members = rooms.members(name);
+          if (!members.length) return broadcastLiveRooms();
+          if (msg.type === 'stop-music') {
+            silenced.add(name);
+            roomMusic.delete(name);
+            const host = hostOf(name);
+            if (host) send(host, { type: 'music-stopped' });
+            log(`♛ ${id} stopped the music in room ${name}`);
+            broadcastRoom(name);
+          } else {
+            endedRooms.set(name, Date.now() + ENDED_ROOM_MS);
+            roomMusic.delete(name);
+            for (const m of members) {
+              rooms.leave(m);
+              send(m, { type: 'room-ended' });
+            }
+            silenced.delete(name);
+            log(`♛ ${id} ended room ${name} (${members.length} dancing)`);
+          }
+          broadcastLobby();
         } else if (msg.type === 'cancel') {
           if (!schedule.cancel(String(msg.id), String(msg.token))) return send(s, { type: 'error', for: 'cancel', error: 'That booking is already gone.' });
           log(`♫ ${id} cancelled booking ${msg.id}`);
@@ -524,6 +582,8 @@ export function startServer({
     }
     broadcastLobby();
     if (schedule.prune()) broadcastSchedule();
+    for (const name of silenced) if (!rooms.members(name).length) silenced.delete(name);
+    for (const [name, until] of endedRooms) if (until <= Date.now()) endedRooms.delete(name);
     assignPeople();
     for (const s of sessions.values()) {
       if (!s.wants.ai && !s.wants.people) continue;

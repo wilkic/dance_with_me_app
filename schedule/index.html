@@ -22,6 +22,9 @@
       <h2>Waiting for approval</h2>
       <p id="admin-msg" class="msg" role="status"></p>
       <ul id="waiting-list"></ul>
+      <h2 class="admin-sub">Live rooms</h2>
+      <p class="hint">Act on a report: stop a room's music (it stays off until the room closes), or end the room (everyone goes back to dancing alone; the name stays closed for an hour).</p>
+      <ul id="live-list"></ul>
       <button id="btn-admin-out" type="button" class="link">Sign out of admin</button>
     </section>
 
@@ -52,6 +55,7 @@
         <input id="f-link" type="text" inputmode="url" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="https://soundcloud.com/…" />
       </label>
       <p class="fine-print" data-fine-print></p>
+      <p class="fine-print">By asking for a room you agree to the <a href="../terms/">terms of use</a>.</p>
       <button id="btn-book" type="submit" class="primary" disabled>Request the room</button>
       <p id="form-msg" class="msg" role="status"></p>
     </form>

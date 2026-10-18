@@ -390,7 +390,8 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><b>Logs:</b> the dance server logs random session ids, never IPs. Caddy has no access log. <code>deploy.sh</code> caps the VM's journal at 3 days and stops copying it into <code>/var/log/syslog</code>.</li>
     <li><b>DJ bookings</b> are deleted when the set ends (<code>Schedule.prune</code>). Rejected and still-pending requests are deleted once their time has passed.</li>
     <li><b>Third parties</b> named on the page: GitHub Pages (website), Oracle Cloud Frankfurt (dance server), Google STUN (room music). Room music is peer-to-peer, so the phones in it see each other's IP.</li>
-    <li><b>Reports:</b> the music fine print ends "To report a room, email Chris@wilkinscoffee.be."</li>
+    <li><b>Reports:</b> the music fine print ends "To report a room, email Chris@wilkinscoffee.be." The admin view of <code>/schedule</code> has <b>Live rooms</b> with <b>Stop music</b> (off until the room closes) and <b>End room</b> (everyone solo; the name stays closed for an hour), so a report can be acted on (issue #10).</li>
+    <li><b>Terms of use</b> at <code>/terms/</code> (<code>terms/index.html</code>), linked from the footer, <code>/schedule</code> and the privacy page: rules, reports and moderation (DSA basics), safety, no warranty, Belgian law, legal notice, and credits. MediaPipe is Apache 2.0; its license text ships at <code>/licenses/apache-2.0.txt</code>.</li>
   </ul>
 </section>
 
@@ -415,6 +416,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>cancel</code></td><td class="sub">cancel a booking with its token</td></tr>
         <tr><td><code>mine</code></td><td class="sub">follow my own requests: <code>{ id: token }</code></td></tr>
         <tr><td><code>admin</code> / <code>approve</code> / <code>reject</code></td><td class="sub">sign in with the admin key, decide on a request</td></tr>
+        <tr><td><code>stop-music</code> / <code>end-room</code></td><td class="sub">admin: silence a room until it closes, or send everyone in it back to solo (the name stays closed for an hour)</td></tr>
       </tbody>
     </table></div>
     <div class="tbl"><table>
@@ -433,6 +435,8 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>booked</code> / <code>cancelled</code> / <code>error</code></td><td class="sub">the answer to <code>book</code> or <code>cancel</code></td></tr>
         <tr><td><code>mine</code></td><td class="sub">my own requests, with their status</td></tr>
         <tr><td><code>waiting</code></td><td class="sub">admin only: requests to approve</td></tr>
+        <tr><td><code>live-rooms</code></td><td class="sub">admin only: open rooms with dancers and music</td></tr>
+        <tr><td><code>music-stopped</code> / <code>room-ended</code></td><td class="sub">a moderator stopped your music / closed your room (the phone shows a notice)</td></tr>
       </tbody>
     </table></div>
   </div>

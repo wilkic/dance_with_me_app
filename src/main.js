@@ -296,6 +296,17 @@ function onServerMessage(msg) {
     $('hud-match').textContent = '';
   } else if (msg.type === 'rtc') {
     music.onSignal(msg.from, msg.data).catch((err) => console.warn('room music:', err));
+  } else if (msg.type === 'music-stopped') {
+    // An admin acted on a report (see /terms/).
+    music.stop();
+    renderMusic();
+    notice('Music in this room was stopped by the moderator.');
+  } else if (msg.type === 'room-ended') {
+    leaveRoom();
+    notice('This room was closed by the moderator. You’re dancing on your own now.');
+  } else if (msg.type === 'error' && msg.for === 'join') {
+    leaveRoom();
+    notice(msg.error);
   }
 }
 
@@ -697,6 +708,18 @@ function confirmPopup(message) {
     };
     $('confirm-yes').onclick = () => done(true);
     $('confirm-no').onclick = () => done(false);
+  });
+}
+
+/** A message with just an OK button (the confirm popup, one button). */
+function notice(message) {
+  $('confirm-no').classList.add('hidden');
+  const yes = $('confirm-yes');
+  const label = yes.textContent;
+  yes.textContent = 'OK';
+  confirmPopup(message).then(() => {
+    $('confirm-no').classList.remove('hidden');
+    yes.textContent = label;
   });
 }
 
