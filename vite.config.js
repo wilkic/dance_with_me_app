@@ -25,11 +25,11 @@ export default defineConfig({
   // Relative base: the built dist/ works from any path on any static host
   // (GitHub Pages subpaths, file servers, etc.) with no configuration.
   base: './',
-  plugins: [basicSsl(), dirSlash(['/schedule'])],
+  plugins: [basicSsl(), dirSlash(['/schedule', '/privacy'])],
   build: {
     rollupOptions: {
       // Three pages: the phone app, the big-screen dance floor, DJ booking.
-      input: { main: 'index.html', floor: 'floor.html', schedule: 'schedule/index.html' },
+      input: { main: 'index.html', floor: 'floor.html', schedule: 'schedule/index.html', privacy: 'privacy/index.html' },
     },
   },
   server: {

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0b12">
+<title>Dance With Me – Privacy</title>
+<style>
+  :root { --bg:#0b0b12; --fg:#e9e9f1; --muted:#9a9ab0; --accent:#b48cff; --card:#15151f; --line:#26263a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:1.8rem; margin:0 0 4px; }
+  h2 { font-size:1.1rem; margin:28px 0 6px; color:var(--accent); }
+  .muted { color:var(--muted); font-size:.9rem; }
+  .back { font-size:.85rem; text-decoration:none; }
+  .tldr { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:20px 0; }
+  .tldr li { margin:4px 0; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="../">&larr; Dance With Me</a>
+<h1>Privacy</h1>
+<p class="muted">Dance With Me · dance.wilkinscoffee.be · Last updated 18 October 2026</p>
+
+<div class="tldr">
+<strong>We store nothing about you.</strong>
+<ul>
+  <li>No accounts, no recordings.</li>
+  <li>Your camera image never leaves your phone. It's only used there to draw your stick figure.</li>
+  <li>While you're in a room, your stick figure and any music you share are passed live to the others in that room. Nothing is saved.</li>
+  <li>No tracking or advertising cookies.</li>
+</ul>
+</div>
+
+<h2>What happens live</h2>
+<p>To let people dance together, our server relays your stick-figure movement to everyone in your room, and works out your tempo from it, in real time. When you leave, it's gone. Only dance on camera with people in your space who are happy to be there.</p>
+<p>If you set the tempo to come from <b>the beat (mic)</b>, your phone listens for the beat and sends only a loudness curve (30 numbers a second), never the sound itself. It's used live and not kept.</p>
+<p>Music played to a room goes straight from the host's phone to each dancer's phone. Because those phones connect directly, they can see each other's IP address. To set up that connection, phones also ask Google's public STUN server (stun.l.google.com) for their own public address.</p>
+
+<h2>What our servers see</h2>
+<p>Like any website, our servers see your IP address to connect you. The dance server doesn't log it. Its system logs (start-ups, errors) are wiped after 3 days.</p>
+<p>The website itself is hosted by GitHub Pages (GitHub, Inc., USA), which, like any web host, sees your IP address when you load the page; see <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. The dance server (rooms, guests, tempo) runs on Oracle Cloud in Frankfurt, Germany.</p>
+
+<h2>On your device</h2>
+<p>Your settings, like guest opacity and AI variation, are saved in your own browser so they're there next time. If you book a DJ set, your browser also keeps a key that lets you follow and cancel your booking. You can clear all of it by clearing your browser data.</p>
+
+<h2>DJ bookings</h2>
+<p>If you book a room, we keep what you put in the form (DJ name, set info, about you, link). Once a booking is approved, it's shown publicly on the start page. When your set is over, all of it is deleted. Requests that aren't approved are deleted when their time has passed.</p>
+
+<h2>Music</h2>
+<p>Please don't share music you don't own. You're responsible for what you broadcast. To report a room, email <a href="mailto:Chris@wilkinscoffee.be">Chris@wilkinscoffee.be</a>.</p>
+
+<h2>Who we are</h2>
+<p>Chris Wilkins, Brussels, Belgium · <a href="mailto:Chris@wilkinscoffee.be">Chris@wilkinscoffee.be</a>. Questions? Email us. You can also contact the Belgian Data Protection Authority at <a href="https://www.dataprotectionauthority.be">dataprotectionauthority.be</a>.</p>
+
+<p class="muted">If we ever start keeping data, for example to train AI dancers, we'll ask you first in the app and update this page.</p>
+</main>
+</body>
+</html>

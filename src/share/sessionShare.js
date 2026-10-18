@@ -1,44 +1,30 @@
 /**
- * What this phone shares with the dance server for the library — the
- * material AI dancers are built from. Two dials, each from "minimal" to
- * "everything":
+ * Where this phone's tempo comes from, told to the dance server:
  *
- *   video:  points  → the PoseFrames already streamed (nothing extra)
- *           video   → the camera feed too (MediaRecorder chunks)
  *   music:  motion  → no microphone; tempo comes from your movement only
  *           beat    → microphone on, but only an onset envelope leaves the
  *                     phone (30 numbers/s) — enough for the server to hear
  *                     the tempo, never the sound
- *           audio   → the microphone recording too
  *
- * Everything goes over the existing server link as JSON control messages
- * ('level', 'music', 'media'); see server/index.js and server/recorder.js.
+ * Nothing is kept: the server uses it live and forgets it (see /privacy/).
+ * Sharing camera video or mic audio to train AI dancers is gone until it
+ * comes back as an explicit opt-in. The video level stays 'points' (the
+ * PoseFrames already streamed for rooms and guests).
+ *
+ * Goes over the existing server link as JSON control messages ('level',
+ * 'music'); see server/index.js.
  */
-export const VIDEO_LEVELS = ['points', 'video'];
-export const MUSIC_LEVELS = ['motion', 'beat', 'audio'];
+export const VIDEO_LEVELS = ['points'];
+export const MUSIC_LEVELS = ['motion', 'beat'];
 const STORE_KEY = 'dwm.share';
 const ENVELOPE_HZ = 30;
-
-function pickMime(cands) {
-  if (typeof MediaRecorder === 'undefined') return null;
-  return cands.find((m) => MediaRecorder.isTypeSupported(m)) ?? null;
-}
-
-function toBase64(buf) {
-  const u8 = new Uint8Array(buf);
-  let s = '';
-  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
-  return btoa(s);
-}
 
 export class SessionShare {
   /**
    * @param link       WebSocketTransport (sendJSON) — null when offline
-   * @param videoTrack () => MediaStreamTrack | null   the camera's video track
    */
-  constructor(link, { videoTrack, onStatus = () => {} } = {}) {
+  constructor(link, { onStatus = () => {} } = {}) {
     this.link = link;
-    this.videoTrack = videoTrack;
     this.onStatus = onStatus;
     this.level = { video: 'points', music: 'motion' };
     try {
@@ -47,8 +33,6 @@ export class SessionShare {
     } catch { /* storage unavailable */ }
     this.active = false;
     this.mic = null;        // { stream, ctx, analyser, timer, prev, batch, t0 }
-    this.recorders = {};    // kind -> MediaRecorder
-    this.seq = 0;
     this.dims = null;
   }
 
@@ -74,32 +58,16 @@ export class SessionShare {
     await this.#apply();
   }
 
-  /** Dancing stopped: microphone off, recorders stopped. */
+  /** Dancing stopped: microphone off. */
   stop() {
     this.active = false;
-    this.#stopRecorder('video');
-    this.#stopRecorder('audio');
     this.#stopMic();
   }
 
   async #apply() {
     if (!this.link) return;
-    // Music: mic for beat/audio, plus a recorder for audio.
-    if (this.level.music === 'motion') {
-      this.#stopRecorder('audio');
-      this.#stopMic();
-    } else {
-      const ok = await this.#startMic();
-      if (ok && this.level.music === 'audio') this.#startRecorder('audio', this.mic.stream, ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'], { audioBitsPerSecond: 48_000 });
-      else this.#stopRecorder('audio');
-    }
-    // Video: recorder on the camera track.
-    if (this.level.video === 'video') {
-      const track = this.videoTrack?.();
-      if (track) this.#startRecorder('video', new MediaStream([track]), ['video/webm;codecs=vp8', 'video/webm', 'video/mp4'], { videoBitsPerSecond: 600_000 });
-    } else {
-      this.#stopRecorder('video');
-    }
+    if (this.level.music === 'motion') this.#stopMic();
+    else await this.#startMic();
   }
 
   async #startMic() {
@@ -152,28 +120,5 @@ export class SessionShare {
     for (const t of m.stream.getTracks()) t.stop();
     m.ctx.close?.();
     this.mic = null;
-  }
-
-  #startRecorder(kind, stream, mimes, opts) {
-    if (this.recorders[kind]) return;
-    const mimeType = pickMime(mimes);
-    if (!mimeType) { this.onStatus(`${kind} recording not supported here`); return; }
-    let rec;
-    try { rec = new MediaRecorder(stream, { mimeType, ...opts }); } catch (err) { this.onStatus(`${kind} recorder failed: ${err.message}`); return; }
-    rec.ondataavailable = async (ev) => {
-      if (!ev.data?.size || !this.recorders[kind]) return;
-      const data = toBase64(await ev.data.arrayBuffer());
-      this.link?.sendJSON({ type: 'media', kind, mime: mimeType, seq: this.seq++, data });
-    };
-    rec.start(1000);
-    this.recorders[kind] = rec;
-    this.onStatus(`sharing ${kind}`);
-  }
-
-  #stopRecorder(kind) {
-    const rec = this.recorders[kind];
-    if (!rec) return;
-    delete this.recorders[kind];
-    try { rec.stop(); } catch { /* already stopped */ }
   }
 }
