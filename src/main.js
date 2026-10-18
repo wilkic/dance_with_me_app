@@ -644,6 +644,11 @@ function renderMusic() {
   btn.classList.toggle('hidden', !roomState.host);
   btn.classList.toggle('playing', st.hosting);
   btn.textContent = st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music';
+  // The ☰ menu has the same button (where the old "record audio" chip was).
+  const menuBtn = $('menu-music');
+  menuBtn.classList.toggle('hidden', !roomState.host);
+  menuBtn.classList.toggle('playing', st.hosting);
+  menuBtn.textContent = st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music to the room';
   $('btn-hear').classList.toggle('hidden', !st.needsTap);
   const hud = $('hud-music');
   const label = !roomState.host && roomState.music ? roomState.music.label : '';
@@ -857,6 +862,10 @@ $('btn-music').addEventListener('click', () => {
   if (music.state.hosting) music.stop();
   else openMusicSheet();
   renderMusic();
+});
+$('menu-music').addEventListener('click', () => {
+  $('menu-panel').classList.add('hidden');
+  $('btn-music').click();
 });
 $('btn-hear').addEventListener('click', () => music.tapToHear());
 $('src-file').addEventListener('click', () => $('music-file').click());
