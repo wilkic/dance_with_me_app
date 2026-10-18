@@ -24,6 +24,8 @@ case "${1:-deploy}" in
     # Code comes from the `release` branch, not the working tree, so the VM
     # runs the same version as the public site. DANCE_REF overrides it.
     REF=${DANCE_REF:-release}
+    # No local `release` branch in this clone: use what was pushed.
+    git -C "$ROOT" rev-parse -q --verify "$REF^{commit}" >/dev/null || REF=origin/$REF
     echo "== code ($REF @ $(git -C "$ROOT" rev-parse --short "$REF"))"
     TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
     # The server imports shared modules from src/, so both go up.
