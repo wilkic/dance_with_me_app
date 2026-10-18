@@ -5,7 +5,9 @@
  * the server decides, see server/index.js). The host picks a source:
  *   file    one or more audio files on the device, played in a loop
  *           (the host hears them too)
- *   mic     the microphone, with voice processing off so music survives
+ *   mic     the microphone — or any sound input the computer has, picked
+ *           by deviceId: a DJ's virtual cable (VB-Cable, BlackHole) carries
+ *           the mix from their DJ software; voice processing is off
  *   screen  a browser tab's or the computer's sound (getDisplayMedia —
  *           desktop Chrome/Edge; phone browsers can't capture other apps)
  *
@@ -28,6 +30,23 @@ function tuneOpus(sdp) {
 
 /** Can this browser share a tab's or the system's sound? */
 export const canShareScreenAudio = () => !!navigator.mediaDevices?.getDisplayMedia && !/Android|iPhone|iPad/i.test(navigator.userAgent);
+
+/**
+ * The computer's sound inputs → [{ id, label }]. Asks for the microphone
+ * once first (browsers hide device names until then). Call from a tap.
+ */
+export async function listSoundInputs() {
+  if (!navigator.mediaDevices?.enumerateDevices) return [];
+  let probe = null;
+  try { probe = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return []; }
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    return devs.filter((d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+      .map((d, i) => ({ id: d.deviceId, label: d.label || `Input ${i + 1}` }));
+  } finally {
+    probe.getTracks().forEach((t) => t.stop());
+  }
+}
 
 export class RoomMusic {
   /**
@@ -56,14 +75,15 @@ export class RoomMusic {
 
   /**
    * Start playing to the room. kind: 'file' (files: FileList/array), 'mic'
-   * or 'screen'. Call from a tap (browsers want a gesture for audio and
-   * screen capture). Throws with a readable message when the source fails.
+   * (deviceId: a specific input, see listSoundInputs) or 'screen'. Call
+   * from a tap (browsers want a gesture for audio and screen capture).
+   * Throws with a readable message when the source fails.
    */
-  async start(kind, files = []) {
+  async start(kind, files = [], { deviceId = null } = {}) {
     this.stop();
     let src;
     if (kind === 'file') src = await this.#fromFiles([...files]);
-    else if (kind === 'mic') src = await this.#fromMic();
+    else if (kind === 'mic') src = await this.#fromMic(deviceId);
     else if (kind === 'screen') src = await this.#fromScreen();
     else throw new Error(`unknown source ${kind}`);
     this.host = { kind, ...src, peers: new Map(), tries: new Map() };
@@ -168,16 +188,17 @@ export class RoomMusic {
     };
   }
 
-  async #fromMic() {
+  async #fromMic(deviceId) {
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
       });
     } catch (err) {
-      throw new Error(`The microphone isn't available (${err.message}).`);
+      throw new Error(`${deviceId ? 'That input' : 'The microphone'} isn't available (${err.message}).`);
     }
-    return { label: 'Microphone', stream, stop: () => stream.getTracks().forEach((t) => t.stop()) };
+    const label = deviceId ? (stream.getAudioTracks()[0]?.label || 'Sound input').slice(0, 60) : 'Microphone';
+    return { label, stream, stop: () => stream.getTracks().forEach((t) => t.stop()) };
   }
 
   async #fromScreen() {

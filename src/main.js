@@ -14,7 +14,7 @@ import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
 import { SessionShare } from './share/sessionShare.js';
 import { joinable, phase, whenText, FINE_PRINT, visitMsg } from './net/schedule.js';
-import { RoomMusic, canShareScreenAudio } from './net/roomMusic.js';
+import { RoomMusic, canShareScreenAudio, listSoundInputs } from './net/roomMusic.js';
 
 // ---- DOM ----
 const $ = (id) => document.getElementById(id);
@@ -673,12 +673,26 @@ function renderMusic() {
 function openMusicSheet() {
   $('music-msg').textContent = '';
   $('src-screen').classList.toggle('hidden', !canShareScreenAudio());
+  $('music-inputs').classList.add('hidden');
   $('music-sheet').classList.remove('hidden');
 }
-async function startMusic(kind, files) {
+// "Microphone": on a computer with several inputs, let the host pick one
+// (a DJ's virtual cable carries their mix); phones go straight to the mic.
+const INPUT_KEY = 'dwm.musicInput';
+async function pickMicOrInput() {
+  const inputs = canShareScreenAudio() ? await listSoundInputs() : [];
+  if (inputs.length < 2) return startMusic('mic');
+  const sel = $('music-input');
+  let saved = null;
+  try { saved = localStorage.getItem(INPUT_KEY); } catch { /* storage unavailable */ }
+  sel.replaceChildren(...inputs.map((d) => new Option(d.label, d.id, false, d.id === saved)));
+  $('music-inputs').classList.remove('hidden');
+  $('music-msg').textContent = '';
+}
+async function startMusic(kind, files, opts) {
   $('music-msg').textContent = kind === 'screen' ? 'Pick what to share…' : 'Starting…';
   try {
-    await music.start(kind, files);
+    await music.start(kind, files, opts);
     music.syncMembers(roomState.members.filter((m) => !m.you).map((m) => m.id));
     $('music-sheet').classList.add('hidden');
   } catch (err) {
@@ -873,7 +887,12 @@ $('music-file').addEventListener('change', (e) => {
   if (e.target.files.length) startMusic('file', e.target.files);
   e.target.value = '';
 });
-$('src-mic').addEventListener('click', () => startMusic('mic'));
+$('src-mic').addEventListener('click', () => { $('music-msg').textContent = 'Looking for sound inputs…'; pickMicOrInput(); });
+$('src-input-go').addEventListener('click', () => {
+  const deviceId = $('music-input').value;
+  try { localStorage.setItem(INPUT_KEY, deviceId); } catch { /* storage unavailable */ }
+  startMusic('mic', [], { deviceId });
+});
 $('src-screen').addEventListener('click', () => startMusic('screen'));
 $('music-cancel').addEventListener('click', () => $('music-sheet').classList.add('hidden'));
 $('btn-room').addEventListener('click', async () => {

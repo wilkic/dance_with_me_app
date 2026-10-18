@@ -447,5 +447,19 @@ button.danger {
 .music-box { display: flex; flex-direction: column; gap: 0.8rem; }
 .music-box #music-title { font-weight: 600; margin: 0; }
 .music-sources { display: flex; flex-direction: column; gap: 0.5rem; }
+.music-inputs { display: flex; flex-direction: column; gap: 0.5rem; }
+.music-inputs select {
+  font: inherit;
+  color: #eee;
+  background: rgba(20, 20, 35, 0.75);
+  border: 1px solid #445;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  width: 100%;
+  min-width: 0;
+}
+.music-inputs option { color: #111; }
+.music-inputs .hint-dj { font-size: 0.75rem; color: #889; margin: 0; }
+.music-inputs .hint-dj a { color: #b9a6ff; }
 .music-box .hint:empty { display: none; }
 .music-box .hint { color: #f9a; }
