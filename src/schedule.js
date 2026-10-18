@@ -7,8 +7,8 @@
  *          'cancelled' / 'error' out. The token for each request made here
  *          is kept in this browser, so the DJ can follow and cancel it.
  *   Admin: open /schedule/#admin=KEY once (the key moves to this browser
- *          and out of the address bar); 'admin' / 'approve' / 'reject' in,
- *          'waiting' out. `server/deploy/deploy.sh admin` prints the link.
+ *          and out of the address bar); 'admin' / 'approve' / 'reject' /
+ *          'stop-music' / 'end-room' in, 'waiting' / 'live-rooms' out. `server/deploy/deploy.sh admin` prints the link.
  */
 import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl } from './net/serverUrl.js';
@@ -28,6 +28,7 @@ const store = {
 let bookings = []; // approved, public
 let mine = [];     // this browser's requests, any status
 let waiting = [];  // admin: requests to decide on
+let liveRooms = []; // admin: open rooms, to act on reports
 let online = false;
 let tokens = store.get(TOKENS_KEY, {});
 
@@ -121,6 +122,9 @@ function onMessage(msg) {
     waiting = msg.bookings;
     $('admin').classList.remove('hidden');
     renderWaiting();
+  } else if (msg.type === 'live-rooms') {
+    liveRooms = msg.rooms;
+    renderLiveRooms();
   } else if (msg.type === 'error') {
     if (msg.for === 'book' || msg.for === 'cancel') {
       $('btn-book').disabled = !online;
@@ -230,6 +234,26 @@ function renderWaiting() {
   }));
   if (!items.length) items.push(el('li', 'none', 'Nothing waiting.'));
   $('waiting-list').replaceChildren(...items);
+}
+
+function renderLiveRooms() {
+  const items = liveRooms.map((r) => {
+    const li = el('li', 'set');
+    const head = el('div');
+    const what = r.silenced ? 'music stopped' : r.music ? `♫ ${r.music}` : 'no music';
+    head.append(el('b', '', r.name), el('span', 'when', `${r.dancers} dancing · ${what}`));
+    const actions = [];
+    if (r.music) actions.push(button('danger', 'Stop music', () => link?.sendJSON({ type: 'stop-music', room: r.name })));
+    actions.push(button('danger', 'End room', () => {
+      if (confirm(`End “${r.name}”? Everyone in it goes back to dancing alone.`)) link?.sendJSON({ type: 'end-room', room: r.name });
+    }));
+    const row = el('div', 'actions');
+    row.append(...actions);
+    li.append(head, row);
+    return li;
+  });
+  if (!items.length) items.push(el('li', 'none', 'No rooms open right now.'));
+  $('live-list').replaceChildren(...items);
 }
 
 setInterval(render, 60_000);
