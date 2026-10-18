@@ -13,7 +13,7 @@ import { resolveServerUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
 import { SessionShare } from './share/sessionShare.js';
-import { joinable, phase, whenText, FINE_PRINT } from './net/schedule.js';
+import { joinable, phase, whenText, FINE_PRINT, visitMsg } from './net/schedule.js';
 import { RoomMusic, canShareScreenAudio } from './net/roomMusic.js';
 
 // ---- DOM ----
@@ -73,7 +73,9 @@ const share = new SessionShare(serverLink, {
 });
 
 if (serverLink) {
+  let visitSent = false;
   serverLink.onOpen = () => {
+    if (!visitSent) { serverLink.sendJSON(visitMsg('app')); visitSent = true; } // daily totals, once per page load
     // Every (re)connect: resend session state.
     if (clickBpm > 0) serverLink.sendJSON({ type: 'label', clickBpm });
     share.announce();

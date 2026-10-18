@@ -5,6 +5,7 @@
 #   server/deploy/deploy.sh pull    # fetch sessions recorded on the VM (only if RECORD_DIR is set there)
 #   server/deploy/deploy.sh logs    # follow the server log
 #   server/deploy/deploy.sh admin   # print the link that approves DJ bookings (secret!)
+#   server/deploy/deploy.sh stats   # daily visit totals, last 14 days
 # Settings (env or server/deploy/.env): DANCE_HOST (ssh target, e.g.
 # ubuntu@1.2.3.4), DANCE_DOMAIN (e.g. ws.wilkinscoffee.be).
 set -euo pipefail
@@ -60,8 +61,18 @@ case "${1:-deploy}" in
     echo "Approve DJ bookings at (keep this link private):"
     echo "  https://${DANCE_SITE:-dance.wilkinscoffee.be}/schedule/#admin=$KEY"
     ;;
+  stats)
+    ssh "$DANCE_HOST" "cd $APP/server && node -e \"
+      import('./stats.js').then(({ Stats }) => {
+        const days = new Stats('data/stats.json').recent(14);
+        console.table(days.map(({ ref, ...d }) => d));
+        const refs = {};
+        for (const d of days) for (const [h, n] of Object.entries(d.ref)) refs[h] = (refs[h] ?? 0) + n;
+        console.log('came from:', Object.entries(refs).sort((a, b) => b[1] - a[1]).map(([h, n]) => h + ' ' + n).join(' · ') || 'nothing yet');
+      });\""
+    ;;
   logs)
     ssh -t "$DANCE_HOST" "journalctl -u dance -f -n 50"
     ;;
-  *) echo "usage: $0 [setup|deploy|pull|logs|admin]" >&2; exit 2 ;;
+  *) echo "usage: $0 [setup|deploy|pull|logs|admin|stats]" >&2; exit 2 ;;
 esac

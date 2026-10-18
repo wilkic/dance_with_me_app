@@ -23,6 +23,7 @@
  *   → { type: 'cancelled', id }                   your booking was cancelled
  *   → { type: 'waiting', bookings }               admin only: requests to approve
  *   → { type: 'live-rooms', rooms }               admin only: open rooms, dancers, music
+ *   → { type: 'stats', days, online }             admin only: daily visit totals (see stats.js)
  *   → { type: 'music-stopped' }                   host: an admin stopped your room's music
  *   → { type: 'room-ended' }                      an admin closed your room (you're solo now)
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
@@ -43,6 +44,8 @@
  *   ← { type: 'mine', tokens }                    follow your own bookings ({ id: token })
  *   ← { type: 'admin', key }                      sign in to approve bookings
  *   ← { type: 'approve' | 'reject', id }          admin: decide on a request
+ *   ← { type: 'visit', page, ref, phone }         a page was opened (counted, nothing kept about who)
+ *   ← { type: 'stats' }                           admin: send the visit totals again
  *   ← { type: 'stop-music', room }                admin: stop a room's music, no more until it closes
  *   ← { type: 'end-room', room }                  admin: send everyone in a room back to solo
  *
@@ -79,6 +82,7 @@ import { SessionRecorder } from './recorder.js';
 import { StyleWindow } from './style.js';
 import { EnvelopeTempo, tempoGap } from './tempo.js';
 import { Schedule } from './schedule.js';
+import { Stats } from './stats.js';
 import { normalizeRoomName } from '../src/net/roomNames.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -124,6 +128,8 @@ export function startServer({
   library = null,
   // DJ bookings (JSON file). SCHEDULE_FILE=0 keeps them in memory only.
   scheduleFile = process.env.SCHEDULE_FILE === '0' ? null : (process.env.SCHEDULE_FILE || join(HERE, 'data', 'schedule.json')),
+  // Daily visit totals (stats.js). STATS_FILE=0 keeps them in memory only.
+  statsFile = process.env.STATS_FILE === '0' ? null : (process.env.STATS_FILE || join(HERE, 'data', 'stats.json')),
   // Approves DJ bookings; null = read or create server/data/admin-key.
   adminKey = null,
   log = console.log,
@@ -133,6 +139,8 @@ export function startServer({
   const rooms = new Rooms();
   const matcher = new Matcher();
   const schedule = new Schedule(scheduleFile, { log });
+  const stats = new Stats(statsFile, { log });
+  const statsMsg = () => ({ type: 'stats', days: stats.recent(14), online: sessions.size });
   const theAdminKey = adminKey ?? loadAdminKey(join(HERE, 'data', 'admin-key'), log);
   const isAdminKey = (k) => {
     if (!theAdminKey || typeof k !== 'string') return false;
@@ -376,6 +384,7 @@ export function startServer({
     send(s, lobby());
     send(s, scheduleMsg());
     log(`+ ${id} connected (${sessions.size} online)`);
+    stats.online(sessions.size);
     broadcastFloor();
 
     ws.on('message', (data, isBinary) => {
@@ -396,6 +405,7 @@ export function startServer({
           const res = rooms.join(s, msg.room);
           if (!res) return send(s, { type: 'error', error: 'bad room name' });
           send(s, { type: 'joined', room: res.name, created: res.created, host: isHost(s) });
+          if (res.created || before !== res.name) stats.count(res.created ? 'shared' : 'joined');
           log(`> ${id} ${res.created ? 'opened' : 'joined'} room ${res.name} (${rooms.members(res.name).length} dancing)`);
           s.rec?.label({ room: res.name });
           if (before && before !== res.name) broadcastRoom(before);
@@ -404,6 +414,7 @@ export function startServer({
         } else if (msg.type === 'room-music') {
           if (!isHost(s)) return;
           if (msg.on && silenced.has(s.room)) return send(s, { type: 'music-stopped' });
+          if (msg.on && !roomMusic.has(s.room)) stats.count('music');
           if (msg.on) roomMusic.set(s.room, { label: String(msg.label ?? '').slice(0, 80) });
           else roomMusic.delete(s.room);
           log(`♪ ${id} ${msg.on ? `plays music to room ${s.room}` : `stopped the music in room ${s.room}`}`);
@@ -432,6 +443,7 @@ export function startServer({
           const res = schedule.book(msg);
           if (res.error) return send(s, { type: 'error', for: 'book', error: res.error });
           s.booked++;
+          stats.count('booked');
           (s.myBookings ??= {})[res.booking.id] = res.token;
           log(`♫ ${id} asked for ${res.booking.dj} (${res.booking.room}) at ${new Date(res.booking.start).toISOString()} for ${res.booking.minutes} min — waiting for approval`);
           send(s, { type: 'booked', booking: res.booking, token: res.token });
@@ -450,6 +462,7 @@ export function startServer({
           log(`♛ ${id} signed in as admin`);
           send(s, { type: 'waiting', bookings: schedule.waiting() });
           send(s, liveRooms());
+          send(s, statsMsg());
         } else if (msg.type === 'approve' || msg.type === 'reject') {
           if (!s.admin) return;
           const bid = String(msg.id);
@@ -507,6 +520,12 @@ export function startServer({
           if (dims) { s.aspect = dims.w / dims.h; s.style.aspect = s.aspect; }
           s.rec?.label({ level: { ...s.level }, ...(dims ? { video: dims } : {}) });
           if (s.level.music === 'motion') s.music.reset();
+        } else if (msg.type === 'visit') {
+          if (s.visited) return; // once per page load
+          s.visited = true;
+          stats.visit({ page: msg.page, ref: typeof msg.ref === 'string' ? msg.ref : '', phone: !!msg.phone });
+        } else if (msg.type === 'stats') {
+          if (s.admin) send(s, statsMsg());
         } else if (msg.type === 'music') {
           s.music.push(msg);
           s.rec?.music(msg);
@@ -518,6 +537,7 @@ export function startServer({
       if (s.watching) return; // spectators don't dance
       const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
       const frame = deserializePoseFrame(buf);
+      if (!s.lastFrameAt) stats.count('danced');
       s.lastFrameAt = now();
       s.lastFrameT = frame.t;
       s.rec?.frame(frame);
@@ -584,6 +604,7 @@ export function startServer({
     if (schedule.prune()) broadcastSchedule();
     for (const name of silenced) if (!rooms.members(name).length) silenced.delete(name);
     for (const [name, until] of endedRooms) if (until <= Date.now()) endedRooms.delete(name);
+    stats.save();
     assignPeople();
     for (const s of sessions.values()) {
       if (!s.wants.ai && !s.wants.people) continue;
@@ -618,6 +639,7 @@ export function startServer({
   }, scanIntervalMs);
 
   const close = () => {
+    stats.save(Date.now(), true);
     clearInterval(timer);
     clearInterval(aiTimer);
     for (const s of sessions.values()) s.ws.terminate();
@@ -625,7 +647,7 @@ export function startServer({
   };
   wss.on('close', () => { clearInterval(timer); clearInterval(aiTimer); });
 
-  return { wss, sessions, rooms, schedule, library: lib, close, get port() { return wss.address().port; } };
+  return { wss, sessions, rooms, schedule, stats, library: lib, close, get port() { return wss.address().port; } };
 }
 
 // Run directly: node index.js [port]
@@ -635,4 +657,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`dance server listening on ws://0.0.0.0:${server.port}`);
     if (server.library) console.log(`library: ${server.library.size} clips — ${server.library.tags.slice(0, 6).map(([t, n]) => `${t} ${n}`).join(', ')}…`);
   });
+  // systemd restarts (deploys) send SIGTERM: write the visit totals first.
+  for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { server.stats.save(Date.now(), true); process.exit(0); });
 }

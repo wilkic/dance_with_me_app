@@ -64,6 +64,16 @@ export function whenText(b, locale = undefined) {
   return `${day}, ${t(s)}–${t(e)}`;
 }
 
+/**
+ * A page open, for the daily visit totals (server/stats.js): which page,
+ * which site sent you (host name only), phone or not. Nothing about who.
+ */
+export function visitMsg(page) {
+  let ref = '';
+  try { const h = new URL(document.referrer).hostname; if (h !== location.hostname) ref = h; } catch { /* no referrer */ }
+  return { type: 'visit', page, ref, phone: /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) };
+}
+
 export const FINE_PRINT =
   'Please don’t share music you don’t own. wilkinscoffee is not liable for your ' +
   'public broadcasting of unlicensed copyrighted material. We’re here to dance to ' +
