@@ -127,6 +127,16 @@ ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
 .admin .set { gap: 0.4rem; }
 .admin .admin-sub { margin-top: 1.2rem; }
 .admin .hint { margin-bottom: 0.5rem; }
+.admin .hint button.link { padding: 0 0 0 0.3rem; }
+.stats-now { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; margin-bottom: 0.6rem; font-size: 0.9rem; }
+.stats-now b { font-size: 1.3rem; color: #fff; margin-right: 0.25rem; }
+.stats-wrap { overflow-x: auto; }
+.stats-table { border-collapse: collapse; width: 100%; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.stats-table th, .stats-table td { padding: 0.25rem 0.4rem; text-align: right; border-bottom: 1px solid #2a2a3d; white-space: nowrap; }
+.stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+.stats-table th { color: #889; font-weight: 600; }
+.stats-table td.zero { color: #556; }
+.stats-refs { margin-top: 0.6rem; font-size: 0.8rem; color: #aab; }
 .admin h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: #889; margin-top: 0.2rem; }
 .set > .actions { flex-direction: row; gap: 0.5rem; margin-top: 0.2rem; }
 button.ok { border-color: #2a6; color: #7dffb0; font-size: 0.8rem; padding: 0.3rem 0.9rem; }

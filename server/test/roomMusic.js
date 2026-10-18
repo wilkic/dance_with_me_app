@@ -12,7 +12,7 @@ const test = async (label, fn) => {
   try { await fn(); console.log(`PASS  ${label}`); } catch (e) { failed++; console.log(`FAIL  ${label}\n      ${e.stack}`); }
 };
 
-const server = startServer({ port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, adminKey: 'k', log: () => {} });
+const server = startServer({ port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, statsFile: null, adminKey: 'k', log: () => {} });
 await new Promise((r) => server.wss.on('listening', r));
 
 const connect = () => new Promise((resolve) => {

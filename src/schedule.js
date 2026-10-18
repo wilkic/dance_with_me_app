@@ -13,7 +13,7 @@
 import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { normalizeRoomName } from './net/roomNames.js';
-import { LENGTHS, phase, whenText, FINE_PRINT } from './net/schedule.js';
+import { LENGTHS, phase, whenText, FINE_PRINT, visitMsg } from './net/schedule.js';
 
 const $ = (id) => document.getElementById(id);
 const TOKENS_KEY = 'dwm.bookings'; // { [bookingId]: token }
@@ -79,7 +79,9 @@ if (!link) {
     $('btn-book').disabled = !online;
   };
   // Every (re)connect: follow my requests, and sign in if this is the admin's browser.
+  let visitSent = false;
   link.onOpen = () => {
+    if (!visitSent) { link.sendJSON(visitMsg('schedule')); visitSent = true; } // daily totals, once per page load
     link.sendJSON({ type: 'mine', tokens });
     if (adminKey) link.sendJSON({ type: 'admin', key: adminKey });
   };
@@ -122,6 +124,8 @@ function onMessage(msg) {
     waiting = msg.bookings;
     $('admin').classList.remove('hidden');
     renderWaiting();
+  } else if (msg.type === 'stats') {
+    renderStats(msg);
   } else if (msg.type === 'live-rooms') {
     liveRooms = msg.rooms;
     renderLiveRooms();
@@ -235,6 +239,37 @@ function renderWaiting() {
   if (!items.length) items.push(el('li', 'none', 'Nothing waiting.'));
   $('waiting-list').replaceChildren(...items);
 }
+
+/** Admin: visit totals — today at a glance, 14 days in a table, where people came from. */
+function renderStats({ days, online }) {
+  const today = days[0];
+  const now = el('div', 'stats-now');
+  for (const [n, label] of [[online, 'online now'], [today.app, 'app opens today'], [today.danced, 'danced today'], [today.shared + today.joined, 'in rooms today']]) {
+    const span = el('span');
+    span.append(el('b', '', String(n)), label);
+    now.append(span);
+  }
+  const cols = [['app', 'Opens'], ['phone', 'Phone'], ['computer', 'PC'], ['danced', 'Danced'], ['shared', 'Shared'], ['joined', 'Joined'], ['music', 'Music'], ['schedule', 'Sched.'], ['booked', 'Booked'], ['peak', 'Peak']];
+  const table = el('table', 'stats-table');
+  const head = el('tr');
+  head.append(el('th', '', 'Day'), ...cols.map(([, label]) => el('th', '', label)));
+  table.append(head);
+  const dayName = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  for (const d of days) {
+    const tr = el('tr');
+    tr.append(el('td', '', dayName(d.day)), ...cols.map(([k]) => el('td', d[k] ? '' : 'zero', String(d[k] ?? 0))));
+    table.append(tr);
+  }
+  const wrap = el('div', 'stats-wrap');
+  wrap.append(table);
+  // Where people came from, over the 14 days.
+  const refs = {};
+  for (const d of days) for (const [h, n] of Object.entries(d.ref ?? {})) refs[h] = (refs[h] ?? 0) + n;
+  const top = Object.entries(refs).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const refLine = el('p', 'stats-refs', top.length ? `Came from: ${top.map(([h, n]) => `${h} ${n}`).join(' · ')}` : 'Came from: nothing yet');
+  $('stats').replaceChildren(now, wrap, refLine);
+}
+$('btn-stats').addEventListener('click', () => link?.sendJSON({ type: 'stats' }));
 
 function renderLiveRooms() {
   const items = liveRooms.map((r) => {

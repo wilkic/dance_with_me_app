@@ -90,7 +90,7 @@ await test('only the token cancels; ended sets are dropped; bookings persist', (
 });
 
 await test('over the socket: request → admin approves → everyone sees it', async () => {
-  const server = startServer({ port: 0, library: false, recordDir: null, scheduleFile: null, adminKey: 'sesame', log: () => {} });
+  const server = startServer({ port: 0, library: false, recordDir: null, scheduleFile: null, statsFile: null, adminKey: 'sesame', log: () => {} });
   await new Promise((r) => server.wss.on('listening', r));
   const connect = () => new Promise((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
