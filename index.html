@@ -125,6 +125,12 @@
           <button id="src-file" class="primary">A file on this device</button>
           <button id="src-mic">Microphone</button>
           <button id="src-screen" class="hidden">Tab or computer sound</button>
+          <!-- Desktop with several inputs: pick one (a DJ's virtual cable). -->
+          <div id="music-inputs" class="music-inputs hidden">
+            <select id="music-input"></select>
+            <button id="src-input-go" class="primary">Play from this input</button>
+            <p class="hint-dj">DJ software? Pick your virtual cable here — see the <a href="dj/" target="_blank">DJ guide</a>.</p>
+          </div>
         </div>
         <input type="file" id="music-file" accept="audio/*" multiple hidden />
         <p id="music-msg" class="hint"></p>
