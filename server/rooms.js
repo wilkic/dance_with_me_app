@@ -1,8 +1,11 @@
 /**
  * Dance rooms: named groups of sessions that see each other dance.
  *
- * A room exists exactly as long as it has members (no persistence, no
- * ownership — the first to arrive creates it, the last to leave closes it).
+ * A room exists exactly as long as it has members (no persistence — the
+ * first to arrive creates it, the last to leave closes it). Its creator is
+ * its host: the one who can play music to the room. The host is known by a
+ * key their browser made (session.hostKey), so they get the role back
+ * after a reconnect; index.js lets a booked DJ's token override it.
  * The one thing assessed per room today is tempo: each member's BPM and a
  * room-level consensus BPM. Later, the room is where the app picks music
  * for everyone (tastes × each dancer's tempo × the room's tempo).
@@ -12,6 +15,7 @@ import { normalizeRoomName } from '../src/net/roomNames.js';
 export class Rooms {
   constructor() {
     this.rooms = new Map(); // name -> Set<session>
+    this.hostKeys = new Map(); // name -> the creator's hostKey (or null)
   }
 
   /**
@@ -25,7 +29,10 @@ export class Rooms {
     this.leave(session);
     let members = this.rooms.get(name);
     const created = !members;
-    if (created) this.rooms.set(name, (members = new Set()));
+    if (created) {
+      this.rooms.set(name, (members = new Set()));
+      this.hostKeys.set(name, session.hostKey || null);
+    }
     members.add(session);
     session.room = name;
     return { name, created };
@@ -37,7 +44,10 @@ export class Rooms {
     if (!name) return null;
     const members = this.rooms.get(name);
     members?.delete(session);
-    if (members && members.size === 0) this.rooms.delete(name);
+    if (members && members.size === 0) {
+      this.rooms.delete(name);
+      this.hostKeys.delete(name);
+    }
     session.room = null;
     return name;
   }
@@ -49,6 +59,12 @@ export class Rooms {
     const out = [];
     for (const s of members) if (s !== session) out.push(s);
     return out;
+  }
+
+  /** Was this session's browser the one that created the room? */
+  createdBy(session, name = session.room) {
+    const key = this.hostKeys.get(name);
+    return !!key && session.hostKey === key;
   }
 
   members(name) {

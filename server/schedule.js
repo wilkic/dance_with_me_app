@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { checkBooking, endOf, overlaps } from '../src/net/schedule.js';
+import { checkBooking, endOf, overlaps, joinable } from '../src/net/schedule.js';
 
 const MAX_APPROVED = 500;
 const MAX_WAITING = 100; // pending requests at once
@@ -70,6 +70,12 @@ export class Schedule {
   mine(tokens, now = Date.now()) {
     if (!tokens || typeof tokens !== 'object') return [];
     return this.#live(now).filter((b) => tokens[b.id] === b.token).map(pub);
+  }
+
+  /** The token of the approved set that has `room` right now (open or live), or null. */
+  djToken(room, now = Date.now()) {
+    const b = this.bookings.find((x) => x.status === 'approved' && x.room === room && joinable(x, now));
+    return b ? b.token : null;
   }
 
   #clash(booking) {

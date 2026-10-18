@@ -420,3 +420,21 @@ button.danger {
   color: #667;
 }
 .menu .fine-print { font-size: 0.7rem; color: #a99; }
+
+/* ---- Room music (host: play/stop; others: tap to hear) ---- */
+.music-btn {
+  align-self: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-btn.playing { border-color: #b84ce7; color: #fff; }
+#btn-hear { border-color: #b84ce7; color: #fff; }
+.music-box { display: flex; flex-direction: column; gap: 0.8rem; }
+.music-box #music-title { font-weight: 600; margin: 0; }
+.music-sources { display: flex; flex-direction: column; gap: 0.5rem; }
+.music-box .hint:empty { display: none; }
+.music-box .hint { color: #f9a; }

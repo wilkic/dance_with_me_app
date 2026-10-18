@@ -14,6 +14,7 @@ import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
 import { SessionShare, VIDEO_LEVELS, MUSIC_LEVELS } from './share/sessionShare.js';
 import { joinable, phase, whenText, FINE_PRINT } from './net/schedule.js';
+import { RoomMusic, canShareScreenAudio } from './net/roomMusic.js';
 
 // ---- DOM ----
 const $ = (id) => document.getElementById(id);
@@ -89,7 +90,31 @@ channel.subscribe(onRemoteFrame);
 // ---- Dance room + guest state ----
 // The one thing assessed per room today: tempo. Each member's BPM, and the
 // room's consensus BPM, arrive in the server's 'room' opinions.
-const roomState = { name: null, bpm: 0, members: [] };
+const roomState = { name: null, bpm: 0, members: [], host: false, hostId: null, music: null };
+
+// Room music (net/roomMusic.js): the room's host — whoever shared it, or
+// the booked DJ — plays music; everyone else in the room hears it. This
+// browser's host key lets the server recognise the host after a reconnect
+// or reload; a booking token (saved by /schedule in this browser) makes
+// the DJ the host of their booked room.
+const hostKey = (() => {
+  try {
+    let k = sessionStorage.getItem('dwm.hostKey');
+    if (!k) sessionStorage.setItem('dwm.hostKey', (k = crypto.randomUUID()));
+    return k;
+  } catch { return crypto.randomUUID(); }
+})();
+function joinExtra(room) {
+  let tokens = {};
+  try { tokens = JSON.parse(localStorage.getItem('dwm.bookings') || '{}') || {}; } catch { /* storage unavailable */ }
+  const mine = bookings.find((b) => b.room === room && tokens[b.id]);
+  return { hostKey, ...(mine ? { bookingToken: tokens[mine.id] } : {}) };
+}
+const music = new RoomMusic({
+  send: (msg) => serverLink?.sendJSON(msg),
+  onState: () => renderMusic(),
+});
+if (urlParams.has('debug')) window.dwm = { music, roomState }; // console poking / browser tests
 let lobby = []; // open rooms from the server: [{ name, dancers, bpm }]
 let bookings = []; // DJ sets booked ahead (see net/schedule.js), soonest first
 const peerBpm = new Map(); // dancerId -> { bpm, confidence } (room-mates + people guests)
@@ -233,12 +258,23 @@ function onServerMessage(msg) {
     renderUpcoming();
   } else if (msg.type === 'joined') {
     roomState.name = msg.room;
+    roomState.host = !!msg.host;
+    if (!roomState.host) music.stop();
+    else music.rejoined(); // after a reconnect: announce the music again, fresh connections
     renderRoomLine();
     renderRoomButton();
+    renderMusic();
   } else if (msg.type === 'room') {
     if (msg.name !== roomState.name) return;
     roomState.bpm = msg.bpm;
     roomState.members = msg.members;
+    roomState.host = !!msg.members.find((m) => m.you)?.host;
+    roomState.hostId = msg.host;
+    roomState.music = msg.music;
+    if (!roomState.host) music.stop();
+    music.setHost(roomState.host ? null : msg.host);
+    music.syncMembers(msg.members.filter((m) => !m.you).map((m) => m.id));
+    renderMusic();
     for (const m of msg.members) if (!m.you) peerBpm.set(m.id, m);
     pruneReal();
     renderRoomLine();
@@ -258,6 +294,8 @@ function onServerMessage(msg) {
       `♪ ${msg.song.title} (${Math.round(msg.song.bpm)} bpm) with ${msg.partner}`;
   } else if (msg.type === 'unmatch') {
     $('hud-match').textContent = '';
+  } else if (msg.type === 'rtc') {
+    music.onSignal(msg.from, msg.data).catch((err) => console.warn('room music:', err));
   }
 }
 
@@ -571,7 +609,7 @@ async function startCamera() {
 async function enter(roomName) {
   pendingRoom = roomName;
   renderRoomButton();
-  if (roomName && serverLink) serverLink.join(roomName);
+  if (roomName && serverLink) serverLink.join(roomName, joinExtra(roomName));
   const ok = await startCamera();
   if (!ok) leaveRoom();
 }
@@ -579,13 +617,53 @@ async function enter(roomName) {
 function leaveRoom() {
   if (roomState.name && serverLink) serverLink.leave();
   serverLink && (serverLink.room = null);
+  music.reset();
   roomState.name = null;
   roomState.bpm = 0;
   roomState.members = [];
+  roomState.host = false;
+  roomState.hostId = null;
+  roomState.music = null;
   pruneReal();
   pendingRoom = null;
   renderRoomLine();
   renderRoomButton();
+  renderMusic();
+}
+
+/**
+ * Room music controls. Host: "♫ Play music" (opens the source picker) or
+ * "■ Stop music · <what's playing>". Everyone else: what's playing in the
+ * HUD, and "Tap to hear the music" if the browser blocked autoplay.
+ */
+function renderMusic() {
+  const st = music.state;
+  const btn = $('btn-music');
+  btn.classList.toggle('hidden', !roomState.host);
+  btn.classList.toggle('playing', st.hosting);
+  btn.textContent = st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music';
+  $('btn-hear').classList.toggle('hidden', !st.needsTap);
+  const hud = $('hud-music');
+  const label = !roomState.host && roomState.music ? roomState.music.label : '';
+  hud.textContent = label ? `♫ ${label}` : '';
+  hud.classList.toggle('hidden', !label);
+}
+
+function openMusicSheet() {
+  $('music-msg').textContent = '';
+  $('src-screen').classList.toggle('hidden', !canShareScreenAudio());
+  $('music-sheet').classList.remove('hidden');
+}
+async function startMusic(kind, files) {
+  $('music-msg').textContent = kind === 'screen' ? 'Pick what to share…' : 'Starting…';
+  try {
+    await music.start(kind, files);
+    music.syncMembers(roomState.members.filter((m) => !m.you).map((m) => m.id));
+    $('music-sheet').classList.add('hidden');
+  } catch (err) {
+    $('music-msg').textContent = err.message;
+  }
+  renderMusic();
 }
 
 /** Open your own space to others: a fresh room name nobody is using. */
@@ -595,7 +673,7 @@ function shareRoom() {
   let name = randomRoomName();
   for (let i = 0; i < 20 && taken.has(name); i++) name = randomRoomName();
   pendingRoom = name;
-  serverLink.join(name);
+  serverLink.join(name, joinExtra(name));
   renderRoomButton();
 }
 
@@ -741,7 +819,7 @@ function renderGuestSlider() {
 // ---- Sharing levels (what feeds the library) ----
 const LEVEL_LABELS = {
   video: { points: 'points', video: 'video' },
-  music: { motion: 'motion', beat: 'beat (mic only)', audio: 'audio' },
+  music: { motion: 'motion', beat: 'beat (mic only)', audio: 'record audio' },
 };
 function buildChips() {
   for (const [dial, levels] of [['video', VIDEO_LEVELS], ['music', MUSIC_LEVELS]]) {
@@ -772,6 +850,20 @@ $('btn-start-room').addEventListener('click', () => enter(null));
 $('sel-join').addEventListener('change', (e) => {
   if (e.target.value) enter(e.target.value);
 });
+$('btn-music').addEventListener('click', () => {
+  if (music.state.hosting) music.stop();
+  else openMusicSheet();
+  renderMusic();
+});
+$('btn-hear').addEventListener('click', () => music.tapToHear());
+$('src-file').addEventListener('click', () => $('music-file').click());
+$('music-file').addEventListener('change', (e) => {
+  if (e.target.files.length) startMusic('file', e.target.files);
+  e.target.value = '';
+});
+$('src-mic').addEventListener('click', () => startMusic('mic'));
+$('src-screen').addEventListener('click', () => startMusic('screen'));
+$('music-cancel').addEventListener('click', () => $('music-sheet').classList.add('hidden'));
 $('btn-room').addEventListener('click', async () => {
   if (!roomState.name && !pendingRoom) return shareRoom();
   if (await confirmPopup('Exit room and return to main menu?')) exitToStart();

@@ -307,7 +307,16 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <p>DJs book a room ahead at <code>dance.wilkinscoffee.be/schedule</code> with a DJ name, a date and start time in their own time zone, a length (30 min to 4 h), and optional set info, a bio and a link. The room is the DJ name run through the usual room-name rules, so "DJ Funk" plays in <code>dj-funk</code>. <b>Every request waits for approval</b> before it shows anywhere public. There are no accounts. Each request comes back with a secret token that stays in that browser, so "Your bookings" shows it as <i>Waiting for approval</i>, <i>Approved</i> or <i>Not approved</i> and offers Cancel. Requests waiting for approval don't hold the room, so a prank request can't block a real DJ. Clashes with approved sets (same room, overlapping times) are checked when a DJ asks and again when you approve. Two different rooms can overlap.</p>
   <p><b>Approving:</b> run <code>server/deploy/deploy.sh admin</code> to print the private link <code>…/schedule/#admin=KEY</code>. Opening it once stores the key in that browser and removes it from the address. Because the key sits after the <code>#</code>, GitHub Pages never sees it, and it only goes over the WebSocket to the dance server. The page then shows a <b>Waiting for approval</b> box with the full details of each request and Approve and Reject buttons, which update live. The server makes the key on first start and saves it in <code>server/data/admin-key</code>, or reads it from <code>ADMIN_KEY</code>. A connection gets 5 wrong tries and is then ignored.</p>
   <p>Bookings live on the dance server in <code>server/data/schedule.json</code>. The deploy script leaves <code>server/data/</code> alone, and ended sets are dropped on the next scan. Every phone gets the approved list on connect and whenever it changes. On the start screen, tapping a set shows its info, bio and link. From 10 minutes before the start until the end, the set has a Join button and appears in "Join a room" as <code>dj-funk · DJ set</code>, even before anyone is in it. Limits: 500 approved sets, 100 requests waiting, 10 requests per connection, at most 90 days ahead.</p>
-  <p>Fine print appears at the bottom of the start screen, on <code>/schedule</code>, and in the ☰ menu while Music is set to <b>audio</b>: "Please don't share music you don't own. wilkinscoffee is not liable for your public broadcasting of unlicensed copyrighted material. We're here to dance to music, not steal it."</p>
+  <p>Fine print appears at the bottom of the start screen, on <code>/schedule</code>, in the ☰ menu while Music is set to <b>record audio</b>, and in the room-music picker: "Please don't share music you don't own. wilkinscoffee is not liable for your public broadcasting of unlicensed copyrighted material. We're here to dance to music, not steal it."</p>
+  <h3>Room music (issue #4)</h3>
+  <p>The room's <b>host</b> plays music to everyone else in the room. That's the only difference between sharing a room and joining one. The host is whoever tapped "Share your room". The server recognises them by a key their browser tab made (<code>hostKey</code>), so they get the role back after a reconnect or reload. During a booked set the host is the DJ instead: the browser that holds the booking's token, which <code>/schedule</code> saved. The host sees <b>♫ Play music</b> above the Guests slider, which opens a picker:</p>
+  <ul>
+    <li><b>A file on this device:</b> one or more files, played in a loop. The host hears it too.</li>
+    <li><b>Microphone:</b> echo cancellation, noise suppression and auto-gain are off, so music isn't treated as speech.</li>
+    <li><b>Tab or computer sound:</b> shown only on desktop browsers. Chrome or Edge can share a tab's sound ("Also share tab audio"), and on Windows or ChromeOS the whole system's sound. Phone browsers can't capture other apps' sound at all; only a native app could.</li>
+  </ul>
+  <p>The sound goes straight from the host to each member over <b>WebRTC</b>, with Opus tuned for music: stereo, 128 kb/s, silence suppression off. The dance server only relays the signalling (<code>rtc</code> messages), and only between a room's host and its members. The host makes one connection per member and retries a failed one up to 3 times. Members see "♫ &lt;what's playing&gt;" in the HUD, plus "Tap to hear the music" if the browser blocks autoplay. Connections are found through Google's public STUN server only, with no TURN relay. Phones on the same wifi or ordinary home networks connect, but some mobile-data networks (carrier-grade NAT) may not. A TURN server on the VM (coturn) would fix that if it turns out to matter.</p>
+  <p>The ☰ menu's Music <b>record audio</b> option (it used to say "audio") is something else: it records the mic for the dance library and never plays to other phones.</p>
   <h3>How an AI dancer is made</h3>
   <p>No choreography is generated. An AI dancer is a real person's recorded dance, retimed to your beat, with moves borrowed from another dancer of similar tempo and style.</p>
   <ol class="flow">
@@ -379,7 +388,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <thead><tr><th>Dial</th><th>Minimal</th><th>Middle</th><th>Full</th></tr></thead>
     <tbody>
       <tr><td>Video</td><td><b>points</b><br><span class="sub">the PoseFrames only</span></td><td>—</td><td><b>video</b><br><span class="sub">the camera feed, in chunks</span></td></tr>
-      <tr><td>Music</td><td><b>motion</b><br><span class="sub">no microphone at all</span></td><td><b>beat</b><br><span class="sub">mic on, only a 30 Hz onset envelope leaves the phone, never the sound</span></td><td><b>audio</b><br><span class="sub">the mic recording</span></td></tr>
+      <tr><td>Music</td><td><b>motion</b><br><span class="sub">no microphone at all</span></td><td><b>beat</b><br><span class="sub">mic on, only a 30 Hz onset envelope leaves the phone, never the sound</span></td><td><b>record audio</b><br><span class="sub">the mic recording, for the library only; music to the room is <a href="#guests">room music</a></span></td></tr>
     </tbody>
   </table></div>
   <p>At <b>beat</b> the server hears the tempo (<code>♫ 120</code> in the HUD) and uses it for AI dancers and matching. Full media lands beside the session file as <code>.audio.webm</code> or <code>.video.webm</code> for later use. The idea behind the dials: dance should work even in a world with no sound, and music makes style matching sharper.</p>
@@ -400,6 +409,8 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>media</code></td><td class="sub">a base64 media chunk</td></tr>
         <tr><td><code>label</code></td><td class="sub">ground-truth click BPM, for the lab</td></tr>
         <tr><td><code>watch</code></td><td class="sub">become a spectator, for the dance floor</td></tr>
+        <tr><td><code>room-music</code></td><td class="sub">host: music to the room on or off, with a label</td></tr>
+        <tr><td><code>rtc</code></td><td class="sub">WebRTC signalling to a room's host or member (<code>join</code> also carries <code>hostKey</code> and <code>bookingToken</code>)</td></tr>
         <tr><td><code>book</code></td><td class="sub">book a DJ set: dj, start, minutes, set info, bio, link</td></tr>
         <tr><td><code>cancel</code></td><td class="sub">cancel a booking with its token</td></tr>
         <tr><td><code>mine</code></td><td class="sub">follow my own requests: <code>{ id: token }</code></td></tr>
@@ -418,6 +429,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>match</code> / <code>unmatch</code></td><td class="sub">a tempo-compatible partner and a song</td></tr>
         <tr><td><code>floor</code></td><td class="sub">to spectators: everyone online, per-room tempo</td></tr>
         <tr><td><code>schedule</code></td><td class="sub">approved DJ sets, soonest first</td></tr>
+        <tr><td><code>rtc</code></td><td class="sub">relayed WebRTC signalling; <code>joined</code> and <code>room</code> say who the host is and what's playing</td></tr>
         <tr><td><code>booked</code> / <code>cancelled</code> / <code>error</code></td><td class="sub">the answer to <code>book</code> or <code>cancel</code></td></tr>
         <tr><td><code>mine</code></td><td class="sub">my own requests, with their status</td></tr>
         <tr><td><code>waiting</code></td><td class="sub">admin only: requests to approve</td></tr>
@@ -441,6 +453,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur, halo or no glow</td><td class="num">144</td></tr>
       <tr><td><code>src/room/roomModel.js</code></td><td>Clean-plate room capture, metadata, room for future 3D</td><td class="num">96</td></tr>
       <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, WebSocket and composite transports</td><td class="num">147</td></tr>
+      <tr><td><code>src/net/roomMusic.js</code></td><td>Room music: file, mic or tab sound from the host to each member over WebRTC</td><td class="num">280</td></tr>
       <tr><td><code>src/share/sessionShare.js</code></td><td>The sharing dials: mic envelope, media chunks</td><td class="num">179</td></tr>
       <tr><td><code>src/net/*.js</code></td><td>Envelope format, room names, server URL rules</td><td class="num">82</td></tr>
       <tr><td><code>src/floor.js</code>, <code>floor.html</code></td><td>The big-screen spectator page</td><td class="num">237</td></tr>
@@ -456,9 +469,9 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>server/recorder.js</code></td><td>Per-session JSONL plus optional media files</td><td class="num">116</td></tr>
       <tr><td><code>server/tempo.js</code></td><td>Autocorrelation for any signal, music tempo from the mic envelope</td><td class="num">99</td></tr>
       <tr><td><code>server/schedule.js</code></td><td>DJ bookings: JSON file, approval, clashes, cancel tokens</td><td class="num">137</td></tr>
-      <tr><td><code>server/rooms.js</code>, <code>matcher.js</code>, <code>songs.js</code></td><td>Room registry, tempo pairing, 14-song stub catalog (65–174 BPM)</td><td class="num">181</td></tr>
+      <tr><td><code>server/rooms.js</code>, <code>matcher.js</code>, <code>songs.js</code></td><td>Room registry and its host, tempo pairing, 14-song stub catalog (65–174 BPM)</td><td class="num">181</td></tr>
       <tr class="grp"><td colspan="3">Tests and tooling</td></tr>
-      <tr><td><code>server/test/*.js</code></td><td>Rooms, DJ schedule, library and AI dancer, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
+      <tr><td><code>server/test/*.js</code></td><td>Rooms, DJ schedule, room music host and signalling, library and AI dancer, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
       <tr><td><code>server/lab/*</code></td><td>Dance lab: scenarios, waterfalls, harvesting, video ingestion</td><td class="num">~1,760</td></tr>
       <tr><td><code>bench.html</code></td><td>Dev-only guest-drawing benchmark (not in the build)</td><td class="num">120</td></tr>
       <tr><td><code>dance-lan.sh</code></td><td>Starts server and Vite, prints a phone QR code, opens the dance floor</td><td class="num">90</td></tr>
@@ -512,7 +525,8 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>
       <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>
       <tr><td>Branch</td><td><span class="pill p-ok">released</span></td><td class="sub"><code>dance-rooms</code> merged into <code>main</code> (lab included) and published to <code>release</code> on 15 Oct 2026.</td></tr>
-      <tr><td>Room as music selector, shared audio</td><td><span class="pill p-plan">planned</span></td><td class="sub">Music matched to each dancer's taste and everyone's tempo. Audio sharing between phones is deliberately deferred.</td></tr>
+      <tr><td>Room music: the host plays to the room (issue #4)</td><td><span class="pill p-ok">verified</span></td><td class="sub">18 Oct 2026, on branch <code>room-music</code>: 2 server tests cover host rules and signalling. Two headless Chrome tabs with fake cameras: the host shared a room and played a file, the listener received Opus stereo at 128 kb/s with a real signal level and saw "♫ tone.wav"; stop cleared it; the mic source worked too. Tab or computer sound and real phones are untested; there's no TURN server.</td></tr>
+      <tr><td>Room as music selector</td><td><span class="pill p-plan">planned</span></td><td class="sub">Music matched to each dancer's taste and everyone's tempo.</td></tr>
     </tbody>
   </table></div>
 </section>
