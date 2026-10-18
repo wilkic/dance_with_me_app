@@ -82,6 +82,11 @@ echo "  Accept the certificate warning once per phone, then Dance in room."
 echo
 echo "  Dance floor (this screen):  $FLOOR"
 echo
+echo "  DJ booking:  ${URL}schedule/"
+# The server makes its admin key on first start (server/data/admin-key).
+for _ in $(seq 1 20); do [ -s server/data/admin-key ] && break; sleep 0.25; done
+[ -s server/data/admin-key ] && echo "  Approve bookings (local admin link):  ${URL}schedule/#admin=$(cat server/data/admin-key)"
+echo
 echo "  logs: $LOGDIR/server.log  $LOGDIR/vite.log      Ctrl+C stops everything"
 echo "------------------------------------------------------------------------"
 tail -f "$LOGDIR/server.log" &
