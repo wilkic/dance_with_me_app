@@ -61,7 +61,7 @@ await test('admin sees live rooms; a non-admin cannot stop music or end rooms', 
   await quiet(admin, (m) => m.type === 'live-rooms');
   sendTo(admin, { type: 'admin', key: 'k' });
   const live = await next(admin, (m) => m.type === 'live-rooms');
-  assert.deepEqual(live.rooms.find((r) => r.name === 'loud'), { name: 'loud', dancers: 2, music: 'track.mp3', silenced: false });
+  assert.deepEqual(live.rooms.find((r) => r.name === 'loud'), { name: 'loud', dancers: 2, music: 'track.mp3', silenced: false, live: false });
   host.ws.close(); guest.ws.close(); admin.ws.close();
 });
 

@@ -78,6 +78,15 @@ export class Schedule {
     return b ? b.token : null;
   }
 
+  /**
+   * OBS stream key → room: the approved booking with this token, from an
+   * hour before its start (time to set up) until it ends. Null otherwise.
+   */
+  roomForToken(token, now = Date.now()) {
+    const b = this.bookings.find((x) => x.status === 'approved' && x.token === token && x.start - 60 * 60_000 <= now && endOf(x) > now);
+    return b ? b.room : null;
+  }
+
   #clash(booking) {
     return this.bookings.find((b) => b.status === 'approved' && b.id !== booking.id && b.room === booking.room && overlaps(b, booking));
   }

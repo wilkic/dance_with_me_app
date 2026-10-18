@@ -94,8 +94,12 @@ export class RoomMusic {
     this.#emit();
   }
 
-  /** Stop playing (host): close every connection, release the source. */
-  stop() {
+  /**
+   * Stop playing (host): close every connection, release the source.
+   * tell=false keeps quiet to the server (while OBS streams, 'off' would
+   * end that stream instead).
+   */
+  stop(tell = true) {
     const h = this.host;
     if (!h) return;
     this.host = null;
@@ -104,7 +108,7 @@ export class RoomMusic {
       this.send({ type: 'rtc', to: id, data: { bye: true } });
     }
     h.stop();
-    this.send({ type: 'room-music', on: false });
+    if (tell) this.send({ type: 'room-music', on: false });
     this.#emit();
   }
 

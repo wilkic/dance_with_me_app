@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0b12">
+<title>Dance With Me – DJ guide</title>
+<style>
+  :root { --bg:#0b0b12; --fg:#e9e9f1; --muted:#9a9ab0; --accent:#b48cff; --card:#15151f; --line:#26263a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:1.8rem; margin:0 0 4px; }
+  h2 { font-size:1.1rem; margin:28px 0 6px; color:var(--accent); }
+  h3 { font-size:1rem; margin:18px 0 4px; }
+  .muted { color:var(--muted); font-size:.9rem; }
+  .back { font-size:.85rem; text-decoration:none; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:16px 0; }
+  li { margin:4px 0; }
+  a { color:var(--accent); }
+  code { background:#1d1d2e; border-radius:6px; padding:1px 6px; font-size:.9em; }
+  ol li { margin:6px 0; }
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="../">&larr; Dance With Me</a>
+<h1>DJ guide</h1>
+<p class="muted">Playing a set to a room, from a phone, a laptop or OBS.</p>
+
+<div class="card">
+<strong>The short version</strong>
+<ul>
+  <li><a href="../schedule/">Book a room</a>. Once it's approved, your set is on the start page and dancers can join from 10 minutes before you start.</li>
+  <li>The person who shared the room plays the music. For a booked set that's you, in whatever browser you booked from.</li>
+  <li>Three ways to send sound: a file or the mic from a phone, your DJ software through a virtual cable from a laptop, or straight from OBS.</li>
+  <li>Put the dancers on your stream with the OBS overlay link.</li>
+  <li>Only play music you own or have the right to share. See the <a href="../terms/">terms</a>.</li>
+</ul>
+</div>
+
+<h2>1. Your room</h2>
+<p>Book a slot at <a href="../schedule/">/schedule</a>. The room name is your DJ name, simplified (DJ Funk → <code>dj-funk</code>). Keep that browser: it holds the key that makes you the room's host, and the page gives you your OBS links. You can also just tap <b>Share your room</b> in the app on any device, no booking needed; then only that device is the host.</p>
+
+<h2>2. Playing music</h2>
+<p>As the host, you get <b>♫ Play music</b> above the Guests slider (also in the ☰ menu). Pick a source:</p>
+<h3>From a phone</h3>
+<ul>
+  <li><b>A file on this device</b>: pick one or more tracks, they loop. You hear them too.</li>
+  <li><b>Microphone</b>: whatever the phone hears, with voice processing off so music comes through.</li>
+</ul>
+<h3>From a laptop: your DJ software</h3>
+<p>Rekordbox, Serato, Traktor, Mixxx and friends can send their output to a <em>virtual cable</em>, which the browser then sees as a microphone:</p>
+<ol>
+  <li>Install a virtual cable: <a href="https://vb-audio.com/Cable/">VB-Cable</a> (Windows) or <a href="https://existential.audio/blackhole/">BlackHole</a> (Mac).</li>
+  <li>In your DJ software, set the master output to the cable (and your headphones to your real sound card). To hear the master yourself on a Mac, make a multi-output device in Audio MIDI Setup.</li>
+  <li>In the app, on your laptop, <b>♫ Play music → Microphone</b>, pick the cable (<code>CABLE Output</code> / <code>BlackHole</code>) and press <b>Play from this input</b>.</li>
+</ol>
+<p>Or <b>Tab or computer sound</b> shares a browser tab or the whole computer's sound without any setup — handy for a quick test.</p>
+<h3>From OBS</h3>
+<p>If you already stream with OBS (version 30 or newer), it can send your mix to our server directly, and the server plays it to everyone in the room. Your upload stays the same no matter how many people dance.</p>
+<ol>
+  <li>Get your stream key: on <a href="../schedule/">/schedule</a>, under <b>Your bookings</b>, press <b>OBS stream setup</b> (it works from an hour before your set). Without a booking: share a room from a laptop, <b>♫ Play music → Stream from OBS</b>.</li>
+  <li>In OBS: <b>Settings → Stream</b>, Service <b>WHIP</b>. Server: the address from step 1. Bearer Token: your key.</li>
+  <li>OBS must send some video with it; it's dropped on arrival, so set <b>Settings → Output</b> to a small, cheap video (for example 640×360 at 300 kb/s) and audio to 160 kb/s or more.</li>
+  <li><b>Start Streaming</b>. The room hears you within a few seconds; your phone, if it's in the room, shows <b>■ Stop the OBS stream</b>.</li>
+</ol>
+<p>OBS streams to one place at a time. To stream to Twitch or YouTube at the same time, use a multi-output plugin, or send the mix through a virtual cable instead (above) and keep OBS for your usual stream.</p>
+
+<h2>3. Dancers on your stream (OBS overlay)</h2>
+<p>Add a <b>Browser Source</b> in OBS with your room's overlay link: on /schedule press <b>Copy OBS overlay link</b>, or use <code>https://dance.wilkinscoffee.be/floor.html?room=<i>your-room</i>&amp;overlay=1</code>. Set it to your canvas size (1920×1080 works). It shows everyone dancing in your room as glowing stick figures on a see-through background, with the room name, the crowd and its tempo in a corner. Add <code>&amp;caption=0</code> to hide the text. It has no sound of its own, so your mix isn't doubled.</p>
+
+<h2>Good to know</h2>
+<ul>
+  <li>Music goes to the dancers' phones with a delay of a second or so; it's fine for dancing, not for talking back and forth.</li>
+  <li>Anyone in the room can report it (<a href="mailto:Chris@wilkinscoffee.be">Chris@wilkinscoffee.be</a>); we can stop a room's music or close a room. Keep it to music you may share.</li>
+  <li>Problems? Email the address above with your room name and the time.</li>
+</ul>
+</main>
+</body>
+</html>

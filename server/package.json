@@ -6,10 +6,11 @@
   "description": "Dance-analysis server: ingests PoseFrames, forms opinions on dance style (tempo first), matches dancers via next songs.",
   "scripts": {
     "start": "node index.js",
-    "test": "node test/rooms.js && node test/schedule.js && node test/roomMusic.js && node test/adminRooms.js && node test/stats.js && node test/library.js && node test/synthetic.js",
+    "test": "node test/rooms.js && node test/schedule.js && node test/roomMusic.js && node test/adminRooms.js && node test/stats.js && node test/whip.js && node test/library.js && node test/synthetic.js",
     "lab": "node lab/run.js"
   },
   "dependencies": {
+    "werift": "^0.25.1",
     "ws": "^8.18.0"
   }
 }
