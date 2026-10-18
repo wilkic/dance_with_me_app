@@ -320,6 +320,7 @@ button.danger {
 .modal-box p { margin-bottom: 1rem; }
 .modal-buttons { display: flex; gap: 0.8rem; justify-content: center; }
 .status { min-height: 1.2em; }
+.status:empty { display: none; } /* online: nothing to say */
 .status.online { color: #7dffb0; }
 .status.offline { color: #f9a; }
 .room-line {
@@ -358,6 +359,8 @@ button.danger {
   text-align: left;
 }
 .upcoming h2 {
+  border-top: 1px solid #2a2a40; /* the dividing line under the booking link */
+  padding-top: 1rem;
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -408,7 +411,7 @@ button.danger {
 }
 .set-body h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: #889; margin: 0.5rem 0 0.15rem; }
 .set-body a, .book-link { color: #b9a6ff; }
-.book-link { display: inline-block; margin-top: 0.7rem; font-size: 0.85rem; }
+.book-link { display: block; width: fit-content; margin: 0 auto 1rem; font-size: 0.9rem; }
 
 .fine-print {
   max-width: 24rem;

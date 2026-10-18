@@ -31,6 +31,7 @@ h2 {
 .lede { color: #aab; }
 .hint { color: #778; font-size: 0.8rem; }
 .status { font-size: 0.8rem; color: #778; margin-top: 0.4rem; }
+.status:empty { display: none; }
 .status.online { color: #7dffb0; }
 .status.offline { color: #f9a; }
 

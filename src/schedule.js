@@ -72,8 +72,8 @@ if (!link) {
 } else {
   link.onStatus = (state) => {
     online = state === 'open';
-    if (online) setStatus('● dance server online', 'online');
-    else if (state === 'connecting') setStatus('connecting to the dance server…');
+    // Online is the normal case — only say something when it isn't.
+    if (online || state === 'connecting') setStatus('');
     else setStatus('○ dance server unreachable — try again in a moment', 'offline');
     $('btn-book').disabled = !online;
   };

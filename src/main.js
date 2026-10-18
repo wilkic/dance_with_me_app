@@ -103,11 +103,9 @@ function onServerStatus(state) {
   const el = $('server-status');
   el.classList.remove('online', 'offline');
   serverOnline = state === 'open';
-  if (state === 'open') {
-    el.textContent = '● dance server online';
-    el.classList.add('online');
-  } else if (state === 'connecting') {
-    el.textContent = 'connecting to dance server…';
+  // Online is the normal case — only say something when it isn't.
+  if (state === 'open' || state === 'connecting') {
+    el.textContent = '';
   } else {
     el.textContent = '○ dance server unreachable — no rooms or guests for now';
     el.classList.add('offline');

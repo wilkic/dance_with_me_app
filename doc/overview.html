@@ -203,7 +203,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <h2>What it does</h2>
   <p>The app never shows the camera feed. It photographs your empty room once, then uses the live camera only to find your joints. What you see is that photo with a stick figure moving where you are. That makes "removing" you perfect and free, with no segmentation and no 3D scan.</p>
   <div class="steps">
-    <div class="step"><h3>1. Pick room</h3><p>"Start a room" opens your own space. "Join a room" is the phone's own picker (a spinning wheel on iOS) listing open rooms, or a grey "None". Below the buttons, <b>Upcoming rooms</b> lists DJ sets booked at <code>/schedule</code>.</p></div>
+    <div class="step"><h3>1. Pick room</h3><p>"Start a room" opens your own space. "Join a room" is the phone's own picker (a spinning wheel on iOS) listing open rooms, or a grey "None". Below the buttons is a "DJs: book a room →" link, then a dividing line, then <b>Upcoming rooms</b>: DJ sets booked at <code>/schedule</code>. The start screen says nothing about the server while it's online; it only shows a line when the server can't be reached.</p></div>
     <div class="step"><h3>2. Capture the room</h3><p>Prop the phone up facing your dance space, step out of frame, tap the button. After a 3-second countdown the app averages several frames into a clean plate.</p></div>
     <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. The slider at the bottom sets how many guests (0–3) dance behind you at 90% opacity. Tapping anywhere else on the screen (or ☰) opens the menu, which changes time between guests, opacity, AI variation and sharing on the fly.</p></div>
   </div>
@@ -424,6 +424,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       </tbody>
     </table></div>
   </div>
+  <p>Locally, <code>dance-lan.sh</code> runs Vite, which redirects <code>/schedule</code> to <code>/schedule/</code> the same way GitHub Pages does. Without that redirect it would serve the start page.</p>
   <p>The client picks its server in this order: <code>?server=0</code> for off, <code>?server=1</code> for the dev proxy, <code>?server=wss://…</code> for a named host, then the build-time <code>VITE_SERVER_URL</code>, then the dev proxy under <code>npm run dev</code>. The server speaks plain <code>ws://</code>, so a deployed setup needs a TLS front such as Caddy or a Cloudflare tunnel.</p>
 </section>
 
