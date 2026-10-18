@@ -7,13 +7,24 @@
  * draws everyone as glowing stick figures grouped by room — the same
  * avatar the phones use. Music: a local audio file played through this
  * machine's speakers (the room speaker), picked from the top bar.
+ *
+ * Overlay mode — floor.html?room=NAME&overlay=1 — is for a DJ's stream:
+ * one room only, transparent background, no bar, a caption with the
+ * room's tempo and crowd, and no sound (OBS already has the DJ's mix).
+ * Paste the link into OBS as a Browser Source. ?caption=0 hides the text.
  */
 import { StickFigureAvatar } from './avatar/stickFigure.js';
 import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { deserializePoseFrame, KP, STRIDE } from './pose/poseFormat.js';
+import { normalizeRoomName } from './net/roomNames.js';
 
 const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const ONLY_ROOM = normalizeRoomName(params.get('room') || '') || null;
+const OVERLAY = params.get('overlay') === '1';
+const CAPTION = params.get('caption') !== '0';
+if (OVERLAY) document.body.classList.add('overlay');
 const canvas = $('floor');
 const ctx = canvas.getContext('2d');
 
@@ -38,6 +49,10 @@ let floorState = { dancers: [], rooms: [] };
 // ---- server link ---------------------------------------------------------
 const serverUrl = resolveServerUrl();
 $('join-url').textContent = `${location.host}`;
+if (ONLY_ROOM) {
+  document.title = `${ONLY_ROOM} — Dance With Me`;
+  $('empty').querySelector('.hint').textContent = `Dancers join the room “${ONLY_ROOM}” in the app.`;
+}
 if (!serverUrl) {
   $('status').textContent = 'no dance server configured';
 } else {
@@ -53,6 +68,7 @@ if (!serverUrl) {
     floorState = msg;
     const known = new Set();
     for (const d of msg.dancers) {
+      if (ONLY_ROOM && d.room !== ONLY_ROOM) continue;
       known.add(d.id);
       const e = entry(d.id);
       e.bpm = d.bpm;
@@ -62,6 +78,7 @@ if (!serverUrl) {
     for (const id of dancers.keys()) if (!known.has(id)) dancers.delete(id);
   };
   link.onReceive = (dancerId, buf) => {
+    if (ONLY_ROOM && !dancers.has(dancerId)) return; // not in this room (the floor message says who is)
     const e = entry(dancerId);
     e.pose = deserializePoseFrame(buf);
     e.lastSeen = performance.now();
@@ -124,6 +141,7 @@ function bands(now) {
   for (const r of floorState.rooms) {
     if (byRoom.has(r.name)) out.push({ ...r, members: byRoom.get(r.name) });
   }
+  if (ONLY_ROOM) return out;
   if (byRoom.has('')) out.push({ name: 'dancing solo', bpm: 0, song: null, members: byRoom.get('') });
   return out;
 }
@@ -137,8 +155,9 @@ function render() {
 
   const rows = bands(now);
   const total = rows.reduce((n, r) => n + r.members.length, 0);
-  $('empty').hidden = total > 0;
+  $('empty').hidden = total > 0 || OVERLAY;
   $('count').textContent = total ? `${total} dancing` : '';
+  if (OVERLAY) return renderOverlay(rows[0], W, H);
   if (!rows.length) return;
 
   const headerH = Math.max(22, H * 0.035);
@@ -177,6 +196,39 @@ function render() {
     });
     y += bandH;
   }
+}
+
+/**
+ * Overlay: the room's dancers in a row across the whole canvas, and a
+ * caption (room · crowd · tempo) bottom-left with a shadow so it reads on
+ * any stream. Everything else is transparent.
+ */
+function renderOverlay(row, W, H) {
+  const n = row?.members.length ?? 0;
+  if (n) {
+    const cellW = Math.min(W / n, H * CELL_ASPECT);
+    const cellH = cellW / CELL_ASPECT;
+    const x0 = (W - cellW * n) / 2;
+    row.members.forEach((m, i) => {
+      ctx.save();
+      ctx.translate(x0 + i * cellW, H - cellH);
+      ctx.beginPath(); ctx.rect(0, 0, cellW, cellH); ctx.clip();
+      m.avatar.render(ctx, m.pose, { width: cellW, height: cellH }, null);
+      ctx.restore();
+    });
+  }
+  if (!CAPTION) return;
+  const parts = [ONLY_ROOM ?? row?.name ?? '', n ? `${n} dancing` : 'waiting for dancers'];
+  if (row?.bpm) parts.push(`${Math.round(row.bpm)} bpm`);
+  const size = Math.max(14, Math.min(W, H) * 0.045);
+  ctx.save();
+  ctx.font = `600 ${size}px system-ui, sans-serif`;
+  ctx.textBaseline = 'bottom';
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur = size * 0.5;
+  ctx.fillStyle = 'rgba(240,238,255,0.92)';
+  ctx.fillText(parts.join('  ·  '), size * 0.8, H - size * 0.5);
+  ctx.restore();
 }
 
 /** Tempo tag floating above the dancer's head, same look as on the phones. */

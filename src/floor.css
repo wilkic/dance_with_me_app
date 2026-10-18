@@ -28,3 +28,7 @@ body { display: flex; flex-direction: column; }
 .empty p { margin: 0.3rem 0; font-size: 1.6rem; opacity: 0.85; }
 .empty .hint { font-size: 1rem; opacity: 0.6; }
 .empty[hidden] { display: none; }
+
+/* Overlay (OBS Browser Source): see-through, no bar, just the dancers. */
+body.overlay, html:has(body.overlay) { background: transparent; }
+body.overlay .bar { display: none; }

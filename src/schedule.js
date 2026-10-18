@@ -217,10 +217,17 @@ function render() {
   $('mine').classList.toggle('hidden', !mine.length);
   $('mine-list').replaceChildren(...mine.map((b) => item(b, {
     status: true,
-    actions: [button('danger', b.status === 'rejected' ? 'Remove' : 'Cancel', () => {
-      if (b.status !== 'rejected' && !confirm(`Cancel ${b.dj}’s set (${whenText(b)})?`)) return;
-      link?.sendJSON({ type: 'cancel', id: b.id, token: tokens[b.id] });
-    })],
+    actions: [
+      // Approved: the OBS overlay link for this room (see floor.js, /dj/).
+      ...(b.status === 'approved' ? [button('', 'Copy OBS overlay link', (e) => {
+        const url = new URL(`../floor.html?room=${encodeURIComponent(b.room)}&overlay=1`, location.href).href;
+        navigator.clipboard?.writeText(url).then(() => { e.target.textContent = 'Copied ✓'; }, () => prompt('Overlay link:', url));
+      })] : []),
+      button('danger', b.status === 'rejected' ? 'Remove' : 'Cancel', () => {
+        if (b.status !== 'rejected' && !confirm(`Cancel ${b.dj}’s set (${whenText(b)})?`)) return;
+        link?.sendJSON({ type: 'cancel', id: b.id, token: tokens[b.id] });
+      }),
+    ],
   })));
   const all = bookings.map((b) => item(b));
   if (!all.length) all.push(el('li', 'none', 'Nothing on the schedule yet — be the first.'));
