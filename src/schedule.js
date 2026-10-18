@@ -11,7 +11,7 @@
  *          'stop-music' / 'end-room' in, 'waiting' / 'live-rooms' out. `server/deploy/deploy.sh admin` prints the link.
  */
 import { WebSocketTransport } from './net/poseChannel.js';
-import { resolveServerUrl } from './net/serverUrl.js';
+import { resolveServerUrl, whipUrl } from './net/serverUrl.js';
 import { normalizeRoomName } from './net/roomNames.js';
 import { LENGTHS, phase, whenText, FINE_PRINT, visitMsg } from './net/schedule.js';
 
@@ -219,10 +219,18 @@ function render() {
     status: true,
     actions: [
       // Approved: the OBS overlay link for this room (see floor.js, /dj/).
-      ...(b.status === 'approved' ? [button('', 'Copy OBS overlay link', (e) => {
-        const url = new URL(`../floor.html?room=${encodeURIComponent(b.room)}&overlay=1`, location.href).href;
-        navigator.clipboard?.writeText(url).then(() => { e.target.textContent = 'Copied ✓'; }, () => prompt('Overlay link:', url));
-      })] : []),
+      ...(b.status === 'approved' ? [
+        button('', 'Copy OBS overlay link', (e) => {
+          const url = new URL(`../floor.html?room=${encodeURIComponent(b.room)}&overlay=1`, location.href).href;
+          navigator.clipboard?.writeText(url).then(() => { e.target.textContent = 'Copied ✓'; }, () => prompt('Overlay link:', url));
+        }),
+        // Stream the set from OBS (WHIP): server + this booking's token as the key.
+        button('', 'OBS stream setup', (e) => {
+          const text = `OBS → Settings → Stream → Service: WHIP\nServer: ${whipUrl(url) ?? '—'}\nBearer token: ${tokens[b.id]}\nWorks from an hour before your set until it ends. See ${new URL('../dj/', location.href).href}`;
+          navigator.clipboard?.writeText(text).then(() => { e.target.textContent = 'Copied ✓'; }, () => {});
+          alert(text);
+        }),
+      ] : []),
       button('danger', b.status === 'rejected' ? 'Remove' : 'Cancel', () => {
         if (b.status !== 'rejected' && !confirm(`Cancel ${b.dj}’s set (${whenText(b)})?`)) return;
         link?.sendJSON({ type: 'cancel', id: b.id, token: tokens[b.id] });

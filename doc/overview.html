@@ -196,7 +196,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 </header>
 
 <nav><div class="in">
-  <a href="#what">What it does</a><a href="#arch">Architecture</a><a href="#guests">Guests</a><a href="#tempo">Tempo</a><a href="#library">Library</a><a href="#sharing">Privacy</a><a href="#protocol">Protocol</a><a href="#code">Code map</a><a href="#lab">Lab</a><a href="#run">Run it</a><a href="#status">Status</a>
+  <a href="#what">What it does</a><a href="#arch">Architecture</a><a href="#guests">Guests</a><a href="#tempo">Tempo</a><a href="#library">Library</a><a href="#sharing">Privacy</a><a href="#dj">DJ tools</a><a href="#protocol">Protocol</a><a href="#code">Code map</a><a href="#lab">Lab</a><a href="#run">Run it</a><a href="#status">Status</a>
 </div></nav>
 
 <section id="what">
@@ -396,6 +396,17 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   </ul>
 </section>
 
+<section id="dj">
+  <h2>DJ tools</h2>
+  <p>Everything a DJ needs is on <code>/dj/</code> (<code>dj/index.html</code>), linked from the music sheet and <code>/schedule</code>:</p>
+  <ul>
+    <li><b>OBS overlay</b> (<code>src/floor.js</code>): <code>floor.html?room=NAME&amp;overlay=1</code> draws one room's dancers in a row on a transparent canvas with a caption (room · crowd · tempo; <code>&amp;caption=0</code> hides it), no bar, no sound. Pasted into OBS as a Browser Source. <code>/schedule</code> offers "Copy OBS overlay link" on approved bookings.</li>
+    <li><b>Sound input</b> (<code>listSoundInputs</code> in <code>src/net/roomMusic.js</code>): on a computer with several inputs, "Microphone" shows a picker, so a virtual cable (VB-Cable, BlackHole) carries the mix from DJ software. The choice is remembered (<code>dwm.musicInput</code>).</li>
+    <li><b>OBS streaming</b> (<code>server/whip.js</code>, library <code>werift</code>): OBS sends its mix over WHIP to <code>POST /whip</code> on the dance server (same port as the WebSocket; Caddy routes <code>/whip*</code>). The key is a booking token (from an hour before the set) or the host key of a room shared from a computer, as long as no booked DJ has the room. The server is ICE-lite with UDP ports <code>WHIP_PORTS</code> (default 50000-50999) and names <code>WHIP_PUBLIC_IP</code> in its answer; it takes the Opus audio, marks the video inactive, and forwards the packets to one connection per listener (everyone in the room but the host). Phones see <code>music: { label: 'Live from OBS', live: true }</code> and take the offer from <code>live:&lt;room&gt;</code> with the same listener code. The host's phone can only stop it; admins' Stop music / End room end it too; a stream with no audio for 20 s is dropped; OBS reconnecting replaces its old stream.</li>
+  </ul>
+  <p>Deploy: <code>deploy.sh</code> opens the UDP range in iptables, writes a systemd drop-in with the public IP, and rewrites the Caddyfile. Oracle's security list must allow the same UDP range (done once in the console).</p>
+</section>
+
 <section id="protocol">
   <h2>Wire protocol</h2>
   <p>One WebSocket per phone. Binary messages carry poses, text messages carry JSON. From the phone, a binary message is one PoseFrame. From the server, a binary message is a small envelope: one byte of id length, the sender id, then the PoseFrame.</p>
@@ -417,6 +428,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>cancel</code></td><td class="sub">cancel a booking with its token</td></tr>
         <tr><td><code>mine</code></td><td class="sub">follow my own requests: <code>{ id: token }</code></td></tr>
         <tr><td><code>admin</code> / <code>approve</code> / <code>reject</code></td><td class="sub">sign in with the admin key, decide on a request</td></tr>
+        <tr><td><code>rtc</code> to <code>live:&lt;room&gt;</code></td><td class="sub">a listener's answer/ICE for the server's own OBS stream (whip.js)</td></tr>
         <tr><td><code>visit</code></td><td class="sub">once per page load: which page, referring host, phone or not (counted, nothing kept about who)</td></tr>
         <tr><td><code>stop-music</code> / <code>end-room</code></td><td class="sub">admin: silence a room until it closes, or send everyone in it back to solo (the name stays closed for an hour)</td></tr>
       </tbody>
@@ -473,6 +485,8 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>server/library.js</code></td><td>Descriptors, cache, tempo/style/tag picking</td><td class="num">233</td></tr>
       <tr><td><code>server/style.js</code></td><td>Body space and the movement-style vector</td><td class="num">171</td></tr>
       <tr><td><code>server/beatDetector.js</code></td><td>Tempo and beats from motion alone</td><td class="num">159</td></tr>
+      <tr><td><code>server/whip.js</code></td><td>OBS streaming: WHIP ingest (werift), audio fan-out to each listener</td><td class="num">190</td></tr>
+      <tr><td><code>server/stats.js</code></td><td>Daily visit totals</td><td class="num">120</td></tr>
       <tr><td><code>server/recorder.js</code></td><td>Per-session JSONL plus optional media files</td><td class="num">116</td></tr>
       <tr><td><code>server/tempo.js</code></td><td>Autocorrelation for any signal, music tempo from the mic envelope</td><td class="num">99</td></tr>
       <tr><td><code>server/schedule.js</code></td><td>DJ bookings: JSON file, approval, clashes, cancel tokens</td><td class="num">137</td></tr>
@@ -511,7 +525,7 @@ cd server &amp;&amp; npm install &amp;&amp; npm start
 ./dance-lan.sh            # --no-browser skips the floor
 
 # tests and lab
-cd server &amp;&amp; npm test        # 40 checks: rooms, library, AI dancer, recorder, end-to-end
+cd server &amp;&amp; npm test        # 57 checks: rooms, library, AI dancer, recorder, end-to-end
 cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</code></pre>
   <p>Without a server the app still works offline, solo, with no guests and no tempo readout. The site on GitHub Pages builds from the <code>release</code> branch (publish with <code>git push origin main:release</code>; <code>server/deploy/deploy.sh</code> ships the same branch to the server VM) and is fully self-contained: the pose model and WebAssembly files are vendored.</p>
 </section>
@@ -534,6 +548,7 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>
       <tr><td>Branch</td><td><span class="pill p-ok">released</span></td><td class="sub"><code>dance-rooms</code> merged into <code>main</code> (lab included) and published to <code>release</code> on 15 Oct 2026.</td></tr>
       <tr><td>Room music: the host plays to the room (issue #4)</td><td><span class="pill p-ok">verified</span></td><td class="sub">18 Oct 2026, on branch <code>room-music</code>: 2 server tests cover host rules and signalling. Two headless Chrome tabs with fake cameras: the host shared a room and played a file, the listener received Opus stereo at 128 kb/s with a real signal level and saw "♫ tone.wav"; stop cleared it; the mic source worked too. Tab or computer sound and real phones are untested; there's no TURN server.</td></tr>
+      <tr><td>DJ tools: OBS overlay, sound-input picker, OBS streaming (issues #12–#14)</td><td><span class="pill p-ok">built</span></td><td class="sub">18 Oct 2026. Overlay: <code>floor.html?room=X&amp;overlay=1</code> drew one room's synthetic dancer on a transparent canvas with a caption, the solo dancer left out. Picker: headless Chrome listed its fake inputs, the chosen one became the room's music and was remembered. OBS: 3 server tests with a werift stand-in for OBS (host key and booking token, two listeners, host stop, DELETE); in headless Chrome a listener received the server's stream (75 packets, 0 lost) and the host's phone stopped it. Not yet tried with real OBS, nor on the VM (UDP ports).</td></tr>
       <tr><td>Room as music selector</td><td><span class="pill p-plan">planned</span></td><td class="sub">Music matched to each dancer's taste and everyone's tempo.</td></tr>
     </tbody>
   </table></div>

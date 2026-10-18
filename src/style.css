@@ -459,7 +459,13 @@ button.danger {
   min-width: 0;
 }
 .music-inputs option { color: #111; }
-.music-inputs .hint-dj { font-size: 0.75rem; color: #889; margin: 0; }
-.music-inputs .hint-dj a { color: #b9a6ff; }
+.music-inputs .hint-dj, .music-obs .hint-dj { font-size: 0.75rem; color: #889; margin: 0; }
+.music-inputs .hint-dj a, .music-obs .hint-dj a { color: #b9a6ff; }
+.music-obs { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem; color: #ccd; text-align: left; }
+.music-obs p { margin: 0; }
+.obs-row { display: grid; grid-template-columns: 6rem 1fr auto; gap: 0.4rem; align-items: center; font-size: 0.8rem; }
+.obs-row span { color: #889; }
+.obs-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #eee; font-size: 0.75rem; }
+.obs-row button { font-size: 0.75rem; padding: 0.25rem 0.7rem; }
 .music-box .hint:empty { display: none; }
 .music-box .hint { color: #f9a; }

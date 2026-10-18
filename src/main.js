@@ -9,7 +9,7 @@ import {
   WebSocketTransport,
 } from './net/poseChannel.js';
 import { randomRoomName } from './net/roomNames.js';
-import { resolveServerUrl } from './net/serverUrl.js';
+import { resolveServerUrl, whipUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
 import { SessionShare } from './share/sessionShare.js';
@@ -273,8 +273,13 @@ function onServerMessage(msg) {
     roomState.host = !!msg.members.find((m) => m.you)?.host;
     roomState.hostId = msg.host;
     roomState.music = msg.music;
+    // An OBS stream (whip.js) is the server playing to the room: listeners
+    // take it from 'live:<room>'; the host's own music gives way.
+    const live = msg.music?.live ? `live:${msg.name}` : null;
     if (!roomState.host) music.stop();
-    music.setHost(roomState.host ? null : msg.host);
+    else if (live) music.stop(false);
+    music.setHost(roomState.host ? null : (live ?? msg.host));
+    if (live && roomState.host) $('music-sheet').classList.add('hidden');
     music.syncMembers(msg.members.filter((m) => !m.you).map((m) => m.id));
     renderMusic();
     for (const m of msg.members) if (!m.you) peerBpm.set(m.id, m);
@@ -655,17 +660,18 @@ function leaveRoom() {
 function renderMusic() {
   const st = music.state;
   const btn = $('btn-music');
+  const live = !!roomState.music?.live;
   btn.classList.toggle('hidden', !roomState.host);
-  btn.classList.toggle('playing', st.hosting);
-  btn.textContent = st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music';
+  btn.classList.toggle('playing', st.hosting || live);
+  btn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music';
   // The ☰ menu has the same button (where the old "record audio" chip was).
   const menuBtn = $('menu-music');
   menuBtn.classList.toggle('hidden', !roomState.host);
-  menuBtn.classList.toggle('playing', st.hosting);
-  menuBtn.textContent = st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music to the room';
+  menuBtn.classList.toggle('playing', st.hosting || live);
+  menuBtn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music to the room';
   $('btn-hear').classList.toggle('hidden', !st.needsTap);
   const hud = $('hud-music');
-  const label = !roomState.host && roomState.music ? roomState.music.label : '';
+  const label = roomState.music && (!roomState.host || roomState.music.live) ? roomState.music.label : '';
   hud.textContent = label ? `♫ ${label}` : '';
   hud.classList.toggle('hidden', !label);
 }
@@ -673,7 +679,9 @@ function renderMusic() {
 function openMusicSheet() {
   $('music-msg').textContent = '';
   $('src-screen').classList.toggle('hidden', !canShareScreenAudio());
+  $('src-obs').classList.toggle('hidden', !canShareScreenAudio());
   $('music-inputs').classList.add('hidden');
+  $('music-obs').classList.add('hidden');
   $('music-sheet').classList.remove('hidden');
 }
 // "Microphone": on a computer with several inputs, let the host pick one
@@ -873,10 +881,22 @@ $('sel-join').addEventListener('change', (e) => {
   if (e.target.value) enter(e.target.value);
 });
 $('btn-music').addEventListener('click', () => {
-  if (music.state.hosting) music.stop();
+  if (roomState.music?.live) serverLink?.sendJSON({ type: 'room-music', on: false }); // ends the OBS stream
+  else if (music.state.hosting) music.stop();
   else openMusicSheet();
   renderMusic();
 });
+// Stream from OBS: show where OBS should send and this room's key (see /dj/).
+$('src-obs').addEventListener('click', () => {
+  const extra = joinExtra(roomState.name);
+  $('obs-server').textContent = whipUrl(serverUrl) ?? '—';
+  $('obs-key').textContent = extra.bookingToken ?? extra.hostKey;
+  $('music-obs').classList.remove('hidden');
+  $('music-msg').textContent = '';
+});
+for (const [btn, src] of [['obs-copy-server', 'obs-server'], ['obs-copy-key', 'obs-key']]) {
+  $(btn).addEventListener('click', (e) => navigator.clipboard?.writeText($(src).textContent).then(() => { e.target.textContent = 'Copied ✓'; }, () => {}));
+}
 $('menu-music').addEventListener('click', () => {
   $('menu-panel').classList.add('hidden');
   $('btn-music').click();

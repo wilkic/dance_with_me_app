@@ -24,6 +24,12 @@
  *   → { type: 'waiting', bookings }               admin only: requests to approve
  *   → { type: 'live-rooms', rooms }               admin only: open rooms, dancers, music
  *   → { type: 'stats', days, online }             admin only: daily visit totals (see stats.js)
+ *
+ * OBS streaming (whip.js): POST /whip on the same port takes a DJ's WebRTC
+ * offer; the server then plays that audio to the room itself ('room'
+ * messages carry music { label, live: true }, and 'rtc' offers come from
+ * 'live:<room>'). The room's host can't play anything else meanwhile and
+ * stopping from their phone ends the stream.
  *   → { type: 'music-stopped' }                   host: an admin stopped your room's music
  *   → { type: 'room-ended' }                      an admin closed your room (you're solo now)
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
@@ -65,6 +71,7 @@
  * the client; binary frames to the client are relay envelopes
  * ([id][PoseFrame], see src/net/envelope.js) carrying other dancers' poses.
  */
+import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -83,6 +90,7 @@ import { StyleWindow } from './style.js';
 import { EnvelopeTempo, tempoGap } from './tempo.js';
 import { Schedule } from './schedule.js';
 import { Stats } from './stats.js';
+import { WhipIngest } from './whip.js';
 import { normalizeRoomName } from '../src/net/roomNames.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -130,11 +138,17 @@ export function startServer({
   scheduleFile = process.env.SCHEDULE_FILE === '0' ? null : (process.env.SCHEDULE_FILE || join(HERE, 'data', 'schedule.json')),
   // Daily visit totals (stats.js). STATS_FILE=0 keeps them in memory only.
   statsFile = process.env.STATS_FILE === '0' ? null : (process.env.STATS_FILE || join(HERE, 'data', 'stats.json')),
+  // OBS streaming (whip.js): UDP port range, and the public IP behind 1:1 NAT.
+  whipPorts = process.env.WHIP_PORTS || '50000-50999',
+  whipPublicIp = process.env.WHIP_PUBLIC_IP || null,
   // Approves DJ bookings; null = read or create server/data/admin-key.
   adminKey = null,
   log = console.log,
 } = {}) {
-  const wss = new WebSocketServer({ port });
+  // One HTTP server: WebSocket upgrades for the app, plain HTTP for WHIP.
+  const http = createServer((req, res) => { if (!whip.handle(req, res)) { res.writeHead(404); res.end(); } });
+  const wss = new WebSocketServer({ server: http });
+  http.listen(port);
   const sessions = new Map(); // id -> session (see connection handler)
   const rooms = new Rooms();
   const matcher = new Matcher();
@@ -182,10 +196,31 @@ export function startServer({
   const hostOf = (name) => rooms.members(name).find((m) => isHost(m, name)) ?? null;
   const roomMusic = new Map(); // room name -> { label } while its host plays music
   const musicOf = (name) => {
+    const live = whip.liveIn(name);
+    if (live) return live; // an OBS stream beats anything the host's phone plays
     const m = roomMusic.get(name);
     if (m && !hostOf(name)) roomMusic.delete(name); // host left: the music stopped with them
     return roomMusic.get(name) ?? null;
   };
+  // DJs stream from OBS with a key: a booking token (the booked DJ) or the
+  // host key of a room shared from a computer (shown in its music sheet).
+  const whip = new WhipIngest({
+    log,
+    ports: whipPorts,
+    publicIp: whipPublicIp,
+    resolveKey: (key) => {
+      const booked = schedule.roomForToken(key);
+      if (booked) return silenced.has(booked) ? null : booked;
+      // A room's creator — unless a booked DJ has the room right now.
+      for (const name of rooms.names) if (rooms.hostKeys.get(name) === key) return silenced.has(name) || schedule.djToken(name) ? null : name;
+      return null;
+    },
+    send: (sid, msg) => { const s = sessions.get(sid); if (s) send(s, msg); },
+    onStart: (name) => { roomMusic.delete(name); stats.count('music'); if (rooms.members(name).length) { broadcastRoom(name); broadcastLiveRooms(); } },
+    onStop: (name) => { if (rooms.members(name).length) { broadcastRoom(name); broadcastLiveRooms(); } },
+  });
+  // Everyone in the room but its host listens to the live stream.
+  const syncLive = (name) => whip.sync(name, rooms.members(name).filter((m) => !isHost(m, name)).map((m) => m.id));
   const roomMates = (a, b) => !!a.room && a.room === b.room;
   // Acting on reports (see /terms/): an admin can silence a room (no music
   // until it closes) or end it (everyone back to solo; the name stays
@@ -221,6 +256,7 @@ export function startServer({
       dancers: rooms.members(name).length,
       music: musicOf(name)?.label ?? null,
       silenced: silenced.has(name),
+      live: !!whip.liveIn(name),
     })),
   });
   const broadcastLiveRooms = () => {
@@ -267,6 +303,7 @@ export function startServer({
   // Sent on every scan and immediately when membership changes.
   const broadcastRoom = (name) => {
     const members = rooms.members(name);
+    syncLive(name);
     if (!members.length) return;
     const profiles = members.map(profileOf);
     const bpm = roomTempo(profiles);
@@ -414,6 +451,11 @@ export function startServer({
         } else if (msg.type === 'room-music') {
           if (!isHost(s)) return;
           if (msg.on && silenced.has(s.room)) return send(s, { type: 'music-stopped' });
+          if (whip.liveIn(s.room)) {
+            // While OBS streams, the host's phone only has a stop button.
+            if (!msg.on) whip.end(s.room, 'host stopped it');
+            return;
+          }
           if (msg.on && !roomMusic.has(s.room)) stats.count('music');
           if (msg.on) roomMusic.set(s.room, { label: String(msg.label ?? '').slice(0, 80) });
           else roomMusic.delete(s.room);
@@ -421,10 +463,13 @@ export function startServer({
           broadcastRoom(s.room);
           broadcastLiveRooms();
         } else if (msg.type === 'rtc') {
-          // Signalling for room music: only between a room's host and its members.
+          if (JSON.stringify(msg.data ?? null).length > MAX_RTC_BYTES) return;
+          // To the live stream: the server itself is the other end.
+          if (typeof msg.to === 'string' && msg.to === `live:${s.room}`) return void whip.onSignal(s.room, id, msg.data);
+          // Signalling for room music: only between a room's host and its members (not while OBS streams).
+          if (whip.liveIn(s.room)) return;
           const to = sessions.get(String(msg.to));
           if (!to || !s.room || to.room !== s.room || !(isHost(s) || isHost(to)) || silenced.has(s.room)) return;
-          if (JSON.stringify(msg.data ?? null).length > MAX_RTC_BYTES) return;
           send(to, { type: 'rtc', from: id, data: msg.data });
         } else if (msg.type === 'leave') {
           const wasHost = isHost(s);
@@ -482,6 +527,7 @@ export function startServer({
           if (msg.type === 'stop-music') {
             silenced.add(name);
             roomMusic.delete(name);
+            whip.end(name, 'stopped by an admin');
             const host = hostOf(name);
             if (host) send(host, { type: 'music-stopped' });
             log(`♛ ${id} stopped the music in room ${name}`);
@@ -489,6 +535,7 @@ export function startServer({
           } else {
             endedRooms.set(name, Date.now() + ENDED_ROOM_MS);
             roomMusic.delete(name);
+            whip.end(name, 'room ended by an admin');
             for (const m of members) {
               rooms.leave(m);
               send(m, { type: 'room-ended' });
@@ -640,6 +687,8 @@ export function startServer({
 
   const close = () => {
     stats.save(Date.now(), true);
+    whip.close();
+    http.close();
     clearInterval(timer);
     clearInterval(aiTimer);
     for (const s of sessions.values()) s.ws.terminate();
@@ -647,7 +696,7 @@ export function startServer({
   };
   wss.on('close', () => { clearInterval(timer); clearInterval(aiTimer); });
 
-  return { wss, sessions, rooms, schedule, stats, library: lib, close, get port() { return wss.address().port; } };
+  return { wss, http, whip, sessions, rooms, schedule, stats, library: lib, close, get port() { return wss.address().port; } };
 }
 
 // Run directly: node index.js [port]
