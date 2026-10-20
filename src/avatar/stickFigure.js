@@ -3,6 +3,39 @@ import { BONES, KP, getKeypoint } from '../pose/poseFormat.js';
 
 const MIN_VISIBILITY = 0.4;
 
+/**
+ * Where a figure's spine is, in pixels: { neck, pelvis, torsoLen,
+ * hipsVisible }, or null when the shoulders aren't both in view (only
+ * legs: not drawn). Up close — a DJ at the decks, someone at a laptop —
+ * the hips are out of frame, so the spine is estimated from the
+ * shoulders: it runs down, square to the shoulder line, about 1.3
+ * shoulder widths (or twice nose-to-neck when turned sideways).
+ */
+export function bodyAnchors(frame, W, H) {
+  const ls = getKeypoint(frame, KP.LEFT_SHOULDER);
+  const rs = getKeypoint(frame, KP.RIGHT_SHOULDER);
+  if (ls.v <= MIN_VISIBILITY || rs.v <= MIN_VISIBILITY) return null;
+  const lh = getKeypoint(frame, KP.LEFT_HIP);
+  const rh = getKeypoint(frame, KP.RIGHT_HIP);
+  const neck = { x: ((ls.x + rs.x) / 2) * W, y: ((ls.y + rs.y) / 2) * H };
+  if (lh.v > MIN_VISIBILITY && rh.v > MIN_VISIBILITY) {
+    const pelvis = { x: ((lh.x + rh.x) / 2) * W, y: ((lh.y + rh.y) / 2) * H };
+    return { neck, pelvis, torsoLen: Math.hypot(neck.x - pelvis.x, neck.y - pelvis.y), hipsVisible: true };
+  }
+  const sx = (rs.x - ls.x) * W;
+  const sy = (rs.y - ls.y) * H;
+  const width = Math.hypot(sx, sy);
+  const nose = getKeypoint(frame, KP.NOSE);
+  const up = nose.v > MIN_VISIBILITY ? Math.hypot(nose.x * W - neck.x, nose.y * H - neck.y) : 0;
+  const torsoLen = Math.max(width * 1.3, up * 2, 1);
+  // Unit vector square to the shoulder line, pointing down the screen.
+  let dx = -sy / (width || 1);
+  let dy = sx / (width || 1);
+  if (width === 0) { dx = 0; dy = 1; }
+  if (dy < 0) { dx = -dx; dy = -dy; }
+  return { neck, pelvis: { x: neck.x + dx * torsoLen, y: neck.y + dy * torsoLen }, torsoLen, hipsVisible: false };
+}
+
 // Bones drawn identically in both torso styles (below the shoulders/hips).
 const LIMB_BONES = [
   [KP.LEFT_ELBOW, KP.LEFT_WRIST],
@@ -43,22 +76,11 @@ export class StickFigureAvatar extends Avatar {
 
   render(ctx, frame, viewport, beat = null) {
     const { width: W, height: H } = viewport;
-
-    const ls = getKeypoint(frame, KP.LEFT_SHOULDER);
-    const rs = getKeypoint(frame, KP.RIGHT_SHOULDER);
-    const lh = getKeypoint(frame, KP.LEFT_HIP);
-    const rh = getKeypoint(frame, KP.RIGHT_HIP);
-    const torsoVisible =
-      ls.v > MIN_VISIBILITY && rs.v > MIN_VISIBILITY &&
-      lh.v > MIN_VISIBILITY && rh.v > MIN_VISIBILITY;
-
-    // Synthetic joints shared by both styles.
-    const neck = { x: ((ls.x + rs.x) / 2) * W, y: ((ls.y + rs.y) / 2) * H };
-    const pelvis = { x: ((lh.x + rh.x) / 2) * W, y: ((lh.y + rh.y) / 2) * H };
-
-    // Apparent size: shoulder-to-hip span in pixels drives line width.
-    const torsoLen = Math.hypot(neck.x - pelvis.x, neck.y - pelvis.y);
-    const lineWidth = Math.max(3, torsoLen * 0.14);
+    const body = bodyAnchors(frame, W, H);
+    if (!body) return; // no shoulders in view (legs only): not a dancer we draw
+    const { neck, pelvis, torsoLen, hipsVisible } = body;
+    // Up close the body fills the frame: cap the line so it stays a stick.
+    const lineWidth = Math.max(3, Math.min(torsoLen * 0.14, hipsVisible ? Infinity : H * 0.03));
 
     // Beat pulse: brief glow swell right after each beat.
     let pulse = 0;
@@ -86,33 +108,32 @@ export class StickFigureAvatar extends Avatar {
     } else {
       // True stick: limbs attach directly to the spine endpoints.
       for (const [a, b] of LIMB_BONES) push(kpPx(a), kpPx(b));
-      if (torsoVisible) {
-        push(neck, kpPx(KP.LEFT_ELBOW));
-        push(neck, kpPx(KP.RIGHT_ELBOW));
+      push(neck, kpPx(KP.LEFT_ELBOW));
+      push(neck, kpPx(KP.RIGHT_ELBOW));
+      if (hipsVisible) {
         push(pelvis, kpPx(KP.LEFT_KNEE));
         push(pelvis, kpPx(KP.RIGHT_KNEE));
       }
     }
 
-    // Head: circle above the neck, positioned via ears/nose when visible.
+    // Spine (running off the bottom of the frame when the hips aren't in
+    // it), then the head: a circle above the neck, placed via ears/nose.
+    push(neck, pelvis);
     let head = null;
-    if (torsoVisible) {
-      push(neck, pelvis); // spine
-      const nose = getKeypoint(frame, KP.NOSE);
-      const le = getKeypoint(frame, KP.LEFT_EAR);
-      const re = getKeypoint(frame, KP.RIGHT_EAR);
-      let c;
-      if (le.v > MIN_VISIBILITY && re.v > MIN_VISIBILITY) {
-        c = { x: ((le.x + re.x) / 2) * W, y: ((le.y + re.y) / 2) * H };
-      } else if (nose.v > MIN_VISIBILITY) {
-        c = { x: nose.x * W, y: nose.y * H };
-      }
-      if (c) {
-        const r = Math.max(6, torsoLen * 0.28);
-        push(neck, { x: c.x, y: c.y + r * 0.7 }); // neck line up to the chin
-        head = new Path2D();
-        head.arc(c.x, c.y, r, 0, Math.PI * 2);
-      }
+    const nose = getKeypoint(frame, KP.NOSE);
+    const le = getKeypoint(frame, KP.LEFT_EAR);
+    const re = getKeypoint(frame, KP.RIGHT_EAR);
+    let c;
+    if (le.v > MIN_VISIBILITY && re.v > MIN_VISIBILITY) {
+      c = { x: ((le.x + re.x) / 2) * W, y: ((le.y + re.y) / 2) * H };
+    } else if (nose.v > MIN_VISIBILITY) {
+      c = { x: nose.x * W, y: nose.y * H };
+    }
+    if (c) {
+      const r = Math.max(6, torsoLen * 0.28);
+      push(neck, { x: c.x, y: c.y + r * 0.7 }); // neck line up to the chin
+      head = new Path2D();
+      head.arc(c.x, c.y, r, 0, Math.PI * 2);
     }
 
     ctx.save();
