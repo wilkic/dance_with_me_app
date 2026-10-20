@@ -684,7 +684,7 @@ function openMusicSheet() {
   $('music-obs').classList.add('hidden');
   $('music-sheet').classList.remove('hidden');
 }
-// "Microphone": on a computer with several inputs, let the host pick one
+// "Mic or line in": on a computer with several inputs, let the host pick one
 // (a DJ's virtual cable carries their mix); phones go straight to the mic.
 const INPUT_KEY = 'dwm.musicInput';
 async function pickMicOrInput() {
