@@ -12,8 +12,8 @@
  * aspect — cached in library/index.json so restarts are instant. Frames
  * are loaded lazily when a clip is actually danced.
  *
- * pick() is tempo-first, style-second, tag-third — the same order the
- * dancer matcher uses — and works with no music at all.
+ * pick() is tempo-first, then how busy the clip looks next to the dancer
+ * (energy), style, tag — and works with no music at all.
  */
 import { readdirSync, readFileSync, statSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
@@ -22,11 +22,13 @@ import { emptyPoseFrame } from '../src/pose/poseFormat.js';
 import { BeatDetector } from './beatDetector.js';
 import { styleOf, styleDistance } from './style.js';
 import { tempoGap } from './tempo.js';
+import { clipEnergy, playbackRate } from './aiDancer.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_DIRS = ['recordings_web', 'recordings', 'library/sessions'].map((d) => join(HERE, d));
 export const DEFAULT_CACHE = join(HERE, 'library', 'index.json');
 
+const DESC_VERSION = 2; // bump when descriptors gain fields: cached ones are redone
 const LANDSCAPE = 16 / 9;
 const PORTRAIT = 9 / 16;
 
@@ -116,6 +118,8 @@ export function describeRecording(path, { minFrames = 300 } = {}) {
     bpm, tempoConf, tempoSource,
     style: style.vector,
     coverage: style.coverage,
+    energy: clipEnergy(frames, aspect),
+    v: DESC_VERSION,
   };
 }
 
@@ -169,7 +173,7 @@ export class Library {
     let st;
     try { st = statSync(path); } catch { return false; }
     const prev = this.index[path];
-    if (!force && prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs) return false;
+    if (!force && prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && (!prev.desc || prev.desc.v === DESC_VERSION)) return false;
     let desc = null;
     try { desc = describeRecording(path, { minFrames: this.minFrames }); } catch (e) { this.log(`library: skip ${path}: ${e.message}`); }
     this.index[path] = { size: st.size, mtimeMs: st.mtimeMs, desc };
@@ -206,15 +210,23 @@ export class Library {
    * dancers don't pick the same clip every time. Any of bpm/style/tag may
    * be missing — a silent, still dancer still gets a dancer.
    */
-  pick({ bpm = 0, style = null, tag = null, exclude = new Set(), rng = Math.random } = {}) {
+  pick({ bpm = 0, energy = 0, style = null, tag = null, exclude = new Set(), rng = Math.random } = {}) {
     let best = null;
     let bestScore = Infinity;
     for (const c of this.clips) {
       if (exclude.has(c.name)) continue;
       const tGap = bpm > 0 && c.bpm > 0 ? tempoGap(bpm, c.bpm) : 0.25;
+      // Energy: how busy the clip will look at the rate it would play at,
+      // next to how busy the dancer is (log ratio: 2× too busy = 0.69).
+      // Clips that fit at natural speed beat ones slowed to half time.
+      let eGap = 0;
+      if (energy > 0 && c.energy > 0) {
+        const rate = playbackRate(bpm, c.bpm, { clipEnergy: c.energy, wantEnergy: energy });
+        eGap = Math.abs(Math.log((c.energy * rate) / energy)) + 0.5 * Math.abs(Math.log(rate));
+      }
       const sDist = style ? styleDistance(style, c.style) : 0.5;
       const tagBonus = tag && c.tag === tag ? -0.3 : 0;
-      const score = 3 * tGap + sDist + tagBonus + rng() * 0.25;
+      const score = 3 * tGap + 1.5 * eGap + sDist + tagBonus + rng() * 0.4;
       if (score < bestScore) { bestScore = score; best = c; }
     }
     return best;

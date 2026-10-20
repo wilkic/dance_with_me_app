@@ -84,9 +84,9 @@ import { Matcher } from './matcher.js';
 import { Rooms, roomTempo } from './rooms.js';
 import { pickSong } from './songs.js';
 import { Library } from './library.js';
-import { AiDancer } from './aiDancer.js';
+import { AiDancer, CALM_ENERGY } from './aiDancer.js';
 import { SessionRecorder } from './recorder.js';
-import { StyleWindow } from './style.js';
+import { StyleWindow, energyOf } from './style.js';
 import { EnvelopeTempo, tempoGap } from './tempo.js';
 import { Schedule } from './schedule.js';
 import { Stats } from './stats.js';
@@ -330,9 +330,11 @@ export function startServer({
     target: { bpm: targetBpm(s), music: s.music.state.bpm > 0 && s.music.state.confidence >= 0.3 },
   });
 
+  /** How busy an AI dancer should look: as busy as this dancer, calm until we know. */
+  const wantEnergy = (s) => energyOf(s.style.vector) || CALM_ENERGY;
   /** A library clip for this dancer: their beat, their style, not one already on their floor. */
   const pickClip = (s, exclude) => {
-    const desc = lib.pick({ bpm: targetBpm(s), style: s.style.vector, exclude });
+    const desc = lib.pick({ bpm: targetBpm(s), energy: wantEnergy(s), style: s.style.vector, exclude });
     return desc ? { desc, frames: lib.frames(desc) } : null;
   };
   const inUse = (s) => new Set(s.ai.flatMap((d) => [d.info.base, d.info.moves]).filter(Boolean));
@@ -351,7 +353,7 @@ export function startServer({
       const moves = pickClip(s, used);
       const d = new AiDancer({
         id: `ai-${slot}-${s.id}`, slot, base, moves,
-        targetBpm: targetBpm(s), aspect: s.aspect, variation: s.wants.variation, now: now(),
+        targetBpm: targetBpm(s), wantEnergy: wantEnergy(s), aspect: s.aspect, variation: s.wants.variation, now: now(),
       });
       if (!d.base) continue; // unusable clip — try another
       s.ai.push(d);
@@ -629,8 +631,9 @@ export function startServer({
     for (const s of sessions.values()) {
       if (!s.ai.length) continue;
       const bpm = targetBpm(s);
+      const energy = wantEnergy(s);
       for (const d of s.ai) {
-        d.setTarget({ bpm, aspect: s.aspect, variation: s.wants.variation });
+        d.setTarget({ bpm, energy, aspect: s.aspect, variation: s.wants.variation });
         const f = d.frame(t);
         if (f) sendFrame(s, d.id, serializePoseFrame(f));
       }
