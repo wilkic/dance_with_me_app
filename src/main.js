@@ -165,7 +165,7 @@ function renderJoinPicker() {
   placeholder.hidden = true;
   const opts = [placeholder];
   if (!lobby.length && !sets.length) {
-    const none = new Option('None', '');
+    const none = new Option('No rooms yet', '');
     none.disabled = true;
     opts.push(none);
   }
