@@ -11,7 +11,7 @@ import { emptyPoseFrame, KP, STRIDE, N_KEYPOINTS } from '../../src/pose/poseForm
 import { dominantTempo, EnvelopeTempo, foldTempo, tempoGap } from '../tempo.js';
 import { styleOf, styleDistance, toBodySpace, StyleWindow } from '../style.js';
 import { Library, describeRecording } from '../library.js';
-import { AiDancer, prepareClip, playbackRate } from '../aiDancer.js';
+import { AiDancer, prepareClip, playbackRate, clipEnergy } from '../aiDancer.js';
 import { SessionRecorder } from '../recorder.js';
 
 let failed = 0;
@@ -132,10 +132,16 @@ const lib = new Library({ dirs: [dir], cacheFile: cache }).load();
 test('Library loads usable clips, caches descriptors, picks by tempo/style/tag', () => {
   assert.deepEqual(lib.clips.map((c) => c.name).sort(), ['hiphop-web', 'lab-click', 'salsa-web']);
   assert.ok(existsSync(cache));
-  assert.equal(lib.pick({ bpm: 92 }).name, 'lab-click', 'nearest tempo');
-  assert.equal(lib.pick({ bpm: 75 }).name, 'salsa-web', '75 ≈ 150 half time');
-  assert.equal(lib.pick({ bpm: 100, tag: 'hiphop' }).name, 'hiphop-web');
-  assert.equal(lib.pick({ bpm: 100, exclude: new Set(['hiphop-web']) }).name, 'lab-click');
+  const r0 = () => 0; // no randomness: the scores alone decide
+  assert.equal(lib.pick({ bpm: 92, rng: r0 }).name, 'lab-click', 'nearest tempo');
+  assert.equal(lib.pick({ bpm: 75, rng: r0 }).name, 'salsa-web', '75 ≈ 150 half time');
+  assert.equal(lib.pick({ bpm: 100, tag: 'hiphop', rng: r0 }).name, 'hiphop-web');
+  assert.equal(lib.pick({ bpm: 100, exclude: new Set(['hiphop-web']), rng: r0 }).name, 'lab-click');
+  // Energy: a calm dancer gets the calmest clip of equal tempo fit.
+  const byEnergy = [...lib.clips].sort((a, b) => a.energy - b.energy);
+  assert.ok(byEnergy.every((c) => c.energy > 0), 'every clip rated');
+  assert.equal(lib.pick({ energy: byEnergy[0].energy, rng: r0 }).name, byEnergy[0].name, 'calm dancer → calm clip');
+  assert.equal(lib.pick({ energy: byEnergy[2].energy, rng: r0 }).name, byEnergy[2].name, 'busy dancer → busy clip');
   const armsy = styleOf(clip(6, { armSwing: 0.9 })).vector;
   assert.equal(lib.pick({ style: armsy, rng: () => 0 }).name, 'hiphop-web', 'style only, no tempo');
   assert.ok(lib.pick({}), 'nothing known → still a dancer');
@@ -157,6 +163,16 @@ test('playbackRate lands a clip on the target tempo within √2', () => {
   assert.ok(Math.abs(playbackRate(60, 100) - 1.2) < 1e-9, 'half time = same groove');
   assert.ok(Math.abs(playbackRate(100, 150) - 4 / 3) < 1e-9, '100 vs 150: play 75-ish at 4/3 rather than 2/3');
   assert.equal(playbackRate(0, 100), 1);
+  assert.ok(Math.abs(playbackRate(120, 100, { clipEnergy: 3, wantEnergy: 0.8 }) - 0.6) < 1e-9, 'a busy clip next to a calm dancer: half time');
+  assert.ok(Math.abs(playbackRate(120, 100, { clipEnergy: 0.8, wantEnergy: 0.8 }) - 1.2) < 1e-9, 'matching energy: normal time');
+});
+
+test('clipEnergy: busier clips rate higher; walking does not count', () => {
+  const calm = clipEnergy(clip(10, { armSwing: 0.15, legSwing: 0.05 }), 1);
+  const busy = clipEnergy(clip(10, { armSwing: 0.8, legSwing: 0.5 }), 1);
+  const walking = clipEnergy(clip(10, { armSwing: 0.15, legSwing: 0.05, walk: 0.3 }), 1);
+  assert.ok(calm > 0 && busy > 2 * calm, `calm ${calm}, busy ${busy}`);
+  assert.ok(Math.abs(walking - calm) < 0.3 * calm, `walking ${walking} vs calm ${calm}`);
 });
 
 test('prepareClip removes walking, keeps the body, loops near the start pose', () => {

@@ -128,6 +128,18 @@ export function styleOf(frames, aspect = 1) {
   return { vector: vec.map((v) => +v.toFixed(4)), coverage: +coverage.toFixed(3), frames: body.length };
 }
 
+/**
+ * How much a dancer moves, from a style vector: mean limb speed (torso
+ * lengths per second), arms and legs counted equally, arms alone when no
+ * legs are seen. Same mix as clipEnergy() in aiDancer.js.
+ */
+export function energyOf(vector) {
+  if (!vector) return 0;
+  const arms = vector[4] ?? 0;
+  const legs = vector[5] ?? 0;
+  return legs > 0 ? (arms + legs) / 2 : arms;
+}
+
 /** Distance between two style vectors (log-compressed so calm vs wild is fair). */
 export function styleDistance(a, b) {
   if (!a || !b) return 1;

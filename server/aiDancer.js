@@ -26,6 +26,9 @@ const MAX_REACH = 3.5;      // torso lengths from the pelvis a joint can honestl
 const MAX_JUMP = 1.2;       // torso lengths a joint may move between consecutive frames
 const SMOOTH = 0.55;        // output EMA weight on the newest sample (web footage jitters)
 const KEY_JOINTS = [...PARTS.arms, ...PARTS.legs, KP.NOSE];
+const MIN_RATE = 0.5;       // half time: the same groove, half as busy
+const MAX_RATE = 1.6;
+export const CALM_ENERGY = 0.8; // limb speed to aim for before we've seen the dancer move (torso lengths/s)
 
 /**
  * Prepare a clip for replay: body-space frames with a slowly following
@@ -134,13 +137,59 @@ function sampleClip(clip, tau, into) {
 
 const pose = () => ({ X: new Float32Array(N_KEYPOINTS), Y: new Float32Array(N_KEYPOINTS), V: new Float32Array(N_KEYPOINTS) });
 
-/** Playback rate that lands a clip's tempo on the target, within ~√2. */
-export function playbackRate(targetBpm, clipBpm) {
+/**
+ * Playback rate that lands a clip's tempo on the target, within ~√2.
+ * Given how much the clip moves (clipEnergy, see clipEnergy()) and how
+ * much the dancer moves (wantEnergy), half or double time is taken when
+ * it brings the AI dancer's limb speed closer to the dancer's own — a
+ * web pro hitting every eighth note reads as frantic next to someone
+ * swaying on the beat, but at half time it's the same groove.
+ */
+export function playbackRate(targetBpm, clipBpm, { clipEnergy = 0, wantEnergy = 0 } = {}) {
   if (!(targetBpm > 0) || !(clipBpm > 0)) return 1;
   let r = foldTempo(targetBpm) / foldTempo(clipBpm);
   if (r > Math.SQRT2) r /= 2;
   if (r < Math.SQRT1_2) r *= 2;
-  return Math.min(1.6, Math.max(0.6, r));
+  if (clipEnergy > 0 && wantEnergy > 0) {
+    const cost = (c) => Math.abs(Math.log((clipEnergy * c) / wantEnergy)) + 0.5 * Math.abs(Math.log(c));
+    let best = r;
+    for (const c of [r / 2, r * 2]) if (c >= MIN_RATE && c <= MAX_RATE && cost(c) < cost(best)) best = c;
+    r = best;
+  }
+  return Math.min(MAX_RATE, Math.max(MIN_RATE, r));
+}
+
+/**
+ * How much a clip moves as an AI dancer shows it: mean speed of the
+ * wrists and elbows, and of the ankles and knees, in torso lengths per
+ * second at playback rate 1, after the same clean-up and smoothing as
+ * frame(). Arms and legs count equally (arms alone when no legs are
+ * seen), the same mix as energyOf() for a live dancer.
+ */
+export function clipEnergy(frames, aspect = 1) {
+  const p = prepareClip(frames, { aspect });
+  if (!p) return 0;
+  const X = new Float32Array(N_KEYPOINTS);
+  const Y = new Float32Array(N_KEYPOINTS);
+  const acc = { arms: [0, 0], legs: [0, 0] };
+  let prev = null;
+  for (const f of p.frames) {
+    if (!prev) { X.set(f.X); Y.set(f.Y); prev = f; continue; }
+    const dt = (f.t - prev.t) / 1000;
+    prev = f;
+    if (dt <= 0 || dt > 0.5) { X.set(f.X); Y.set(f.Y); continue; }
+    for (const part of ['arms', 'legs']) {
+      for (const j of PARTS[part]) {
+        const nx = X[j] + SMOOTH * (f.X[j] - X[j]);
+        const ny = Y[j] + SMOOTH * (f.Y[j] - Y[j]);
+        if (f.V[j] >= MIN_VIS) { acc[part][0] += Math.hypot(nx - X[j], ny - Y[j]) / dt; acc[part][1]++; }
+        X[j] = nx; Y[j] = ny;
+      }
+    }
+  }
+  const arms = acc.arms[1] ? acc.arms[0] / acc.arms[1] : 0;
+  const legs = acc.legs[1] ? acc.legs[0] / acc.legs[1] : 0;
+  return +(legs > 0 ? (arms + legs) / 2 : arms).toFixed(3);
 }
 
 export class AiDancer {
@@ -148,13 +197,14 @@ export class AiDancer {
    * @param base   { desc, frames }  the person being replayed
    * @param moves  { desc, frames }  where borrowed moves come from (may be null)
    */
-  constructor({ id, slot = 1, base, moves = null, targetBpm = 0, aspect = 9 / 16, variation = 0.5, rng = Math.random, now = 0 }) {
+  constructor({ id, slot = 1, base, moves = null, targetBpm = 0, wantEnergy = CALM_ENERGY, aspect = 9 / 16, variation = 0.5, rng = Math.random, now = 0 }) {
     this.id = id;
     this.slot = slot;
     this.rng = rng;
     this.aspect = aspect;
     this.variation = variation;
     this.targetBpm = targetBpm;
+    this.wantEnergy = wantEnergy;
     this.bornAt = now;
     this.base = null;
     this.prev = null;          // previous base during a crossfade
@@ -175,11 +225,15 @@ export class AiDancer {
     return { desc: clip.desc, ...prepared, tau: prepared.loopMs * this.rng(), rate: 1 };
   }
 
+  #rateOf(clip) {
+    return playbackRate(this.targetBpm, clip.desc.bpm, { clipEnergy: clip.desc.energy, wantEnergy: this.wantEnergy });
+  }
+
   /** Swap the person being replayed (crossfades over SWITCH_MS). */
   setBase(clip, now = 0) {
     const p = this.#prep(clip);
     if (!p) return false;
-    p.rate = playbackRate(this.targetBpm, p.desc.bpm);
+    p.rate = this.#rateOf(p);
     if (this.base) { this.prev = this.base; this.switchAt = now; }
     this.base = p;
     this.baseSince = now;
@@ -189,19 +243,19 @@ export class AiDancer {
   setMoves(clip) {
     const p = this.#prep(clip);
     if (!p) return false;
-    p.rate = playbackRate(this.targetBpm, p.desc.bpm);
+    p.rate = this.#rateOf(p);
     this.moves = p;
     return true;
   }
 
-  /** Live target: the dancer's tempo and the phone's aspect ratio. */
-  setTarget({ bpm, aspect, variation } = {}) {
+  /** Live target: the dancer's tempo and limb speed, and the phone's aspect ratio. */
+  setTarget({ bpm, energy, aspect, variation } = {}) {
     if (aspect > 0) this.aspect = aspect;
     if (variation !== undefined) this.variation = Math.min(1, Math.max(0, variation));
-    if (bpm !== undefined && Math.abs((bpm || 0) - this.targetBpm) > 1) {
-      this.targetBpm = bpm || 0;
-      for (const c of [this.base, this.prev, this.moves]) if (c) c.rate = playbackRate(this.targetBpm, c.desc.bpm);
-    }
+    let changed = false;
+    if (bpm !== undefined && Math.abs((bpm || 0) - this.targetBpm) > 1) { this.targetBpm = bpm || 0; changed = true; }
+    if (energy > 0 && Math.abs(Math.log(energy / this.wantEnergy)) > 0.1) { this.wantEnergy = energy; changed = true; }
+    if (changed) for (const c of [this.base, this.prev, this.moves]) if (c) c.rate = this.#rateOf(c);
   }
 
   get info() {
@@ -213,6 +267,7 @@ export class AiDancer {
       title: this.base?.desc.title ?? null,
       bpm: this.base?.desc.bpm ?? 0,
       rate: +(this.base?.rate ?? 1).toFixed(2),
+      energy: this.base?.desc.energy ?? 0,
       base: this.base?.desc.name ?? null,
       moves: this.moves?.desc.name ?? null,
       borrowing: [this.phrase.arms && 'arms', this.phrase.legs && 'legs'].filter(Boolean),

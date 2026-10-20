@@ -320,9 +320,9 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <h3>How an AI dancer is made</h3>
   <p>No choreography is generated. An AI dancer is a real person's recorded dance, retimed to your beat, with moves borrowed from another dancer of similar tempo and style.</p>
   <ol class="flow">
-    <li><b>Pick a base clip</b>Tempo first, style second, tag third. It skips clips already on your floor. It needs none of the three to be known.</li>
+    <li><b>Pick a base clip</b>Tempo first, then energy, style, tag. <b>Energy</b> is how busy a dancer looks: mean limb speed in torso lengths per second (each clip rated as the AI dancer shows it, <code>clipEnergy</code>; you from your last 8 s, <code>energyOf</code>). Clips that match yours at natural speed win; until you've moved, it aims for a calm 0.8. Web dancers move about 3× more than people dancing at home, which made AI dancers look frantic (issue #17). It skips clips already on your floor and needs none of these to be known.</li>
     <li><b>Move into body space</b>Pelvis-centred, measured in torso lengths, locomotion and camera pans removed. A landscape clip from far away lands at the same size on a portrait phone.</li>
-    <li><b>Retime</b>Playback rate between 0.6× and 1.6× so the clip's tempo lands on yours. Half and double time count as the same groove.</li>
+    <li><b>Retime</b>Playback rate between 0.5× and 1.6× so the clip's tempo lands on yours. Half and double time count as the same groove, and the one that brings the clip's energy closer to yours is taken.</li>
     <li><b>Borrow moves</b>For a phrase at a time, arms or legs come from a second clip and hang off the base dancer's own shoulders or hips. Limbs swing a little further. The AI variation slider sets how far.</li>
     <li><b>Smooth and place</b>Hips at 58% of the frame height, torso about 17% of it. Joint jumps are clamped and the output is smoothed because web footage jitters.</li>
     <li><b>Stream</b>About 30 fps to your phone as ordinary PoseFrames. The beat comes in as a number, so it works for a silent dancer. Music makes the number better.</li>
