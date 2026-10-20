@@ -80,7 +80,9 @@ export class BeatDetector {
   #motionEnergy(frame, prev, dt) {
     const ls = getKeypoint(frame, KP.LEFT_SHOULDER);
     const lh = getKeypoint(frame, KP.LEFT_HIP);
-    const torso = Math.hypot(ls.x - lh.x, ls.y - lh.y) || 0.25;
+    // Hips out of frame (close to the camera): size from the shoulders.
+    const rs = getKeypoint(frame, KP.RIGHT_SHOULDER);
+    const torso = (lh.v >= 0.4 ? Math.hypot(ls.x - lh.x, ls.y - lh.y) : 1.3 * Math.hypot(ls.x - rs.x, ls.y - rs.y)) || 0.25;
 
     let sum = 0;
     let wsum = 0;

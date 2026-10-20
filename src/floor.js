@@ -13,7 +13,7 @@
  * room's tempo and crowd, and no sound (OBS already has the DJ's mix).
  * Paste the link into OBS as a Browser Source. ?caption=0 hides the text.
  */
-import { StickFigureAvatar } from './avatar/stickFigure.js';
+import { StickFigureAvatar, bodyAnchors } from './avatar/stickFigure.js';
 import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { deserializePoseFrame, KP, STRIDE } from './pose/poseFormat.js';
@@ -237,9 +237,9 @@ function drawBpmLabel(pose, bpm, color, W, H) {
   const nose = at(KP.NOSE);
   if (nose.v < 0.4) return;
   // Clear the head circle: the avatar draws it with radius 0.28 × torso length.
-  const ls = at(KP.LEFT_SHOULDER), rs = at(KP.RIGHT_SHOULDER), lh = at(KP.LEFT_HIP), rh = at(KP.RIGHT_HIP);
-  const torsoLen = Math.hypot((ls.x + rs.x - lh.x - rh.x) / 2, (ls.y + rs.y - lh.y - rh.y) / 2);
-  const r = Math.max(6, torsoLen * 0.28);
+  const body = bodyAnchors(pose, W, H);
+  if (!body) return;
+  const r = Math.max(6, body.torsoLen * 0.28);
   const size = Math.max(14, H * 0.05);
   ctx.save();
   ctx.font = `700 ${size}px system-ui, sans-serif`;
