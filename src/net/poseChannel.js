@@ -47,8 +47,8 @@ export class LoopbackTransport {
 
 /**
  * WebSocketTransport: streams serialized PoseFrames to the dance server
- * (binary frames) and surfaces its JSON opinions — profile, room, match,
- * unmatch — via onMessage. Binary frames from the server are relay
+ * (binary frames) and surfaces its JSON opinions — profile, room, guests
+ * … — via onMessage. Binary frames from the server are relay
  * envelopes carrying room-mates' PoseFrames; they arrive through the
  * standard onReceive path and render as guest avatars. Reconnects
  * automatically and re-joins the current room on every (re)connect.

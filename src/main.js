@@ -122,7 +122,6 @@ const music = new RoomMusic({
 if (urlParams.has('debug')) window.dwm = { music, roomState }; // console poking / browser tests
 let lobby = []; // open rooms from the server: [{ name, dancers, bpm }]
 let bookings = []; // DJ sets booked ahead (see net/schedule.js), soonest first
-const peerBpm = new Map(); // dancerId -> { bpm, confidence } (room-mates + people guests)
 const peopleGuests = new Set(); // dancer ids the server brought into my space
 const aiInfo = new Map(); // ai dancer id -> { tag, title, bpm, base, moves, borrowing }
 let libraryClips = null;
@@ -287,13 +286,12 @@ function onServerMessage(msg) {
     if (live && roomState.host) $('music-sheet').classList.add('hidden');
     music.syncMembers(msg.members.filter((m) => !m.you).map((m) => m.id));
     renderMusic();
-    for (const m of msg.members) if (!m.you) peerBpm.set(m.id, m);
     pruneReal();
     renderRoomLine();
     planGuests(); // room-mates take guest seats
   } else if (msg.type === 'guests') {
     peopleGuests.clear();
-    for (const p of msg.people) { peopleGuests.add(p.id); peerBpm.set(p.id, p); }
+    for (const p of msg.people) peopleGuests.add(p.id);
     aiInfo.clear();
     for (const a of msg.ai) aiInfo.set(a.id, a);
     libraryClips = msg.library?.clips ?? null;
@@ -301,11 +299,6 @@ function onServerMessage(msg) {
     pruneReal();
     renderGuestLine();
     planGuests();
-  } else if (msg.type === 'match') {
-    $('hud-match').textContent =
-      `♪ ${msg.song.title} (${Math.round(msg.song.bpm)} bpm) with ${msg.partner}`;
-  } else if (msg.type === 'unmatch') {
-    $('hud-match').textContent = '';
   } else if (msg.type === 'rtc') {
     music.onSignal(msg.from, msg.data).catch((err) => console.warn('room music:', err));
   } else if (msg.type === 'music-stopped') {
@@ -327,7 +320,6 @@ function pruneReal() {
   const present = new Set(peopleGuests);
   for (const m of roomState.members) present.add(m.id);
   for (const [id, g] of guests) if (g.kind === 'peer' && !present.has(id)) guests.delete(id);
-  for (const id of peerBpm.keys()) if (!present.has(id)) peerBpm.delete(id);
 }
 
 /** Top of the dance screen: the music's tempo once we hear it, and yours once it locks. */
@@ -538,12 +530,7 @@ function loop() {
     const fade = Math.min(1, (now - g.bornAt) / GUEST_FADE_MS[g.kind]);
     g.avatar.alpha = fade * guestCfg.opacity;
     g.avatar.render(ctx, g.pose, { width: W, height: H });
-    if (g.kind === 'peer') {
-      const p = peerBpm.get(id);
-      if (p && p.bpm > 0 && p.confidence > 0.25) {
-        drawLabel(g.pose, `${Math.round(p.bpm)}`, g.avatar.color, g.avatar.alpha, W, H);
-      }
-    } else if (g.kind === 'ai') {
+    if (g.kind === 'ai') {
       const a = aiInfo.get(id);
       if (guestCfg.styleLabels && a?.tag) drawLabel(g.pose, a.tag, g.avatar.color, g.avatar.alpha, W, H);
     }
@@ -552,7 +539,6 @@ function loop() {
 
   if (lastPose) {
     avatar.render(ctx, lastPose, { width: W, height: H });
-    if (roomState.name && myBpm) drawLabel(lastPose, `${Math.round(myBpm)}`, avatar.color, 1, W, H);
     $('hud-status').textContent = '';
   } else {
     $('hud-status').textContent = 'step into frame…';
@@ -773,7 +759,6 @@ function exitToStart() {
   fpsEma = 0;
   lastFrameT = 0;
   renderBpm();
-  $('hud-match').textContent = '';
   ctx.clearRect(0, 0, stage.width, stage.height);
   showScreen('start');
   planGuests(); // mode is 'start' → the server clears our guests

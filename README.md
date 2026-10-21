@@ -33,9 +33,9 @@ CDN on first load, so the phone needs internet the first time.
    averages several frames into a "clean plate" of your empty room.
 3. **Dance** — step back in. You're gone from the screen; a stick figure
    dances in your room instead. Room-mates show up as stick figures behind
-   you, each in their own color, each tagged with their BPM. The HUD shows
-   FPS, your motion-derived BPM, the room line (name · how many dancing ·
-   room BPM) and song matches.
+   you, each in their own color. The HUD shows FPS, your BPM (and the
+   music's once it's heard), and the room line (how many dancing · room
+   BPM). No song titles: we can't know what's playing.
 
 Controls: **Ghost** toggles between the clean room (user removed) and the
 live feed (debugging). **Rescan** recaptures the room. **Flip** switches
@@ -96,8 +96,8 @@ and `library/sessions/`; each clip gets a descriptor — tempo (metronome
 label > music tempo > motion tempo), a **style vector** (per body part,
 how far it travels and how fast, in torso lengths — `server/style.js`),
 pose coverage, source aspect — cached in `library/index.json`. Picking a
-clip is tempo-first, style-second, tag-third, the same order as the
-dancer matcher, and needs none of them to be known.
+clip is tempo-first, style-second, tag-third, and needs none of them to
+be known.
 
 ## Architecture
 
@@ -123,9 +123,7 @@ server/                dance-analysis server (Node, separate package.json)
   library.js           the dance library: descriptors, cache, tempo/style picking
   aiDancer.js          AI dancer: retimed replay + borrowed moves, in body space
   recorder.js          per-session recording into library/sessions/
-  matcher.js           tempo-first pairing, half/double-tempo tolerant
-  songs.js             stub BPM-labeled catalog for "next song" pairing
-  test/synthetic.js    end-to-end: 2 synthetic dancers → profiled + matched
+  test/synthetic.js    end-to-end: 2 synthetic dancers → profiled, relayed, room tempo
   lab/                 dance lab: BPM calibration + rhythm research tools
     run.js             scenario suite ("dance unit tests") + recording analysis
     synthDancer.js     synthetic dancer with per-body-part oscillators
@@ -152,9 +150,8 @@ shared yet — play whatever you like.
 
 **Rhythm analysis:** the client streams raw PoseFrames (the same binary
 format used everywhere) and the server runs a per-dancer BeatDetector,
-forms an opinion of each dancer's tempo, and pairs tempo-compatible
-dancers within a room by proposing a shared "next song" — the music does
-the syncing, not phase alignment. Without a server the app is fully
+and forms an opinion of each dancer's tempo and the room's (the room's
+music when it plays, else its dancers' movement). Without a server the app is fully
 offline, solo only (no BPM shown).
 
 ```bash

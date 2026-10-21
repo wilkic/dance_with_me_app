@@ -4,7 +4,7 @@
  *
  * No choreography is generated. The base clip is someone's actual
  * dancing, retimed so its tempo lands on yours (half/double time
- * allowed, as in the matcher). Variation comes from a second clip — the
+ * allowed, see foldTempo in tempo.js). Variation comes from a second clip — the
  * "moves" clip — whose arms or legs are grafted onto the base for a
  * phrase at a time, plus a little extra swing on the limbs. Everything is
  * done in body space (style.js), so a clip filmed in landscape from far

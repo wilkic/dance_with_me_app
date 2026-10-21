@@ -128,14 +128,14 @@ await test('room music: one listener measures it, the whole room (and the lobby)
   assert.ok(Math.abs((b.last.rooms?.rooms.find((r) => r.name === 'beat')?.bpm ?? 0) - 128) < 3, 'lobby');
 });
 
-await test('room music: pairing uses the music, not movement at clashing tempi', async () => {
-  // 100 and 140 are no match on their own; both dance to the room's 128.
+await test('room music: dancers at clashing tempi, the room keeps the music\'s tempo', async () => {
   dance(a, 100, 9000);
   dance(b, 140, 9000);
   clicks(128, 2, { to: a });
-  assert.ok(await until(() => a.last.match && b.last.match), `not matched: ${JSON.stringify({ a: a.last.profile, b: b.last.profile, g: server.sessions.get(a.id)?.lastFrameAt })}`);
-  assert.equal(a.last.match.partner, b.id);
-  assert.ok(Math.abs(a.last.match.bpm - 128) < 3, `matched at ${a.last.match.bpm}`);
+  assert.ok(await until(() => b.last.profile?.bpm > 0 && a.last.profile?.bpm > 0), 'movement never locked');
+  await wait(600);
+  assert.ok(Math.abs((b.last.room?.bpm ?? 0) - 128) < 3, `room at ${b.last.room?.bpm}`);
+  assert.ok(!a.last.match && !b.last.match, 'a partner match / song was sent');
 });
 
 await test('room music: stopped, the room falls back to movement', async () => {

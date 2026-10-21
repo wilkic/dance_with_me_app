@@ -19,7 +19,6 @@
  *                                                 warming: you're moving, not locked yet);
  *                                                 musicBpm: the music's (room music, else your mic)
  *   → { type: 'guests', people, ai, library }     who is dancing in your space
- *   → { type: 'match', partner, bpm, song }       tempo-compatible pairing
  *   → { type: 'schedule', bookings }              approved DJ sets (see schedule.js)
  *   → { type: 'booked', booking, token }          your request is in, waiting for approval
  *   → { type: 'mine', bookings }                  your own requests, with status
@@ -36,7 +35,6 @@
  *   → { type: 'music-stopped' }                   host: an admin stopped your room's music
  *   → { type: 'room-ended' }                      an admin closed your room (you're solo now)
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
- *   → { type: 'unmatch' }                         pairing dissolved
  *
  *   ← { type: 'join', room, hostKey, bookingToken }   enter a room (creates it; see Rooms)
  *   ← { type: 'leave' }                           back to solo
@@ -70,7 +68,7 @@
  *
  * Spectators (the big-screen dance floor, floor.html) send no frames; they
  * receive every dancer's frames as relay envelopes plus:
- *   → { type: 'floor', dancers, rooms }           everyone online + per-room tempo/song
+ *   → { type: 'floor', dancers, rooms }           everyone online + per-room tempo
  *
  * Text frames are JSON control messages. Binary frames are PoseFrames from
  * the client; binary frames to the client are relay envelopes
@@ -85,9 +83,7 @@ import { fileURLToPath } from 'node:url';
 import { deserializePoseFrame, serializePoseFrame } from '../src/pose/poseFormat.js';
 import { encodeEnvelope } from '../src/net/envelope.js';
 import { BeatDetector } from './beatDetector.js';
-import { Matcher } from './matcher.js';
 import { Rooms, roomTempo } from './rooms.js';
-import { pickSong } from './songs.js';
 import { Library } from './library.js';
 import { AiDancer, CALM_ENERGY } from './aiDancer.js';
 import { SessionRecorder } from './recorder.js';
@@ -157,7 +153,6 @@ export function startServer({
   http.listen(port);
   const sessions = new Map(); // id -> session (see connection handler)
   const rooms = new Rooms();
-  const matcher = new Matcher();
   const schedule = new Schedule(scheduleFile, { log });
   const stats = new Stats(statsFile, { log });
   const statsMsg = () => ({ type: 'stats', days: stats.recent(14), online: sessions.size });
@@ -199,7 +194,7 @@ export function startServer({
   /** The music this dancer hears, if we can tell its tempo: the room's, else their own mic's. */
   const musicBeat = (s) => roomMusicBeat(s.room) ?? heard(s.music.state);
   /**
-   * One beat for everything (AI dancers, guests, pairing, a room's tempo):
+   * One beat for everything (AI dancers, guests, a room's tempo):
    * the music if we hear it, else the dancer's movement.
    */
   const beatOf = (s) => {
@@ -305,15 +300,15 @@ export function startServer({
   };
 
   // Dance floor: what a spectator screen shows — every dancer (with room
-  // and tempo) and every room with its consensus tempo and the song the
-  // catalog would put on for it. Sent to watchers with every lobby update.
+  // and tempo) and every room with its consensus tempo. Sent to watchers
+  // with every lobby update.
   const dancersOnline = () => [...sessions.values()].filter((s) => !s.watching);
   const floor = () => ({
     type: 'floor',
     dancers: dancersOnline().map((s) => ({ ...profileOf(s), room: s.room })),
     rooms: rooms.names.map((name) => {
       const bpm = roomBpm(name);
-      return { name, dancers: rooms.members(name).length, bpm, song: bpm ? pickSong(bpm) : null };
+      return { name, dancers: rooms.members(name).length, bpm };
     }),
   });
   const broadcastFloor = () => {
@@ -430,7 +425,7 @@ export function startServer({
   wss.on('connection', (ws) => {
     const id = randomUUID().slice(0, 8);
     const s = {
-      id, ws, room: null, watching: false, matchKey: null,
+      id, ws, room: null, watching: false,
       detector: new BeatDetector(), style: new StyleWindow(), music: new EnvelopeTempo(),
       roomBeat: new EnvelopeTempo(), roomBeatAt: 0, // the room's music, as this phone plays it
       lastFrameAt: 0, lastFrameT: 0, aspect: 9 / 16, level: { video: 'points', music: 'motion' },
@@ -503,7 +498,6 @@ export function startServer({
           const left = rooms.leave(s);
           if (left && wasHost) roomMusic.delete(left);
           if (left) { log(`< ${id} left room ${left}`); broadcastRoom(left); broadcastLobby(); }
-          if (s.matchKey) { s.matchKey = null; send(s, { type: 'unmatch' }); }
         } else if (msg.type === 'watch') {
           // Spectator: leaves any room, is not a dancer, sees everyone.
           const left = rooms.leave(s);
@@ -672,8 +666,7 @@ export function startServer({
     }
   }, AI_TICK_MS);
 
-  // Opinion scan: profiles out, room tempo per room, guests, then
-  // tempo-first pairing (within a room) with a next song.
+  // Opinion scan: profiles out, room tempo per room, guests.
   const timer = setInterval(() => {
     for (const s of dancersOnline()) {
       const m = musicBeat(s) ?? { bpm: 0, confidence: 0 };
@@ -694,29 +687,7 @@ export function startServer({
       send(s, guestsMsg(s));
     }
 
-    const matched = new Set();
-    for (const name of rooms.names) {
-      broadcastRoom(name);
-      for (const { a, b, bpm } of matcher.pair(rooms.members(name).filter(dancing).map(beatOf))) {
-        const song = pickSong(bpm);
-        const key = `${[a, b].sort().join('+')}:${song.title}`;
-        for (const [me, partner] of [[a, b], [b, a]]) {
-          const s = sessions.get(me);
-          if (!s) continue;
-          matched.add(me);
-          if (s.matchKey !== key) {
-            s.matchKey = key;
-            send(s, { type: 'match', partner, bpm, song });
-          }
-        }
-      }
-    }
-    for (const s of sessions.values()) {
-      if (!matched.has(s.id) && s.matchKey) {
-        s.matchKey = null;
-        send(s, { type: 'unmatch' });
-      }
-    }
+    for (const name of rooms.names) broadcastRoom(name);
   }, scanIntervalMs);
 
   const close = () => {
