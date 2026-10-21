@@ -11,7 +11,8 @@
  *   → { type: 'welcome', id }                     on connect
  *   → { type: 'rooms', rooms }                    lobby: open rooms to pick from
  *   → { type: 'joined', room, created, host }     after a join (host: you can play music)
- *   → { type: 'room', name, bpm, members, host, music }   who's in your room + tempo;
+ *   → { type: 'room', name, bpm, members, host, music }   who's in your room + tempo
+ *                                                 (members[].dancing: their frames are arriving);
  *                                                 host = the host's id, music = { label } while playing
  *   → { type: 'rtc', from, data }                 WebRTC signalling for room music (host ↔ member)
  *   → { type: 'profile', bpm, confidence, warming, musicBpm, musicConfidence }
@@ -36,7 +37,9 @@
  *   → { type: 'room-ended' }                      an admin closed your room (you're solo now)
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
  *
- *   ← { type: 'join', room, hostKey, bookingToken }   enter a room (creates it; see Rooms)
+ *   ← { type: 'join', room, hostKey, bookingToken, tab }   enter a room (creates it; see Rooms);
+ *                                                 tab: this browser tab's id, so a reconnect replaces
+ *                                                 its old connection instead of leaving a ghost
  *   ← { type: 'leave' }                           back to solo
  *   ← { type: 'guests', people, ai, aspect, variation }   guests wanted in my space
  *   ← { type: 'room-music', on, label }           host: music to the room started/stopped
@@ -104,6 +107,8 @@ const MAX_BOOKINGS_PER_SESSION = 10;
 const MAX_ADMIN_TRIES = 5;
 const MAX_RTC_BYTES = 16_000; // one SDP or ICE candidate
 const ROOM_BEAT_MS = 4000;    // a phone's room-music envelope counts this long after its last batch
+const HEARTBEAT_MS = 15_000;  // ping every connection; one that misses a whole round is dropped
+const QUIET_MS = 3000;        // a rejoining tab replaces its old connection if that one went quiet
 
 /**
  * The key that approves DJ bookings: ADMIN_KEY, else server/data/admin-key,
@@ -129,6 +134,7 @@ const LEVELS = { video: ['points', 'video'], music: ['motion', 'beat', 'audio'] 
 export function startServer({
   port = 8901,
   scanIntervalMs = 2000,
+  heartbeatMs = HEARTBEAT_MS,
   // Nothing a dancer does is kept by default (see /privacy/). RECORD_DIR=dir
   // records sessions (frames + tempo + what they chose to share) as library
   // material — for your own test sessions; the public server leaves it unset.
@@ -335,7 +341,7 @@ export function startServer({
         bpm,
         host: host?.id ?? null,
         music,
-        members: profiles.map((p) => ({ ...p, you: p.id === s.id, host: p.id === host?.id })),
+        members: members.map((m, i) => ({ ...profiles[i], you: m === s, host: m === host, dancing: dancing(m) })),
       });
     }
   };
@@ -426,6 +432,7 @@ export function startServer({
     const id = randomUUID().slice(0, 8);
     const s = {
       id, ws, room: null, watching: false,
+      tab: null, alive: true, lastMsgAt: now(), // see the heartbeat and 'join'
       detector: new BeatDetector(), style: new StyleWindow(), music: new EnvelopeTempo(),
       roomBeat: new EnvelopeTempo(), roomBeatAt: 0, // the room's music, as this phone plays it
       lastFrameAt: 0, lastFrameT: 0, aspect: 9 / 16, level: { video: 'points', music: 'motion' },
@@ -446,7 +453,10 @@ export function startServer({
     stats.online(sessions.size);
     broadcastFloor();
 
+    ws.on('pong', () => { s.alive = true; });
     ws.on('message', (data, isBinary) => {
+      s.alive = true;
+      s.lastMsgAt = now();
       if (!isBinary) {
         let msg;
         try { msg = JSON.parse(data.toString()); } catch { return; }
@@ -457,6 +467,19 @@ export function startServer({
           const before = s.room;
           const str = (v) => (typeof v === 'string' && v ? v.slice(0, 64) : null);
           s.hostKey = str(msg.hostKey);
+          // A phone that reconnects (screen sleep, network blip) joins again
+          // from a new connection while the old one may never close: drop
+          // that one now, or it stays in the room as a ghost. Only if it went
+          // quiet — a duplicated tab carries the same id and is still dancing.
+          s.tab = str(msg.tab);
+          if (s.tab) {
+            for (const o of sessions.values()) {
+              if (o !== s && o.tab === s.tab && now() - o.lastMsgAt > QUIET_MS) {
+                log(`- ${o.id} replaced by ${id} (same tab, reconnected)`);
+                o.ws.terminate();
+              }
+            }
+          }
           s.bookingToken = str(msg.bookingToken);
           if (roomClosed(normalizeRoomName(msg.room))) {
             return send(s, { type: 'error', for: 'join', error: 'That room was closed. Try another one.' });
@@ -651,6 +674,17 @@ export function startServer({
     });
   });
 
+  // Heartbeat: browsers answer pings by themselves. A connection that
+  // didn't answer (or send anything) for a whole round is gone — a phone
+  // that lost its network — and is dropped so it leaves its room.
+  const heartbeat = setInterval(() => {
+    for (const s of sessions.values()) {
+      if (!s.alive) { log(`- ${s.id} stopped answering`); s.ws.terminate(); continue; }
+      s.alive = false;
+      try { s.ws.ping(); } catch { /* closing anyway */ }
+    }
+  }, heartbeatMs);
+
   // AI dancers: stream each one's pose to its host at ~30 fps.
   const aiTimer = setInterval(() => {
     const t = now();
@@ -695,11 +729,12 @@ export function startServer({
     whip.close();
     http.close();
     clearInterval(timer);
+    clearInterval(heartbeat);
     clearInterval(aiTimer);
     for (const s of sessions.values()) s.ws.terminate();
     wss.close();
   };
-  wss.on('close', () => { clearInterval(timer); clearInterval(aiTimer); });
+  wss.on('close', () => { clearInterval(timer); clearInterval(aiTimer); clearInterval(heartbeat); });
 
   return { wss, http, whip, sessions, rooms, schedule, stats, library: lib, close, get port() { return wss.address().port; } };
 }
