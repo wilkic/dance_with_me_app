@@ -109,11 +109,20 @@ const hostKey = (() => {
     return k;
   } catch { return crypto.randomUUID(); }
 })();
+// This tab's id: a reconnect joins again under it, and the server drops the
+// old connection instead of keeping it in the room as a ghost.
+const tabId = (() => {
+  try {
+    let t = sessionStorage.getItem('dwm.tab');
+    if (!t) sessionStorage.setItem('dwm.tab', (t = crypto.randomUUID()));
+    return t;
+  } catch { return crypto.randomUUID(); }
+})();
 function joinExtra(room) {
   let tokens = {};
   try { tokens = JSON.parse(localStorage.getItem('dwm.bookings') || '{}') || {}; } catch { /* storage unavailable */ }
   const mine = bookings.find((b) => b.room === room && tokens[b.id]);
-  return { hostKey, ...(mine ? { bookingToken: tokens[mine.id] } : {}) };
+  return { hostKey, tab: tabId, ...(mine ? { bookingToken: tokens[mine.id] } : {}) };
 }
 const music = new RoomMusic({
   send: (msg) => serverLink?.sendJSON(msg),
@@ -337,7 +346,9 @@ function renderRoomLine() {
     cap.classList.add('hidden');
     return;
   }
-  const n = roomState.members.length;
+  // Room-mates count once their movement arrives (someone still setting
+  // up, or a dropped phone, isn't dancing yet).
+  const n = 1 + roomState.members.filter((m) => !m.you && m.dancing).length;
   const who = n <= 1 ? 'just you' : `${n} dancing`;
   const tempo = roomState.bpm > 0 ? ` · room ${Math.round(roomState.bpm)} bpm` : '';
   hud.textContent = `${who}${tempo}`; // the name is on the room button
@@ -816,7 +827,7 @@ function showPlate(on) {
 function planGuests() {
   const now = performance.now();
   const dancing = mode === 'dance';
-  const roomMates = roomState.members.filter((m) => !m.you).length;
+  const roomMates = roomState.members.filter((m) => !m.you && m.dancing).length;
   const seats = dancing && serverLink && serverOnline ? Math.max(0, guestCfg.count - roomMates) : 0;
   const spacing = guestCfg.spacingSec * 1000;
   const elapsed = now - danceStartedAt;
