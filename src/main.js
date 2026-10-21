@@ -182,6 +182,7 @@ function renderJoinPicker() {
   for (const b of sets) opts.push(new Option(`${b.room} · DJ set`, b.room));
   sel.replaceChildren(...opts);
   sel.classList.toggle('empty', !lobby.length && !sets.length);
+  if (!$('rooms-sheet').classList.contains('hidden')) renderRoomsSheet();
 }
 
 /**
@@ -635,6 +636,57 @@ async function enter(roomName) {
   if (!ok) leaveRoom();
 }
 
+/**
+ * Tap your room name: every open room (and DJ sets you can join), to switch
+ * to without leaving the dance screen, plus "Exit to main menu". Kept
+ * current while open (renderJoinPicker calls it on every lobby update).
+ */
+function openRoomsSheet() {
+  renderRoomsSheet();
+  $('rooms-sheet').classList.remove('hidden');
+}
+function renderRoomsSheet() {
+  const list = $('rooms-list');
+  const here = roomState.name ?? pendingRoom;
+  const now = Date.now();
+  const rows = lobby.map((r) => {
+    const bpm = r.bpm > 0 ? ` · ${Math.round(r.bpm)} BPM` : '';
+    const dj = bookings.some((b) => b.room === r.name && joinable(b, now)) ? ' · DJ set' : '';
+    return { name: r.name, text: `${r.name} · ${r.dancers} dancing${bpm}${dj}` };
+  });
+  for (const b of bookings) {
+    if (joinable(b, now) && !lobby.some((r) => r.name === b.room)) rows.push({ name: b.room, text: `${b.room} · DJ set` });
+  }
+  const buttons = rows.map(({ name, text }) => {
+    const btn = document.createElement('button');
+    btn.textContent = name === here ? `${text} · you're here` : text;
+    btn.classList.toggle('here', name === here);
+    btn.disabled = name === here;
+    btn.onclick = () => { $('rooms-sheet').classList.add('hidden'); switchRoom(name); };
+    return btn;
+  });
+  if (!buttons.length) buttons.push(Object.assign(document.createElement('p'), { className: 'hint', textContent: 'No other rooms open.' }));
+  list.replaceChildren(...buttons);
+}
+
+/** Move to another room while dancing: the server moves us; guests and music follow its opinions. */
+function switchRoom(name) {
+  if (!serverLink || name === roomState.name) return;
+  music.reset(); // our music (as host) or the old room's stream stops here
+  roomState.name = null; // the old room's opinions are ignored from now on
+  roomState.host = false;
+  roomState.bpm = 0;
+  roomState.members = [];
+  roomState.music = null;
+  pruneReal();
+  pendingRoom = name;
+  serverLink.join(name, joinExtra(name));
+  renderRoomButton();
+  renderRoomLine();
+  renderMusic();
+  planGuests();
+}
+
 function leaveRoom() {
   if (roomState.name && serverLink) serverLink.leave();
   serverLink && (serverLink.room = null);
@@ -659,7 +711,7 @@ function leaveRoom() {
  * your AI dancers. In a room, everyone else hears it: they see what's
  * playing in the HUD, and "Tap to hear the music" if autoplay was blocked.
  */
-const canPlayMusic = () => !roomState.name || roomState.host;
+const canPlayMusic = () => !!serverLink && (!(roomState.name ?? pendingRoom) || roomState.host);
 function renderMusic() {
   const st = music.state;
   const btn = $('btn-music');
@@ -794,6 +846,7 @@ async function captureRoom() {
   fpsEma = 0;
   lastFrameT = 0;
   showScreen('dance');
+  renderMusic(); // ♫ Play music above the Guests bar, solo too
   resetGuests();
   danceStartedAt = performance.now();
   planGuests();
@@ -925,10 +978,12 @@ $('src-input-go').addEventListener('click', () => {
 });
 $('src-screen').addEventListener('click', () => startMusic('screen'));
 $('music-cancel').addEventListener('click', () => $('music-sheet').classList.add('hidden'));
-$('btn-room').addEventListener('click', async () => {
+$('btn-room').addEventListener('click', () => {
   if (!roomState.name && !pendingRoom) return shareRoom();
-  if (await confirmPopup('Exit room and return to main menu?')) exitToStart();
+  openRoomsSheet();
 });
+$('rooms-cancel').addEventListener('click', () => $('rooms-sheet').classList.add('hidden'));
+$('rooms-exit').addEventListener('click', () => { $('rooms-sheet').classList.add('hidden'); exitToStart(); });
 renderJoinPicker();
 renderUpcoming();
 setInterval(() => { renderUpcoming(); renderJoinPicker(); }, 30_000);
