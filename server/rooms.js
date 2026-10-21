@@ -79,7 +79,7 @@ export class Rooms {
 /**
  * Room tempo: confidence-weighted median of the members that have a
  * trustworthy read. Raw BPM (no octave folding) — this is what the room
- * "feels like", the matcher handles half/double-time equivalence.
+ * "feels like"; half/double-time equivalence is tempoGap's job (tempo.js).
  * profiles: [{ bpm, confidence }] → bpm (0 if nobody is confident yet)
  */
 export function roomTempo(profiles, { minConfidence = 0.3 } = {}) {

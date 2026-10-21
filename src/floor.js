@@ -3,7 +3,7 @@
  *
  * Connects to the dance server as a spectator ('watch'), receives every
  * dancer's PoseFrames plus 'floor' opinions (who is online, which room,
- * tempo per dancer and per room, the song the catalog would put on), and
+ * tempo per dancer and per room), and
  * draws everyone as glowing stick figures grouped by room — the same
  * avatar the phones use. Music: a local audio file played through this
  * machine's speakers (the room speaker), picked from the top bar.
@@ -142,7 +142,7 @@ function bands(now) {
     if (byRoom.has(r.name)) out.push({ ...r, members: byRoom.get(r.name) });
   }
   if (ONLY_ROOM) return out;
-  if (byRoom.has('')) out.push({ name: 'dancing solo', bpm: 0, song: null, members: byRoom.get('') });
+  if (byRoom.has('')) out.push({ name: 'dancing solo', bpm: 0, members: byRoom.get('') });
   return out;
 }
 
@@ -164,10 +164,9 @@ function render() {
   const bandH = H / rows.length;
   let y = 0;
   for (const row of rows) {
-    // Band header: room · dancers · tempo · song
+    // Band header: room · dancers · tempo
     const parts = [row.name, `${row.members.length} dancing`];
     if (row.bpm) parts.push(`${Math.round(row.bpm)} bpm`);
-    if (row.song) parts.push(`♪ ${row.song.title} (${row.song.bpm})`);
     ctx.save();
     ctx.font = `600 ${headerH * 0.6}px system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(232,230,245,0.75)';

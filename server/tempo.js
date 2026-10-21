@@ -39,7 +39,7 @@ export function dominantTempo(grid, hz, { minBpm = 50, maxBpm = 200, minPeak = 0
  * "audio") sends ~1 s batches of spectral-flux samples — no raw audio at
  * the "beat" level — and this keeps a window of them, re-estimating the
  * tempo on every batch. Smoothed like the motion detector so the value
- * is steady enough to drive AI dancers and song picking.
+ * is steady enough to drive AI dancers and a room's tempo.
  */
 export class EnvelopeTempo {
   constructor({ windowS = 8, hz = 30 } = {}) {

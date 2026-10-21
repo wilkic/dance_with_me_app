@@ -240,7 +240,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <rect class="box" x="580" y="56" width="340" height="46" rx="8"/><text class="t" x="596" y="76">Sessions</text><text class="s" x="596" y="93">one per connection: room, guest wishes, sharing level</text>
       <rect class="box" x="580" y="120" width="340" height="46" rx="8"/><text class="t" x="596" y="140">Rooms</text><text class="s" x="596" y="157">first in creates · last out closes · relay · lobby list</text>
       <rect class="box" x="580" y="184" width="340" height="46" rx="8"/><text class="t" x="596" y="204">Analysis, per dancer</text><text class="s" x="596" y="221">motion tempo · style · tempo from the mic</text>
-      <rect class="box" x="580" y="248" width="340" height="46" rx="8"/><text class="t" x="596" y="268">Matcher + songs</text><text class="s" x="596" y="285">tempo-first pairing · half/double time · 6% tolerance</text>
+      <rect class="box" x="580" y="248" width="340" height="46" rx="8"/><text class="t" x="596" y="268">One beat</text><text class="s" x="596" y="285">room music, else locked movement · half/double time</text>
       <rect class="box ai" x="580" y="312" width="340" height="46" rx="8"/><text class="t" x="596" y="332">Guests</text><text class="s" x="596" y="349">real people by tempo · AI dancers from the library</text>
       <rect class="box" x="580" y="376" width="340" height="46" rx="8"/><text class="t" x="596" y="396">Library</text><text class="s" x="596" y="413">81 clips + new sessions · tempo, style, tag</text>
       <rect class="box" x="580" y="440" width="340" height="46" rx="8"/><text class="t" x="596" y="460">Recorder</text><text class="s" x="596" y="477">off unless RECORD_DIR is set (lab only)</text>
@@ -259,7 +259,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <text class="lblb" x="480" y="132" text-anchor="middle">PoseFrames</text><text class="lbl" x="480" y="160" text-anchor="middle">binary · ~30 fps</text>
     <text class="lblb" x="480" y="200" text-anchor="middle">guest frames</text><text class="lbl" x="480" y="228" text-anchor="middle">sender id + frame</text>
     <text class="lblb" x="480" y="282" text-anchor="middle">control · JSON</text><text class="lbl" x="480" y="309" text-anchor="middle">join · guests · level</text><text class="lbl" x="480" y="323" text-anchor="middle">music · media · label</text>
-    <text class="lblb" x="480" y="362" text-anchor="middle">opinions · JSON</text><text class="lbl" x="480" y="389" text-anchor="middle">rooms · room · guests</text><text class="lbl" x="480" y="403" text-anchor="middle">profile · match</text>
+    <text class="lblb" x="480" y="362" text-anchor="middle">opinions · JSON</text><text class="lbl" x="480" y="389" text-anchor="middle">rooms · room · guests</text><text class="lbl" x="480" y="403" text-anchor="middle">profile · floor</text>
 
     <!-- satellites -->
     <g class="ln dash"><path d="M650 518V546" marker-end="url(#ah)"/><path d="M830 518V546" marker-end="url(#ah)"/></g>
@@ -331,7 +331,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 
 <section id="tempo">
   <h2>Tempo comes first</h2>
-  <p>Matching is tiered. Tier one is tempo, and only tempo. Phase is ignored because the shared "next song" does the syncing. Tier two, movement style, plugs in as an extra score and already drives clip picking.</p>
+  <p>Tempo is the one thing the app judges, and it is only ever shown as BPM. We can never know what song is playing, so no song titles appear anywhere: the stub song catalog and the partner pairing that proposed a "next song" were removed on 21 Oct 2026 (issue #21). Tempo picks AI dancers and other-people guests; movement style is the second score in clip picking.</p>
   <h3>From camera to beat</h3>
   <p>The whole path from someone propping up a phone to an AI dancer on their beat, or a partner on the same groove (issue #19):</p>
   <ol class="flow">
@@ -346,12 +346,11 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <tbody>
       <tr><td>AI dancers: clip pick and playback rate</td><td class="sub">One beat. With none yet, a calm clip plays at its own speed.</td></tr>
       <tr><td>Other people as guests</td><td class="sub">One beat, theirs against yours.</td></tr>
-      <tr><td>Partner pairing and next song</td><td class="sub">One beat, among room-mates who are dancing (a frame in the last 6 s). In a room with music everyone dancing shares its tempo.</td></tr>
       <tr><td>Room, lobby and dance-floor tempo</td><td class="sub">The room's music, else the confidence-weighted median of its dancers' movement tempos.</td></tr>
-      <tr><td>Tempo tag over each dancer, HUD "you"</td><td class="sub">That dancer's own movement tempo.</td></tr>
+      <tr><td>HUD "you"; each dancer's tempo on the dance floor</td><td class="sub">That dancer's own movement tempo. The phone draws no number over anyone's head (issue #21).</td></tr>
     </tbody>
   </table></div>
-  <p>Half and double time are the same groove, so every tempo is folded into one octave before comparing. Two dancers match if they are within 6% inside that octave, including across its wrap point. The matcher pairs greedily, most confident first, and proposes the catalog song closest on a log scale.</p>
+  <p>Half and double time are the same groove, so every tempo is folded into one octave before comparing. Other-people guests are ranked by that folded gap (<code>tempoGap</code>), including across the octave's wrap point.</p>
   <div class="diagram narrow">
   <svg viewBox="0 0 660 205" role="img" aria-label="A logarithmic tempo axis from 50 to 200 beats per minute. The band from 90 to 180 is the canonical octave. An arc shows 60 folding up to 120, and an arc shows 200 folding down to 100.">
     <defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arcar" d="M0 0L10 5L0 10z"/></marker></defs>
@@ -460,7 +459,6 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>room</code></td><td class="sub">members and room tempo</td></tr>
         <tr><td><code>profile</code></td><td class="sub">your movement tempo (0 until it locks, <code>warming</code> while you move) and the music's (room music, else your mic), with confidence</td></tr>
         <tr><td><code>guests</code></td><td class="sub">who is dancing in your space, library size</td></tr>
-        <tr><td><code>match</code> / <code>unmatch</code></td><td class="sub">a tempo-compatible partner and a song</td></tr>
         <tr><td><code>floor</code></td><td class="sub">to spectators: everyone online, per-room tempo</td></tr>
         <tr><td><code>schedule</code></td><td class="sub">approved DJ sets, soonest first</td></tr>
         <tr><td><code>rtc</code></td><td class="sub">relayed WebRTC signalling; <code>joined</code> and <code>room</code> say who the host is and what's playing</td></tr>
@@ -509,7 +507,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>server/recorder.js</code></td><td>Per-session JSONL plus optional media files</td><td class="num">116</td></tr>
       <tr><td><code>server/tempo.js</code></td><td>Autocorrelation for any signal, music tempo from an onset envelope (room music or mic)</td><td class="num">99</td></tr>
       <tr><td><code>server/schedule.js</code></td><td>DJ bookings: JSON file, approval, clashes, cancel tokens</td><td class="num">137</td></tr>
-      <tr><td><code>server/rooms.js</code>, <code>matcher.js</code>, <code>songs.js</code></td><td>Room registry and its host, tempo pairing, 14-song stub catalog (65–174 BPM)</td><td class="num">181</td></tr>
+      <tr><td><code>server/rooms.js</code></td><td>Room registry, its host, and the room's movement tempo</td><td class="num">97</td></tr>
       <tr class="grp"><td colspan="3">Tests and tooling</td></tr>
       <tr><td><code>server/test/*.js</code></td><td>Rooms, DJ schedule, room music host and signalling, library and AI dancer, tempo locking and room-music tempo, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
       <tr><td><code>server/lab/*</code></td><td>Dance lab: scenarios, waterfalls, harvesting, video ingestion</td><td class="num">~1,760</td></tr>
@@ -569,7 +567,7 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Branch</td><td><span class="pill p-ok">released</span></td><td class="sub"><code>dance-rooms</code> merged into <code>main</code> (lab included) and published to <code>release</code> on 15 Oct 2026.</td></tr>
       <tr><td>Room music: the host plays to the room (issue #4)</td><td><span class="pill p-ok">verified</span></td><td class="sub">18 Oct 2026, on branch <code>room-music</code>: 2 server tests cover host rules and signalling. Two headless Chrome tabs with fake cameras: the host shared a room and played a file, the listener received Opus stereo at 128 kb/s with a real signal level and saw "♫ tone.wav"; stop cleared it; the mic source worked too. Tab or computer sound and real phones are untested; there's no TURN server.</td></tr>
       <tr><td>DJ tools: OBS overlay, sound-input picker, OBS streaming (issues #12–#14)</td><td><span class="pill p-ok">built</span></td><td class="sub">18 Oct 2026. Overlay: <code>floor.html?room=X&amp;overlay=1</code> drew one room's synthetic dancer on a transparent canvas with a caption, the solo dancer left out. Picker: headless Chrome listed its fake inputs, the chosen one became the room's music and was remembered. OBS: 3 server tests with a werift stand-in for OBS (host key and booking token, two listeners, host stop, DELETE); in headless Chrome a listener received the server's stream (75 packets, 0 lost) and the host's phone stopped it. Not yet tried with real OBS, nor on the VM (UDP ports).</td></tr>
-      <tr><td>Room as music selector</td><td><span class="pill p-plan">planned</span></td><td class="sub">Music matched to each dancer's taste and everyone's tempo.</td></tr>
+      <tr><td>Song titles, partner matching (issue #21)</td><td><span class="pill p-ok">removed</span></td><td class="sub">21 Oct 2026: we can't know what's playing, so no song titles anywhere (phone, dance floor, OBS overlay) and no partner match line; the stub catalog and matcher are gone. The bare BPM number over room-mates' heads went too. Tempo is shown as BPM only.</td></tr>
     </tbody>
   </table></div>
 </section>

@@ -3,7 +3,7 @@
  * clients streaming synthetic PoseFrames "dancing" at 120 and 118 BPM,
  * in the same dance room, and assert the server profiles both near 120,
  * relays each one's frames to the other, reports the room tempo, and
- * matches them with a tempo-appropriate song.
+ * and never names a song (we can't know what's playing).
  *
  * Synthesis note: motion energy is joint *speed*, so a joint oscillating
  * at 1 Hz produces two energy peaks per cycle → 2 Hz → 120 BPM.
@@ -75,8 +75,8 @@ function connectDancer(port, bpm) {
         dancer.lobby = msg.rooms;
       } else if (msg.type === 'profile') {
         dancer.profile = msg;
-      } else if (msg.type === 'match') {
-        dancer.match = msg;
+      } else if (msg.type === 'match' || msg.type === 'unmatch') {
+        dancer.match = msg; // gone: must never arrive
       } else if (msg.type === 'guests') {
         dancer.guests = msg;
       }
@@ -177,7 +177,7 @@ for (let b = 0; b < 8; b++) {
 
 // Wait for opinion scans to run on the streamed data.
 const deadline = Date.now() + 5000;
-while (Date.now() < deadline && !dancers.every((d) => d.match)) {
+while (Date.now() < deadline && !dancers.every((d) => d.profile?.bpm > 0)) {
   await new Promise((r) => setTimeout(r, 100));
 }
 // Now that the server knows the host's beat, ask for 1 real person + 1 AI
@@ -203,15 +203,8 @@ for (const d of dancers) {
     `dancer@${d.bpm}: profiled ${bpm.toFixed(1)} bpm (conf ${d.profile?.confidence?.toFixed(2)})`,
     Math.abs(bpm - d.bpm) < 6 && d.profile.confidence > 0.3,
   );
-  check(
-    `dancer@${d.bpm}: matched with ${d.match?.partner} → "${d.match?.song?.title}" (${d.match?.song?.bpm} bpm)`,
-    !!d.match && Math.abs(d.match.song.bpm - 119) < 15,
-  );
 }
-check(
-  'dancers matched with each other',
-  dancers[0].match?.partner === dancers[1].id && dancers[1].match?.partner === dancers[0].id,
-);
+check('no song titles or partner matches are sent', !dancers.some((d) => d.match));
 
 // ---- Dance floor (spectator) checks ----
 {
@@ -224,9 +217,9 @@ check(
   const fd = watcher.floor?.dancers ?? [];
   const fr = watcher.floor?.rooms?.find((r) => r.name === 'test-floor');
   check(
-    `floor: lists ${fd.length} dancers (2 in room test-floor at ${fr?.bpm?.toFixed?.(1)} bpm, song "${fr?.song?.title}", host solo)`,
+    `floor: lists ${fd.length} dancers (2 in room test-floor at ${fr?.bpm?.toFixed?.(1)} bpm, no song, host solo)`,
     fd.length === 3 && fd.filter((d) => d.room === 'test-floor').length === 2 && fd.some((d) => d.id === host.id && !d.room) &&
-      fr?.dancers === 2 && Math.abs(fr.bpm - 119) < 6 && !!fr.song,
+      fr?.dancers === 2 && Math.abs(fr.bpm - 119) < 6 && !('song' in fr),
   );
   check('floor: spectator is not listed as a dancer', !fd.some((d) => d.id === watcher.id));
 }
