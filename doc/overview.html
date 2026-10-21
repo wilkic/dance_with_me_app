@@ -205,7 +205,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <div class="steps">
     <div class="step"><h3>1. Pick room</h3><p>"Start a room" opens your own space. "Join a room" is the phone's own picker (a spinning wheel on iOS) listing open rooms, or a grey "No rooms yet". Below the buttons is a "DJs: book a room →" link, then a dividing line, then <b>Upcoming rooms</b>: DJ sets booked at <code>/schedule</code>. The start screen says nothing about the server while it's online; it only shows a line when the server can't be reached.</p></div>
     <div class="step"><h3>2. Capture the room</h3><p>Prop the phone up facing your dance space, step out of frame, tap the button. After a 3-second countdown the app averages several frames into a clean plate.</p></div>
-    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears and the HUD shows your tempo. Close to the camera (a DJ at the decks, someone at a laptop) the hips are out of frame, so the figure is drawn from the shoulders: head, arms, and a spine running off the bottom (<code>bodyAnchors</code> in <code>stickFigure.js</code>, issue #18). With no shoulders in view, legs only, nothing is drawn. The slider at the bottom sets how many guests (0–3) dance behind you at 90% opacity. Tapping anywhere else on the screen (or ☰) opens the menu, which changes time between guests, opacity, AI variation and where the tempo comes from on the fly.</p></div>
+    <div class="step"><h3>3. Dance</h3><p>Step back in. Your stick figure appears. The HUD says "finding your beat…" while you move, then shows your tempo once it's steady, and the music's (♫) as soon as the room's music is heard (see <a href="#tempo">Tempo</a>). Close to the camera (a DJ at the decks, someone at a laptop) the hips are out of frame, so the figure is drawn from the shoulders: head, arms, and a spine running off the bottom (<code>bodyAnchors</code> in <code>stickFigure.js</code>, issue #18). With no shoulders in view, legs only, nothing is drawn. The slider at the bottom sets how many guests (0–3) dance behind you at 90% opacity. Tapping anywhere else on the screen (or ☰) opens the menu, which changes time between guests, opacity, AI variation and where the tempo comes from on the fly.</p></div>
   </div>
   <p class="note">Everything the app sends is the skeleton: 33 joints per frame. Camera video and microphone audio leave the phone only if the dancer turns those dials up.</p>
 </section>
@@ -316,7 +316,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><b>Mic or line in:</b> echo cancellation, noise suppression and auto-gain are off, so music isn't treated as speech.</li>
     <li><b>Tab or computer sound:</b> shown only on desktop browsers. Chrome or Edge can share a tab's sound ("Also share tab audio"), and on Windows or ChromeOS the whole system's sound. Phone browsers can't capture other apps' sound at all; only a native app could.</li>
   </ul>
-  <p>The sound goes straight from the host to each member over <b>WebRTC</b>, with Opus tuned for music: stereo, 128 kb/s, silence suppression off. The dance server only relays the signalling (<code>rtc</code> messages), and only between a room's host and its members. The host makes one connection per member and retries a failed one up to 3 times. Members see "♫ &lt;what's playing&gt;" in the HUD, plus "Tap to hear the music" if the browser blocks autoplay. Connections are found through Google's public STUN server only, with no TURN relay. Phones on the same wifi or ordinary home networks connect, but some mobile-data networks (carrier-grade NAT) may not. A TURN server on the VM (coturn) would fix that if it turns out to matter.</p>
+  <p>The sound goes straight from the host to each member over <b>WebRTC</b>, with Opus tuned for music: stereo, 128 kb/s, silence suppression off. The dance server only relays the signalling (<code>rtc</code> messages), and only between a room's host and its members. The host makes one connection per member and retries a failed one up to 3 times. Every phone playing the music, the host's and each member's, also measures its beat and sends it as numbers, so the room's tempo is the music's (see <a href="#tempo">Tempo</a>). Members see "♫ &lt;what's playing&gt;" in the HUD, plus "Tap to hear the music" if the browser blocks autoplay. Connections are found through Google's public STUN server only, with no TURN relay. Phones on the same wifi or ordinary home networks connect, but some mobile-data networks (carrier-grade NAT) may not. A TURN server on the VM (coturn) would fix that if it turns out to matter.</p>
   <h3>How an AI dancer is made</h3>
   <p>No choreography is generated. An AI dancer is a real person's recorded dance, retimed to your beat, with moves borrowed from another dancer of similar tempo and style.</p>
   <ol class="flow">
@@ -332,7 +332,25 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 <section id="tempo">
   <h2>Tempo comes first</h2>
   <p>Matching is tiered. Tier one is tempo, and only tempo. Phase is ignored because the shared "next song" does the syncing. Tier two, movement style, plugs in as an extra score and already drives clip picking.</p>
-  <p>Each dancer's tempo comes from a <b>BeatDetector</b>: body-size-normalised joint speeds, resampled to 30 Hz, autocorrelated over a 6-second window across 50–200 BPM, with a confidence. If the phone hears music, a second tempo comes from the microphone's onset envelope, and that one wins when its confidence is at least 0.3.</p>
+  <h3>From camera to beat</h3>
+  <p>The whole path from someone propping up a phone to an AI dancer on their beat, or a partner on the same groove (issue #19):</p>
+  <ol class="flow">
+    <li><b>Camera → points</b>The phone runs MediaPipe and sends only PoseFrames: 33 points about 30 times a second. No video leaves the phone.</li>
+    <li><b>Points → movement tempo</b><code>BeatDetector</code> (server): wrist, ankle, knee, elbow, hip and head speeds, divided by torso length so distance doesn't matter, resampled to 30 Hz. Once a second it autocorrelates the last 6 s and takes the strongest repeat between 50 and 200 BPM, with a confidence.</li>
+    <li><b>Wait until they're really dancing</b>People opening the app aren't dancing yet, and setting the phone down and stepping back reads as a confident, steady, wrong tempo: on Chris's July lab recording, 164 BPM for 4 s before the real 100. So no movement tempo is reported until it <b>locks</b>: the last 3 estimates agree within 10% (half/double time count as the same), the window is full (6 s) with movement even across it (louder half at most 3× the quieter), and the last 3 s on their own beat at the same tempo. Until then the HUD says "finding your beat…". That recording now shows nothing until 100 BPM at 14 s, when the dancing started. The price: messy, wandering movement may never lock (28 of 79 edited web clips don't), so without music it can stay at "finding your beat…". Library clips are rated without the lock (<code>new BeatDetector({ lock: false })</code>); they dance from the first frame.</li>
+    <li><b>Music → music tempo</b>Every phone playing the room's music measures it: the host's file, line in or tab sound, and the stream each member hears, including a DJ's OBS stream. <code>OnsetEnvelope</code> turns it into spectral flux at 30 Hz, sent once a second as a <code>music</code> message with <code>from: 'room'</code>. Never the sound. The server keeps an <code>EnvelopeTempo</code> per phone (8 s window) and takes the clearest reading in the room, counting a phone for 4 s after its last batch. A tempo comes 3–8 s after the music starts, whether or not anyone moves. Solo, with no room music, the phone's own mic does the same, but only with <code>?beat=1</code> (testing).</li>
+    <li><b>One beat</b>The music's tempo if it's heard (confidence at least 0.3), else the locked movement tempo, else none (<code>beatOf</code> in <code>server/index.js</code>).</li>
+  </ol>
+  <div class="tbl wrapfirst"><table>
+    <thead><tr><th>What uses it</th><th>Which tempo</th></tr></thead>
+    <tbody>
+      <tr><td>AI dancers: clip pick and playback rate</td><td class="sub">One beat. With none yet, a calm clip plays at its own speed.</td></tr>
+      <tr><td>Other people as guests</td><td class="sub">One beat, theirs against yours.</td></tr>
+      <tr><td>Partner pairing and next song</td><td class="sub">One beat, among room-mates who are dancing (a frame in the last 6 s). In a room with music everyone dancing shares its tempo.</td></tr>
+      <tr><td>Room, lobby and dance-floor tempo</td><td class="sub">The room's music, else the confidence-weighted median of its dancers' movement tempos.</td></tr>
+      <tr><td>Tempo tag over each dancer, HUD "you"</td><td class="sub">That dancer's own movement tempo.</td></tr>
+    </tbody>
+  </table></div>
   <p>Half and double time are the same groove, so every tempo is folded into one octave before comparing. Two dancers match if they are within 6% inside that octave, including across its wrap point. The matcher pairs greedily, most confident first, and proposes the catalog song closest on a log scale.</p>
   <div class="diagram narrow">
   <svg viewBox="0 0 660 205" role="img" aria-label="A logarithmic tempo axis from 50 to 200 beats per minute. The band from 90 to 180 is the canonical octave. An arc shows 60 folding up to 120, and an arc shows 200 folding down to 100.">
@@ -386,7 +404,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <p>Nothing a dancer does is kept. The public promise is the page at <code>/privacy/</code> (<code>privacy/index.html</code>, linked from the start-screen footer); keep it true whenever data handling changes. Since 18 Oct 2026 (issues #5–#9):</p>
   <ul>
     <li><b>No server-side recording by default.</b> The server keeps a session (frames, tempo, mic beat) in <code>library/sessions/</code> only when <code>RECORD_DIR</code> is set. That is for your own lab sessions; the VM leaves it unset. Uploading camera video or mic audio is gone from the app.</li>
-    <li><b>☰ menu:</b> no sharing dials. Tempo comes from movement. The mic beat (only a 30 Hz onset envelope leaves the phone, used live, never the sound) is for testing only, with <code>?beat=1</code>; the "Tempo from" dial was removed on 18 Oct 2026 as too technical. "Teach AI" is marked <b>coming soon</b>. Training AI dancers on people's dances comes back later as an explicit opt-in, and the privacy page has to change first.</li>
+    <li><b>☰ menu:</b> no sharing dials. Tempo comes from movement, and from the room's music when one plays (each phone playing it sends its 30 Hz onset envelope; never the sound). The solo mic beat (only a 30 Hz onset envelope leaves the phone, used live, never the sound) is for testing only, with <code>?beat=1</code>; the "Tempo from" dial was removed on 18 Oct 2026 as too technical. "Teach AI" is marked <b>coming soon</b>. Training AI dancers on people's dances comes back later as an explicit opt-in, and the privacy page has to change first.</li>
     <li><b>Logs:</b> the dance server logs random session ids, never IPs. Caddy has no access log. <code>deploy.sh</code> caps the VM's journal at 3 days and stops copying it into <code>/var/log/syslog</code>.</li>
     <li><b>DJ bookings</b> are deleted when the set ends (<code>Schedule.prune</code>). Rejected and still-pending requests are deleted once their time has passed. The booking form says so right under it: "Deleted after your set · Privacy", linking to <code>/privacy/#dj-bookings</code>.</li>
     <li><b>Third parties</b> named on the page: GitHub Pages (website), Oracle Cloud Frankfurt (dance server), Google STUN (room music). Room music is peer-to-peer, so the phones in it see each other's IP.</li>
@@ -418,7 +436,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>leave</code></td><td class="sub">back to solo</td></tr>
         <tr><td><code>guests</code></td><td class="sub">how many people and AI dancers I want, plus aspect and variation</td></tr>
         <tr><td><code>level</code></td><td class="sub">video and music sharing levels</td></tr>
-        <tr><td><code>music</code></td><td class="sub">onset envelope samples from the mic</td></tr>
+        <tr><td><code>music</code></td><td class="sub">onset envelope samples: <code>from: 'room'</code> for the room's music as this phone plays it, else the mic</td></tr>
         <tr><td><code>media</code></td><td class="sub">a base64 media chunk</td></tr>
         <tr><td><code>label</code></td><td class="sub">ground-truth click BPM, for the lab</td></tr>
         <tr><td><code>watch</code></td><td class="sub">become a spectator, for the dance floor</td></tr>
@@ -440,7 +458,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>rooms</code></td><td class="sub">the lobby: open rooms, counts, tempo</td></tr>
         <tr><td><code>joined</code></td><td class="sub">room name, and whether you created it</td></tr>
         <tr><td><code>room</code></td><td class="sub">members and room tempo</td></tr>
-        <tr><td><code>profile</code></td><td class="sub">your motion and music tempo, with confidence</td></tr>
+        <tr><td><code>profile</code></td><td class="sub">your movement tempo (0 until it locks, <code>warming</code> while you move) and the music's (room music, else your mic), with confidence</td></tr>
         <tr><td><code>guests</code></td><td class="sub">who is dancing in your space, library size</td></tr>
         <tr><td><code>match</code> / <code>unmatch</code></td><td class="sub">a tempo-compatible partner and a song</td></tr>
         <tr><td><code>floor</code></td><td class="sub">to spectators: everyone online, per-room tempo</td></tr>
@@ -472,8 +490,9 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur, halo or no glow</td><td class="num">144</td></tr>
       <tr><td><code>src/room/roomModel.js</code></td><td>Clean-plate room capture, metadata, room for future 3D</td><td class="num">96</td></tr>
       <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, WebSocket and composite transports</td><td class="num">147</td></tr>
-      <tr><td><code>src/net/roomMusic.js</code></td><td>Room music: file, mic or tab sound from the host to each member over WebRTC</td><td class="num">280</td></tr>
-      <tr><td><code>src/share/sessionShare.js</code></td><td>Tempo source: mic onset envelope (nothing recorded)</td><td class="num">179</td></tr>
+      <tr><td><code>src/net/roomMusic.js</code></td><td>Room music: file, mic or tab sound from the host to each member over WebRTC; measures its beat</td><td class="num">324</td></tr>
+      <tr><td><code>src/audio/onsetEnvelope.js</code></td><td>The beat of any sound as numbers: 30 Hz spectral flux, batched per second</td><td class="num">51</td></tr>
+      <tr><td><code>src/share/sessionShare.js</code></td><td>Tempo source: mic onset envelope (nothing recorded)</td><td class="num">100</td></tr>
       <tr><td><code>src/net/*.js</code></td><td>Envelope format, room names, server URL rules</td><td class="num">82</td></tr>
       <tr><td><code>src/floor.js</code>, <code>floor.html</code></td><td>The big-screen spectator page</td><td class="num">237</td></tr>
       <tr><td><code>src/schedule.js</code>, <code>schedule/index.html</code></td><td>The DJ booking page at <code>/schedule</code>, and its admin approval queue</td><td class="num">308</td></tr>
@@ -484,15 +503,15 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>server/aiDancer.js</code></td><td>Retimed replay with borrowed limbs, in body space</td><td class="num">324</td></tr>
       <tr><td><code>server/library.js</code></td><td>Descriptors, cache, tempo/style/tag picking</td><td class="num">233</td></tr>
       <tr><td><code>server/style.js</code></td><td>Body space and the movement-style vector</td><td class="num">171</td></tr>
-      <tr><td><code>server/beatDetector.js</code></td><td>Tempo and beats from motion alone</td><td class="num">159</td></tr>
+      <tr><td><code>server/beatDetector.js</code></td><td>Tempo and beats from motion alone, reported once locked</td><td class="num">221</td></tr>
       <tr><td><code>server/whip.js</code></td><td>OBS streaming: WHIP ingest (werift), audio fan-out to each listener</td><td class="num">190</td></tr>
       <tr><td><code>server/stats.js</code></td><td>Daily visit totals</td><td class="num">120</td></tr>
       <tr><td><code>server/recorder.js</code></td><td>Per-session JSONL plus optional media files</td><td class="num">116</td></tr>
-      <tr><td><code>server/tempo.js</code></td><td>Autocorrelation for any signal, music tempo from the mic envelope</td><td class="num">99</td></tr>
+      <tr><td><code>server/tempo.js</code></td><td>Autocorrelation for any signal, music tempo from an onset envelope (room music or mic)</td><td class="num">99</td></tr>
       <tr><td><code>server/schedule.js</code></td><td>DJ bookings: JSON file, approval, clashes, cancel tokens</td><td class="num">137</td></tr>
       <tr><td><code>server/rooms.js</code>, <code>matcher.js</code>, <code>songs.js</code></td><td>Room registry and its host, tempo pairing, 14-song stub catalog (65–174 BPM)</td><td class="num">181</td></tr>
       <tr class="grp"><td colspan="3">Tests and tooling</td></tr>
-      <tr><td><code>server/test/*.js</code></td><td>Rooms, DJ schedule, room music host and signalling, library and AI dancer, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
+      <tr><td><code>server/test/*.js</code></td><td>Rooms, DJ schedule, room music host and signalling, library and AI dancer, tempo locking and room-music tempo, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
       <tr><td><code>server/lab/*</code></td><td>Dance lab: scenarios, waterfalls, harvesting, video ingestion</td><td class="num">~1,760</td></tr>
       <tr><td><code>bench.html</code></td><td>Dev-only guest-drawing benchmark (not in the build)</td><td class="num">120</td></tr>
       <tr><td><code>dance-lan.sh</code></td><td>Starts server and Vite, prints a phone QR code, opens the dance floor</td><td class="num">90</td></tr>
@@ -544,7 +563,8 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>DJ schedule with approval, Upcoming rooms, fine print (issue #2)</td><td><span class="pill p-ok">verified</span></td><td class="sub">18 Oct 2026, on branch <code>dj-schedule</code>: 6 schedule tests pass, including request → admin approve → public over a real socket. In headless Chrome at phone size: requests stayed private until approved, a wrong admin key was refused, approve and reject updated the DJ's statuses live, the approved set reached Upcoming and "Join a room", Join opened <code>dj-funk</code>, and the audio fine print toggled. Not yet phone-tested.</td></tr>
       <tr><td>Mic beat</td><td><span class="pill p-todo">untested live</span></td><td class="sub">Server side is tested. On a real phone only the mic-refused path has been seen. Video and audio uploads were removed on 18 Oct 2026 (privacy).</td></tr>
       <tr><td>Privacy page, nothing stored (issues #5–#9)</td><td><span class="pill p-ok">built</span></td><td class="sub">18 Oct 2026, branch <code>privacy</code>: <code>/privacy/</code> page plus footer link, recording off by default, "Teach AI" marked coming soon, report email in the fine print, 3-day journal cap in <code>deploy.sh</code>. 48 server tests pass. The VM's existing <code>library/sessions/</code> still holds sessions from before; Chris decides whether to delete them.</td></tr>
-      <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked.</td></tr>
+      <tr><td>Tempo from motion</td><td><span class="pill p-todo">weak</span></td><td class="sub">Unreliable on travelling dancers. Pelvis-relative redesign is parked. Since issue #19 it no longer reports start-up noise, but messy movement may never lock.</td></tr>
+      <tr><td>Tempo from room music, one beat everywhere (issue #19)</td><td><span class="pill p-ok">built</span></td><td class="sub">21 Oct 2026, branch <code>room-tempo</code>: 6 tempo tests (walk-up then dance, room music measured by one listener reaching the whole room and the lobby, pairing on the music at clashing movement tempos, falling back when it stops); 64 server checks and the lab pass. Not yet heard on real phones: WebRTC audio into the beat meter, and autoplay-blocked listeners (they measure after "Tap to hear").</td></tr>
       <tr><td>Public server for the deployed site</td><td><span class="pill p-ok">live</span></td><td class="sub">Since 15 Oct 2026: Oracle Cloud Always Free ARM VM (Frankfurt, 92.5.67.131) behind Caddy at <code>wss://ws.wilkinscoffee.be/ws</code>, deployed with <code>server/deploy/deploy.sh</code>. No uptime monitor or “multiplayer offline” notice yet.</td></tr>
       <tr><td>Branch</td><td><span class="pill p-ok">released</span></td><td class="sub"><code>dance-rooms</code> merged into <code>main</code> (lab included) and published to <code>release</code> on 15 Oct 2026.</td></tr>
       <tr><td>Room music: the host plays to the room (issue #4)</td><td><span class="pill p-ok">verified</span></td><td class="sub">18 Oct 2026, on branch <code>room-music</code>: 2 server tests cover host rules and signalling. Two headless Chrome tabs with fake cameras: the host shared a room and played a file, the listener received Opus stereo at 128 kb/s with a real signal level and saw "♫ tone.wav"; stop cleared it; the mic source worked too. Tab or computer sound and real phones are untested; there's no TURN server.</td></tr>

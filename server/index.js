@@ -14,7 +14,10 @@
  *   → { type: 'room', name, bpm, members, host, music }   who's in your room + tempo;
  *                                                 host = the host's id, music = { label } while playing
  *   → { type: 'rtc', from, data }                 WebRTC signalling for room music (host ↔ member)
- *   → { type: 'profile', bpm, confidence, musicBpm, musicConfidence }
+ *   → { type: 'profile', bpm, confidence, warming, musicBpm, musicConfidence }
+ *                                                 bpm: your movement's tempo (0 until it locks;
+ *                                                 warming: you're moving, not locked yet);
+ *                                                 musicBpm: the music's (room music, else your mic)
  *   → { type: 'guests', people, ai, library }     who is dancing in your space
  *   → { type: 'match', partner, bpm, song }       tempo-compatible pairing
  *   → { type: 'schedule', bookings }              approved DJ sets (see schedule.js)
@@ -41,7 +44,9 @@
  *   ← { type: 'room-music', on, label }           host: music to the room started/stopped
  *   ← { type: 'rtc', to, data }                   WebRTC signalling, relayed host ↔ member only
  *   ← { type: 'level', video, music, w, h }       what this session shares (see recorder.js)
- *   ← { type: 'music', t0, hz, e }                mic onset envelope (music level beat/audio)
+ *   ← { type: 'music', t0, hz, e, from }          onset envelope of what this phone hears: from 'room'
+ *                                                 = the room's music it plays (host or listener),
+ *                                                 else its mic (music level beat/audio)
  *   ← { type: 'media', kind, mime, data }         MediaRecorder chunk, base64 (level audio/video)
  *   ← { type: 'label', clickBpm }                 dance-lab ground truth
  *   ← { type: 'watch' }                           become a spectator (dance floor)
@@ -102,6 +107,7 @@ const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip th
 const MAX_BOOKINGS_PER_SESSION = 10;
 const MAX_ADMIN_TRIES = 5;
 const MAX_RTC_BYTES = 16_000; // one SDP or ICE candidate
+const ROOM_BEAT_MS = 4000;    // a phone's room-music envelope counts this long after its last batch
 
 /**
  * The key that approves DJ bookings: ADMIN_KEY, else server/data/admin-key,
@@ -176,14 +182,34 @@ export function startServer({
     const { bpm, confidence } = s.detector.state;
     return { id: s.id, bpm, confidence };
   };
-  /** The beat an AI dancer or a guest match should follow: music if we hear it, else motion. */
-  const targetBpm = (s) => {
-    const m = s.music.state;
-    if (m.bpm > 0 && m.confidence >= 0.3) return m.bpm;
-    const d = s.detector.state;
-    return d.bpm > 0 && d.confidence >= 0.3 ? d.bpm : 0;
+  const heard = (st) => (st.bpm > 0 && st.confidence >= 0.3 ? st : null);
+  /**
+   * The tempo of a room's music: every phone playing it (the host, each
+   * listener) measures what it plays; the clearest reading wins.
+   */
+  const roomMusicBeat = (name) => {
+    if (!name || !musicOf(name)) return null;
+    let best = null;
+    for (const m of rooms.members(name)) {
+      const st = now() - m.roomBeatAt < ROOM_BEAT_MS ? heard(m.roomBeat.state) : null;
+      if (st && (!best || st.confidence > best.confidence)) best = st;
+    }
+    return best;
   };
-  const dancing = (s) => !s.watching && now() - s.lastFrameAt < ACTIVE_MS;
+  /** The music this dancer hears, if we can tell its tempo: the room's, else their own mic's. */
+  const musicBeat = (s) => roomMusicBeat(s.room) ?? heard(s.music.state);
+  /**
+   * One beat for everything (AI dancers, guests, pairing, a room's tempo):
+   * the music if we hear it, else the dancer's movement.
+   */
+  const beatOf = (s) => {
+    const m = musicBeat(s) ?? heard(s.detector.state);
+    return { id: s.id, bpm: m?.bpm ?? 0, confidence: m?.confidence ?? 0 };
+  };
+  const targetBpm = (s) => beatOf(s).bpm;
+  /** A room's tempo: its music's, else the consensus of its dancers' movement. */
+  const roomBpm = (name) => roomMusicBeat(name)?.bpm ?? roomTempo(rooms.members(name).map(profileOf));
+  const dancing = (s) => !s.watching && s.lastFrameAt > 0 && now() - s.lastFrameAt < ACTIVE_MS;
 
   // Room host: the one member who can play music to the room. During a
   // booked set it is the DJ (whoever holds the booking's token); otherwise
@@ -236,8 +262,7 @@ export function startServer({
     type: 'rooms',
     rooms: rooms.names
       .map((name) => {
-        const profiles = rooms.members(name).map(profileOf);
-        return { name, dancers: profiles.length, bpm: roomTempo(profiles) };
+        return { name, dancers: rooms.members(name).length, bpm: roomBpm(name) };
       })
       .sort((a, b) => b.dancers - a.dancers || a.name.localeCompare(b.name)),
   });
@@ -287,9 +312,8 @@ export function startServer({
     type: 'floor',
     dancers: dancersOnline().map((s) => ({ ...profileOf(s), room: s.room })),
     rooms: rooms.names.map((name) => {
-      const profiles = rooms.members(name).map(profileOf);
-      const bpm = roomTempo(profiles);
-      return { name, dancers: profiles.length, bpm, song: bpm ? pickSong(bpm) : null };
+      const bpm = roomBpm(name);
+      return { name, dancers: rooms.members(name).length, bpm, song: bpm ? pickSong(bpm) : null };
     }),
   });
   const broadcastFloor = () => {
@@ -306,7 +330,7 @@ export function startServer({
     syncLive(name);
     if (!members.length) return;
     const profiles = members.map(profileOf);
-    const bpm = roomTempo(profiles);
+    const bpm = roomBpm(name);
     const host = hostOf(name);
     const music = musicOf(name);
     for (const s of members) {
@@ -327,7 +351,7 @@ export function startServer({
     people: s.people.map((p) => ({ ...profileOf(p), room: p.room })),
     ai: s.ai.map((d) => d.info),
     library: lib ? { clips: lib.size } : null,
-    target: { bpm: targetBpm(s), music: s.music.state.bpm > 0 && s.music.state.confidence >= 0.3 },
+    target: { bpm: targetBpm(s), music: !!musicBeat(s) },
   });
 
   /** How busy an AI dancer should look: as busy as this dancer, calm until we know. */
@@ -408,6 +432,7 @@ export function startServer({
     const s = {
       id, ws, room: null, watching: false, matchKey: null,
       detector: new BeatDetector(), style: new StyleWindow(), music: new EnvelopeTempo(),
+      roomBeat: new EnvelopeTempo(), roomBeatAt: 0, // the room's music, as this phone plays it
       lastFrameAt: 0, lastFrameT: 0, aspect: 9 / 16, level: { video: 'points', music: 'motion' },
       wants: { people: 0, ai: 0, variation: 0.5 },
       people: [],          // sessions dancing in my space as "other people"
@@ -576,7 +601,14 @@ export function startServer({
         } else if (msg.type === 'stats') {
           if (s.admin) send(s, statsMsg());
         } else if (msg.type === 'music') {
-          s.music.push(msg);
+          if (msg.from === 'room') {
+            if (!s.room) return;
+            if (now() - s.roomBeatAt > ROOM_BEAT_MS) s.roomBeat.reset(); // a new song or a new room
+            s.roomBeat.push(msg);
+            s.roomBeatAt = now();
+          } else {
+            s.music.push(msg);
+          }
           s.rec?.music(msg);
         } else if (msg.type === 'media') {
           if (typeof msg.data === 'string') s.rec?.mediaChunk(msg.kind, msg.mime, Buffer.from(msg.data, 'base64'));
@@ -644,8 +676,8 @@ export function startServer({
   // tempo-first pairing (within a room) with a next song.
   const timer = setInterval(() => {
     for (const s of dancersOnline()) {
-      const m = s.music.state;
-      send(s, { type: 'profile', ...profileOf(s), musicBpm: m.bpm, musicConfidence: m.confidence });
+      const m = musicBeat(s) ?? { bpm: 0, confidence: 0 };
+      send(s, { type: 'profile', ...profileOf(s), warming: s.detector.state.warming, musicBpm: m.bpm, musicConfidence: m.confidence });
       if (dancing(s)) {
         s.rec?.tempo({ t: s.lastFrameT, ...s.detector.state, musicBpm: m.bpm, musicConfidence: m.confidence });
       }
@@ -665,8 +697,7 @@ export function startServer({
     const matched = new Set();
     for (const name of rooms.names) {
       broadcastRoom(name);
-      const profiles = rooms.members(name).map(profileOf);
-      for (const { a, b, bpm } of matcher.pair(profiles)) {
+      for (const { a, b, bpm } of matcher.pair(rooms.members(name).filter(dancing).map(beatOf))) {
         const song = pickSong(bpm);
         const key = `${[a, b].sort().join('+')}:${song.title}`;
         for (const [me, partner] of [[a, b], [b, a]]) {

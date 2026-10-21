@@ -14,7 +14,14 @@
  * The sound goes straight from the host to each member over WebRTC; the
  * dance server only relays the signalling ('rtc' messages, host ↔ member).
  * The host offers, members answer. Opus is set up for music: stereo, 128 kb/s.
+ *
+ * So the server can tell the music's tempo, every phone playing it (the
+ * host, and each member hearing it — also when the server itself streams
+ * a DJ's OBS mix) sends its beat as numbers: 'music' messages with
+ * from: 'room' (see audio/onsetEnvelope.js). Never the sound.
  */
+import { OnsetEnvelope } from '../audio/onsetEnvelope.js';
+
 const ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
 const MAX_TRIES = 3; // per member: fresh connections after a failure
 
@@ -59,6 +66,13 @@ export class RoomMusic {
     this.host = null;     // hosting: { kind, label, stream, stop(), peers: Map<id, { pc, queue }>, tries: Map<id, n> }
     this.listen = null;   // listening: { from, pc, queue, audio }
     this.hostId = null;   // who hosts my room (null: nobody / me)
+    this.beat = null;     // OnsetEnvelope on whatever this phone plays to or hears from the room
+  }
+
+  /** Measure the beat of the room's music as this phone plays it (null: stop). */
+  #measure(stream) {
+    this.beat?.stop();
+    this.beat = stream ? new OnsetEnvelope(stream, (batch) => this.send({ type: 'music', from: 'room', ...batch })) : null;
   }
 
   get state() {
@@ -91,6 +105,7 @@ export class RoomMusic {
     // mic unplugged) stops the music.
     for (const t of src.stream.getAudioTracks()) t.addEventListener('ended', () => { if (this.host?.stream === src.stream) this.stop(); });
     this.send({ type: 'room-music', on: true, label: this.host.label });
+    this.#measure(src.stream);
     this.#emit();
   }
 
@@ -103,6 +118,7 @@ export class RoomMusic {
     const h = this.host;
     if (!h) return;
     this.host = null;
+    this.#measure(null);
     for (const [id, p] of h.peers) {
       p.pc.close();
       this.send({ type: 'rtc', to: id, data: { bye: true } });
@@ -263,6 +279,7 @@ export class RoomMusic {
       pc.onicecandidate = (e) => { if (e.candidate) this.send({ type: 'rtc', to: from, data: { candidate: e.candidate.toJSON() } }); };
       pc.ontrack = (e) => {
         audio.srcObject = e.streams[0] ?? new MediaStream([e.track]);
+        this.#measure(audio.srcObject);
         audio.play().then(() => { l.needsTap = false; this.#emit(); }).catch(() => { l.needsTap = true; this.#emit(); });
         this.#emit();
       };
@@ -283,6 +300,7 @@ export class RoomMusic {
   tapToHear() {
     const l = this.listen;
     if (!l) return;
+    this.beat?.resume();
     l.audio.play().then(() => { l.needsTap = false; this.#emit(); }).catch(() => {});
   }
 
@@ -290,6 +308,7 @@ export class RoomMusic {
     const l = this.listen;
     if (!l || (from && l.from !== from)) return;
     this.listen = null;
+    this.#measure(null);
     l.pc.close();
     l.audio.pause();
     l.audio.srcObject = null;

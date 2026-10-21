@@ -58,7 +58,7 @@ export function readRecording(path) {
 
 /** Settled motion tempo of a clip: median of the detector's last estimates. */
 function motionTempo(frames) {
-  const det = new BeatDetector();
+  const det = new BeatDetector({ lock: false });
   const trace = [];
   let last = -Infinity;
   for (const f of frames) {

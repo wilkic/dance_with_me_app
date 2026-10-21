@@ -7,7 +7,7 @@
  *   { type:'label', clickBpm }                    metronome ground truth (?click=)
  *   { t, k:[132 numbers] }                        PoseFrames — the "points" video level
  *   { type:'tempo', t, bpm, confidence, musicBpm, musicConfidence }  every scan
- *   { type:'music', t0, hz, e:[...] }             onset envelope (music level "beat"/"audio")
+ *   { type:'music', t0, hz, e:[...], from? }      onset envelope (music level "beat"/"audio"; from 'room': the room's music)
  * Full media, when the dancer shares it, lands next to it as
  * <session>.audio.<ext> / <session>.video.<ext> (MediaRecorder chunks).
  *
@@ -70,7 +70,8 @@ export class SessionRecorder {
   }
 
   music(batch) {
-    this.#line({ type: 'music', t0: Math.round(batch.t0 ?? 0), hz: batch.hz ?? 30, e: batch.e.map((v) => +(+v).toFixed(3)) });
+    if (!Array.isArray(batch.e)) return;
+    this.#line({ type: 'music', t0: Math.round(batch.t0 ?? 0), hz: batch.hz ?? 30, e: batch.e.map((v) => +(+v).toFixed(3)), ...(batch.from === 'room' ? { from: 'room' } : {}) });
   }
 
   /** A MediaRecorder chunk: kind 'audio' | 'video', mime like 'audio/webm;codecs=opus'. */
