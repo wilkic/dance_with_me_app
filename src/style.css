@@ -445,6 +445,18 @@ button.danger {
 .music-btn.playing { border-color: #b84ce7; color: #fff; }
 #btn-hear { border-color: #b84ce7; color: #fff; }
 .music-box { display: flex; flex-direction: column; gap: 0.8rem; }
+.rooms-box #rooms-title { font-weight: 600; }
+.rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+.rooms-list button { text-align: left; }
+.rooms-list button.here { border-color: #9fa8ff; color: #9fa8ff; }
+.rooms-list .hint { color: #889; margin: 0; }
 .music-box #music-title { font-weight: 600; margin: 0; }
 .music-sources { display: flex; flex-direction: column; gap: 0.5rem; }
 .music-inputs { display: flex; flex-direction: column; gap: 0.5rem; }

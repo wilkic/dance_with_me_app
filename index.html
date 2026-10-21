@@ -147,6 +147,18 @@
       </div>
     </div>
 
+    <!-- Tap your room name: other open rooms to switch to, or back to the main menu. -->
+    <div id="rooms-sheet" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rooms-title">
+      <div class="modal-box rooms-box">
+        <p id="rooms-title">Rooms</p>
+        <div id="rooms-list" class="rooms-list"></div>
+        <div class="modal-buttons">
+          <button id="rooms-cancel">Stay</button>
+          <button id="rooms-exit" class="danger">Exit to main menu</button>
+        </div>
+      </div>
+    </div>
+
     <div id="confirm" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-msg">
       <div class="modal-box">
         <p id="confirm-msg">Exit room and return to main menu?</p>
