@@ -1,9 +1,11 @@
 /**
  * End-to-end synthetic test: start the server, connect two WebSocket
- * clients streaming synthetic PoseFrames "dancing" at 120 and 118 BPM,
- * in the same dance room, and assert the server profiles both near 120,
- * relays each one's frames to the other, reports the room tempo, and
- * and never names a song (we can't know what's playing).
+ * clients streaming synthetic PoseFrames in the same dance room, plus a
+ * solo dancer who plays their own music (beat numbers only) and asks for
+ * an AI dancer. Asserts frames are relayed between room-mates and to the
+ * dance floor, the lobby and rooms carry no tempo from dancing (no music
+ * there), the solo dancer's AI dancer follows their music, and sessions
+ * are recorded into the library.
  *
  * Synthesis note: motion energy is joint *speed*, so a joint oscillating
  * at 1 Hz produces two energy peaks per cycle → 2 Hz → 120 BPM.
@@ -50,7 +52,7 @@ function makeFrame(tMs, beatBpm) {
 function connectDancer(port, bpm) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-    const dancer = { bpm, ws, id: null, profile: null, match: null, room: null, relayed: new Map() };
+    const dancer = { bpm, ws, id: null, tempo: null, room: null, relayed: new Map() };
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
         // Room-mates' frames, relayed: count them per sender.
@@ -73,10 +75,8 @@ function connectDancer(port, bpm) {
         dancer.room = msg;
       } else if (msg.type === 'rooms') {
         dancer.lobby = msg.rooms;
-      } else if (msg.type === 'profile') {
-        dancer.profile = msg;
-      } else if (msg.type === 'match' || msg.type === 'unmatch') {
-        dancer.match = msg; // gone: must never arrive
+      } else if (msg.type === 'tempo') {
+        dancer.tempo = msg;
       } else if (msg.type === 'guests') {
         dancer.guests = msg;
       }
@@ -85,11 +85,11 @@ function connectDancer(port, bpm) {
   });
 }
 
-/** A solo dancer (no room) who asks for other people and AI dancers as guests. */
-function connectHost(port, { people, ai }) {
+/** A solo dancer (no room) who plays their own music and asks for an AI dancer. */
+function connectHost(port) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-    const h = { ws, id: null, guests: null, relayed: new Map(), profile: null };
+    const h = { ws, id: null, guests: null, relayed: new Map(), tempo: null };
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
         const { dancerId, frameBytes } = decodeEnvelope(new Uint8Array(data));
@@ -107,12 +107,11 @@ function connectHost(port, { people, ai }) {
       const msg = JSON.parse(data.toString());
       if (msg.type === 'welcome') {
         h.id = msg.id;
-        ws.send(JSON.stringify({ type: 'level', video: 'points', music: 'beat', w: 720, h: 1280 }));
         resolve(h);
       } else if (msg.type === 'guests') {
         h.guests = msg;
-      } else if (msg.type === 'profile') {
-        h.profile = msg;
+      } else if (msg.type === 'tempo') {
+        h.tempo = msg;
       }
     });
     ws.on('error', reject);
@@ -159,7 +158,7 @@ const watcher = await new Promise((resolve, reject) => {
 });
 
 // A third dancer, alone in their own space (no room).
-const host = await connectHost(server.port, { people: 1, ai: 1 });
+const host = await connectHost(server.port);
 
 // Stream 15 virtual seconds of dancing at ~30 fps (frame.t is synthetic,
 // so this can be sent as fast as the socket allows).
@@ -168,7 +167,8 @@ for (const d of dancers) {
     d.ws.send(serializePoseFrame(makeFrame(t, d.bpm)));
   }
 }
-// The host dances at 120 too, and hears music at 120 bpm (mic onset envelope).
+// The host dances too, and plays their own music at 120 bpm (Play music
+// without a room: only the onset envelope reaches the server).
 for (let t = 0; t <= 15000; t += 33) host.ws.send(serializePoseFrame(makeFrame(t, 120)));
 for (let b = 0; b < 8; b++) {
   const e = Array.from({ length: 30 }, (_, i) => ((((b * 30 + i) / 30) * 2) % 1) < 0.15 ? 1 : 0.05);
@@ -177,15 +177,14 @@ for (let b = 0; b < 8; b++) {
 
 // Wait for opinion scans to run on the streamed data.
 const deadline = Date.now() + 5000;
-while (Date.now() < deadline && !dancers.every((d) => d.profile?.bpm > 0)) {
+while (Date.now() < deadline && !(host.tempo?.bpm > 0)) {
   await new Promise((r) => setTimeout(r, 100));
 }
-// Now that the server knows the host's beat, ask for 1 real person + 1 AI
-// dancer in the host's space, and let the AI dance for a couple of seconds.
-host.ws.send(JSON.stringify({ type: 'guests', people: 1, ai: 1, aspect: 720 / 1280, variation: 0.7 }));
+// Now that the server knows the host's music, ask for an AI dancer, and
+// let it dance for a couple of seconds.
+host.ws.send(JSON.stringify({ type: 'guests', ai: 1, aspect: 720 / 1280, variation: 0.7 }));
 await new Promise((r) => setTimeout(r, 1500));
-// The room dancers keep dancing: 5 more seconds, which the assigned one
-// should now also be relayed into the host's space.
+// The room dancers keep dancing: 5 more seconds.
 for (const d of dancers) {
   for (let t = 15033; t <= 20000; t += 33) d.ws.send(serializePoseFrame(makeFrame(t, d.bpm)));
 }
@@ -197,14 +196,8 @@ const check = (label, ok) => {
   if (!ok) failed = true;
 };
 
-for (const d of dancers) {
-  const bpm = d.profile?.bpm ?? 0;
-  check(
-    `dancer@${d.bpm}: profiled ${bpm.toFixed(1)} bpm (conf ${d.profile?.confidence?.toFixed(2)})`,
-    Math.abs(bpm - d.bpm) < 6 && d.profile.confidence > 0.3,
-  );
-}
-check('no song titles or partner matches are sent', !dancers.some((d) => d.match));
+check('no tempo from dancing: room-mates without music get bpm 0',
+  dancers.every((d) => d.tempo && d.tempo.bpm === 0 && d.room?.bpm === 0));
 
 // ---- Dance floor (spectator) checks ----
 {
@@ -217,54 +210,42 @@ check('no song titles or partner matches are sent', !dancers.some((d) => d.match
   const fd = watcher.floor?.dancers ?? [];
   const fr = watcher.floor?.rooms?.find((r) => r.name === 'test-floor');
   check(
-    `floor: lists ${fd.length} dancers (2 in room test-floor at ${fr?.bpm?.toFixed?.(1)} bpm, no song, host solo)`,
+    `floor: lists ${fd.length} dancers (2 in room test-floor, no music so bpm ${fr?.bpm}, host solo)`,
     fd.length === 3 && fd.filter((d) => d.room === 'test-floor').length === 2 && fd.some((d) => d.id === host.id && !d.room) &&
-      fr?.dancers === 2 && Math.abs(fr.bpm - 119) < 6 && !('song' in fr),
+      fr?.dancers === 2 && fr.bpm === 0 && !fd.some((d) => 'bpm' in d),
   );
   check('floor: spectator is not listed as a dancer', !fd.some((d) => d.id === watcher.id));
 }
 
-// ---- Guests checks: other people + AI dancers in a solo dancer's space ----
+// ---- AI dancer in a solo dancer's space, following their own music ----
 {
   const g = host.guests;
   const aiIds = [...host.relayed.keys()].filter((k) => k.startsWith('ai-1-'));
-  const peopleIds = [...host.relayed.keys()].filter((k) => !k.startsWith('ai-'));
   check(
-    `guests: host got 1 real person (${g?.people?.map((p) => p.id).join()}) and 1 AI dancer (${g?.ai?.[0]?.base}, ${g?.ai?.[0]?.tag})`,
-    g?.people?.length === 1 && dancers.some((d) => d.id === g.people[0].id) && g?.ai?.length === 1 && g.ai[0].kind === 'ai',
+    `ai: the solo dancer's music heard at ${host.tempo?.bpm?.toFixed?.(1)} bpm`,
+    Math.abs((host.tempo?.bpm ?? 0) - 120) < 5 && host.tempo.confidence > 0.3,
   );
   check(
-    `guests: AI dancer picked the tempo-matching clip (salsa-a @120) and library has ${g?.library?.clips} clips`,
-    g?.ai?.[0]?.base === 'salsa-a' && g.library.clips === 2,
-  );
-  const person = host.relayed.get(g?.people?.[0]?.id);
-  const extra = Math.floor((20000 - 15033) / 33) + 1;
-  check(
-    `guests: the real person's frames were relayed into the host's space (${person?.n ?? 0}/${extra} since they were assigned)`,
-    person?.n === extra && peopleIds.length === 1,
+    `ai: 1 AI dancer picked the music-matching clip (${g?.ai?.[0]?.base} — salsa-a @120) from ${g?.library?.clips} clips`,
+    g?.ai?.length === 1 && g.ai[0].kind === 'ai' && g.ai[0].base === 'salsa-a' && g.library.clips === 2 && g.target?.music === true,
   );
   const ai = host.relayed.get(aiIds[0]);
   check(
-    `guests: AI dancer streamed ${ai?.n ?? 0} frames, on screen (x ${ai?.minX.toFixed(2)}–${ai?.maxX.toFixed(2)}, y ${ai?.minY.toFixed(2)}–${ai?.maxY.toFixed(2)})`,
+    `ai: streamed ${ai?.n ?? 0} frames, on screen (x ${ai?.minX.toFixed(2)}–${ai?.maxX.toFixed(2)}, y ${ai?.minY.toFixed(2)}–${ai?.maxY.toFixed(2)})`,
     aiIds.length === 1 && ai?.n > 40 && ai.minX > -0.3 && ai.maxX < 1.3 && ai.minY > -0.2 && ai.maxY < 1.2,
   );
   check(
-    `guests: host's music tempo heard at ${host.profile?.musicBpm?.toFixed?.(1)} bpm`,
-    Math.abs((host.profile?.musicBpm ?? 0) - 120) < 5 && host.profile.musicConfidence > 0.3,
+    'ai: only AI dancers came in — no strangers (the room dancers never reached the host)',
+    [...host.relayed.keys()].every((k) => k.startsWith('ai-')) && !dancers.some((d) => d.relayed.has(host.id)),
   );
-  check(
-    'guests: the room dancers did NOT receive the host (they never asked for people)',
-    !dancers.some((d) => d.relayed.has(host.id)),
-  );
-  // Turn guests off: AI frames stop, people are released.
   const before = host.relayed.get(aiIds[0])?.n ?? 0;
-  host.ws.send(JSON.stringify({ type: 'guests', people: 0, ai: 0 }));
+  host.ws.send(JSON.stringify({ type: 'guests', ai: 0 }));
   await new Promise((r) => setTimeout(r, 300));
   const mid = host.relayed.get(aiIds[0])?.n ?? 0;
   await new Promise((r) => setTimeout(r, 300));
   check(
-    'guests: setting 0/0 stops the AI stream and empties the guest list',
-    host.guests.ai.length === 0 && host.guests.people.length === 0 && (host.relayed.get(aiIds[0])?.n ?? 0) === mid && mid >= before,
+    'ai: asking for 0 stops the AI stream',
+    host.guests.ai.length === 0 && (host.relayed.get(aiIds[0])?.n ?? 0) === mid && mid >= before,
   );
 }
 
@@ -273,8 +254,8 @@ const [d0, d1] = dancers;
 // ---- Lobby checks: the start screen's room list ----
 const lob = d0.lobby?.find((r) => r.name === 'test-floor');
 check(
-  `lobby: lists test-floor with ${lob?.dancers} dancing at ${lob?.bpm?.toFixed?.(1)} bpm`,
-  d0.lobby?.length === 1 && lob?.dancers === 2 && Math.abs(lob.bpm - 119) < 6,
+  `lobby: lists test-floor with ${lob?.dancers} dancing, no music so bpm ${lob?.bpm}`,
+  d0.lobby?.length === 1 && lob?.dancers === 2 && lob.bpm === 0,
 );
 // A newcomer (not in any room) gets the lobby on connect, before joining.
 const newcomer = await new Promise((resolve, reject) => {
@@ -306,11 +287,10 @@ for (const [me, other] of [[d0, d1], [d1, d0]]) {
   );
 }
 check(
-  `room: opinion lists both members with tempo (room ${d0.room?.bpm?.toFixed(1)} bpm)`,
+  'room: opinion lists both members, both dancing, no tempo per member',
   d0.room?.name === 'test-floor' && d0.room.members.length === 2 &&
   d0.room.members.some((m) => m.you && m.id === d0.id) &&
-  d0.room.members.some((m) => !m.you && m.id === d1.id && Math.abs(m.bpm - 118) < 6) &&
-  Math.abs(d0.room.bpm - 119) < 6,
+  d0.room.members.some((m) => !m.you && m.id === d1.id && m.dancing && !('bpm' in m)),
 );
 // Leaving: the room shrinks for the one who stays.
 d1.ws.send(JSON.stringify({ type: 'leave' }));
@@ -331,10 +311,9 @@ await new Promise((r) => setTimeout(r, 300));
   const hostFile = files.find((f) => f.endsWith(`-${host.id}.jsonl`));
   const lines = hostFile ? readFileSync(join(recordDir, hostFile), 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
   check(
-    `recording: ${files.length} dancer sessions kept (spectator/newcomer dropped), host's has frames + tempo + music + level`,
+    `recording: ${files.length} dancer sessions kept (spectator/newcomer dropped), host's has frames + music tempo + envelope`,
     files.length === 3 && lines.filter((l) => Array.isArray(l.k)).length === 455 &&
-      lines.some((l) => l.type === 'tempo' && l.musicBpm > 100) && lines.some((l) => l.type === 'music') &&
-      lines.some((l) => l.type === 'label' && l.level?.music === 'beat' && l.video?.w === 720),
+      lines.some((l) => l.type === 'tempo' && l.musicBpm > 100) && lines.some((l) => l.type === 'music'),
   );
   check(`recording: closed sessions joined the library (${library.size} clips now)`, library.size === 5);
 }

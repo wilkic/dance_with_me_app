@@ -36,7 +36,7 @@ const PORTRAIT = 9 / 16;
 export function readRecording(path) {
   const frames = [];
   let label = null;
-  const tempo = [];   // {t, bpm, confidence, musicBpm, musicConfidence} lines from recorder.js
+  const tempo = [];   // {t, musicBpm, musicConfidence} lines from recorder.js
   for (const line of readFileSync(path, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     let o;
@@ -58,7 +58,7 @@ export function readRecording(path) {
 
 /** Settled motion tempo of a clip: median of the detector's last estimates. */
 function motionTempo(frames) {
-  const det = new BeatDetector({ lock: false });
+  const det = new BeatDetector();
   const trace = [];
   let last = -Infinity;
   for (const f of frames) {

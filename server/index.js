@@ -2,24 +2,24 @@
  * Dance-analysis server + dance rooms + guests.
  *
  * Ingests raw PoseFrames from clients over WebSocket (binary frames in the
- * exact serialize format the app already uses), runs a per-dancer
- * BeatDetector server-side, relays frames between the members of a dance
- * room, brings guests into a dancer's space (and, only when RECORD_DIR is
+ * exact serialize format the app already uses), relays frames between the
+ * members of a dance room, hears the tempo of the music each dancer plays
+ * or hears (beat numbers only), brings AI dancers into a dancer's space
+ * when there is music (and, only when RECORD_DIR is
  * set, records sessions into the dance library), and periodically forms
  * opinions:
  *
  *   → { type: 'welcome', id }                     on connect
  *   → { type: 'rooms', rooms }                    lobby: open rooms to pick from
  *   → { type: 'joined', room, created, host }     after a join (host: you can play music)
- *   → { type: 'room', name, bpm, members, host, music }   who's in your room + tempo
- *                                                 (members[].dancing: their frames are arriving);
+ *   → { type: 'room', name, bpm, members, host, music }   who's in your room; bpm: its music's
+ *                                                 (0: none or not heard yet); members[].dancing:
+ *                                                 their frames are arriving;
  *                                                 host = the host's id, music = { label } while playing
  *   → { type: 'rtc', from, data }                 WebRTC signalling for room music (host ↔ member)
- *   → { type: 'profile', bpm, confidence, warming, musicBpm, musicConfidence }
- *                                                 bpm: your movement's tempo (0 until it locks;
- *                                                 warming: you're moving, not locked yet);
- *                                                 musicBpm: the music's (room music, else your mic)
- *   → { type: 'guests', people, ai, library }     who is dancing in your space
+ *   → { type: 'tempo', bpm, confidence }          the tempo of the music you dance to: the room's,
+ *                                                 or alone, what you play (0: no music heard)
+ *   → { type: 'guests', ai, library, target }     the AI dancers in your space
  *   → { type: 'schedule', bookings }              approved DJ sets (see schedule.js)
  *   → { type: 'booked', booking, token }          your request is in, waiting for approval
  *   → { type: 'mine', bookings }                  your own requests, with status
@@ -41,14 +41,12 @@
  *                                                 tab: this browser tab's id, so a reconnect replaces
  *                                                 its old connection instead of leaving a ghost
  *   ← { type: 'leave' }                           back to solo
- *   ← { type: 'guests', people, ai, aspect, variation }   guests wanted in my space
+ *   ← { type: 'guests', ai, aspect, variation }   how many AI dancers I want (only with music)
  *   ← { type: 'room-music', on, label }           host: music to the room started/stopped
  *   ← { type: 'rtc', to, data }                   WebRTC signalling, relayed host ↔ member only
- *   ← { type: 'level', video, music, w, h }       what this session shares (see recorder.js)
- *   ← { type: 'music', t0, hz, e, from }          onset envelope of what this phone hears: from 'room'
- *                                                 = the room's music it plays (host or listener),
- *                                                 else its mic (music level beat/audio)
- *   ← { type: 'media', kind, mime, data }         MediaRecorder chunk, base64 (level audio/video)
+ *   ← { type: 'music', t0, hz, e }                onset envelope (beat numbers, never sound) of the
+ *                                                 music this phone plays or hears: the room's, or
+ *                                                 alone, its own (Play music without a room)
  *   ← { type: 'label', clickBpm }                 dance-lab ground truth
  *   ← { type: 'watch' }                           become a spectator (dance floor)
  *   ← { type: 'book', dj, start, minutes, setInfo, bio, link }   book a DJ set (/schedule)
@@ -61,13 +59,11 @@
  *   ← { type: 'stop-music', room }                admin: stop a room's music, no more until it closes
  *   ← { type: 'end-room', room }                  admin: send everyone in a room back to solo
  *
- * Guests. Two kinds can dance in someone's space. "Other people" are real
- * dancers online right now, assigned by the server (tempo-compatible
- * first) and relayed exactly like room-mates — you can be dancing in
- * someone's space while dancing alone in yours. "AI dancers" are built
- * from the dance library (library.js + aiDancer.js): a recorded person
- * retimed to your beat, with moves borrowed from a similar dancer, streamed
- * as PoseFrames under an `ai-<slot>-<id>` dancer id.
+ * Guests. With music, "AI dancers" fill the empty seats in someone's space:
+ * built from the dance library (library.js + aiDancer.js), a recorded
+ * person retimed to the music's beat, as busy as you, with moves borrowed
+ * from a similar dancer, streamed as PoseFrames under an `ai-<slot>-<id>`
+ * dancer id. Without music the phone fills them with delayed-yous itself.
  *
  * Spectators (the big-screen dance floor, floor.html) send no frames; they
  * receive every dancer's frames as relay envelopes plus:
@@ -85,13 +81,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deserializePoseFrame, serializePoseFrame } from '../src/pose/poseFormat.js';
 import { encodeEnvelope } from '../src/net/envelope.js';
-import { BeatDetector } from './beatDetector.js';
-import { Rooms, roomTempo } from './rooms.js';
+import { Rooms } from './rooms.js';
 import { Library } from './library.js';
 import { AiDancer, CALM_ENERGY } from './aiDancer.js';
 import { SessionRecorder } from './recorder.js';
 import { StyleWindow, energyOf } from './style.js';
-import { EnvelopeTempo, tempoGap } from './tempo.js';
+import { EnvelopeTempo } from './tempo.js';
 import { Schedule } from './schedule.js';
 import { Stats } from './stats.js';
 import { WhipIngest } from './whip.js';
@@ -106,7 +101,7 @@ const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip th
 const MAX_BOOKINGS_PER_SESSION = 10;
 const MAX_ADMIN_TRIES = 5;
 const MAX_RTC_BYTES = 16_000; // one SDP or ICE candidate
-const ROOM_BEAT_MS = 4000;    // a phone's room-music envelope counts this long after its last batch
+const BEAT_MS = 4000;         // a phone's music envelope counts this long after its last batch
 const HEARTBEAT_MS = 15_000;  // ping every connection; one that misses a whole round is dropped
 const QUIET_MS = 3000;        // a rejoining tab replaces its old connection if that one went quiet
 
@@ -129,7 +124,6 @@ function loadAdminKey(file, log) {
   }
   return key;
 }
-const LEVELS = { video: ['points', 'video'], music: ['motion', 'beat', 'audio'] };
 
 export function startServer({
   port = 8901,
@@ -179,11 +173,10 @@ export function startServer({
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(encodeEnvelope(dancerId, new Uint8Array(buf)), { binary: true });
   };
 
-  const profileOf = (s) => {
-    const { bpm, confidence } = s.detector.state;
-    return { id: s.id, bpm, confidence };
+  const heard = (s) => {
+    const st = s.beat.state;
+    return now() - s.beatAt < BEAT_MS && st.bpm > 0 && st.confidence >= 0.3 ? st : null;
   };
-  const heard = (st) => (st.bpm > 0 && st.confidence >= 0.3 ? st : null);
   /**
    * The tempo of a room's music: every phone playing it (the host, each
    * listener) measures what it plays; the clearest reading wins.
@@ -192,24 +185,20 @@ export function startServer({
     if (!name || !musicOf(name)) return null;
     let best = null;
     for (const m of rooms.members(name)) {
-      const st = now() - m.roomBeatAt < ROOM_BEAT_MS ? heard(m.roomBeat.state) : null;
+      const st = heard(m);
       if (st && (!best || st.confidence > best.confidence)) best = st;
     }
     return best;
   };
-  /** The music this dancer hears, if we can tell its tempo: the room's, else their own mic's. */
-  const musicBeat = (s) => roomMusicBeat(s.room) ?? heard(s.music.state);
   /**
-   * One beat for everything (AI dancers, guests, a room's tempo):
-   * the music if we hear it, else the dancer's movement.
+   * The music this dancer dances to, if we can tell its tempo: in a room,
+   * the room's; alone, whatever they play for themselves (Play music).
+   * There is no tempo from movement: AI dancers follow the music, and
+   * without music the guests are delayed-yous (on the phone).
    */
-  const beatOf = (s) => {
-    const m = musicBeat(s) ?? heard(s.detector.state);
-    return { id: s.id, bpm: m?.bpm ?? 0, confidence: m?.confidence ?? 0 };
-  };
-  const targetBpm = (s) => beatOf(s).bpm;
-  /** A room's tempo: its music's, else the consensus of its dancers' movement. */
-  const roomBpm = (name) => roomMusicBeat(name)?.bpm ?? roomTempo(rooms.members(name).map(profileOf));
+  const musicBeat = (s) => (s.room ? roomMusicBeat(s.room) : heard(s));
+  const targetBpm = (s) => musicBeat(s)?.bpm ?? 0;
+  const roomBpm = (name) => roomMusicBeat(name)?.bpm ?? 0;
   const dancing = (s) => !s.watching && s.lastFrameAt > 0 && now() - s.lastFrameAt < ACTIVE_MS;
 
   // Room host: the one member who can play music to the room. During a
@@ -248,7 +237,6 @@ export function startServer({
   });
   // Everyone in the room but its host listens to the live stream.
   const syncLive = (name) => whip.sync(name, rooms.members(name).filter((m) => !isHost(m, name)).map((m) => m.id));
-  const roomMates = (a, b) => !!a.room && a.room === b.room;
   // Acting on reports (see /terms/): an admin can silence a room (no music
   // until it closes) or end it (everyone back to solo; the name stays
   // closed for ENDED_ROOM_MS so it can't simply be reopened).
@@ -305,13 +293,13 @@ export function startServer({
     }
   };
 
-  // Dance floor: what a spectator screen shows — every dancer (with room
-  // and tempo) and every room with its consensus tempo. Sent to watchers
-  // with every lobby update.
+  // Dance floor: what a spectator screen shows — every dancer (with room)
+  // and every room with its music's tempo. Sent to watchers with every
+  // lobby update.
   const dancersOnline = () => [...sessions.values()].filter((s) => !s.watching);
   const floor = () => ({
     type: 'floor',
-    dancers: dancersOnline().map((s) => ({ ...profileOf(s), room: s.room })),
+    dancers: dancersOnline().map((s) => ({ id: s.id, room: s.room })),
     rooms: rooms.names.map((name) => {
       const bpm = roomBpm(name);
       return { name, dancers: rooms.members(name).length, bpm };
@@ -324,13 +312,12 @@ export function startServer({
     }
   };
 
-  // Room opinion: membership + everyone's tempo + the room's consensus.
+  // Room opinion: membership, host, music and the music's tempo.
   // Sent on every scan and immediately when membership changes.
   const broadcastRoom = (name) => {
     const members = rooms.members(name);
     syncLive(name);
     if (!members.length) return;
-    const profiles = members.map(profileOf);
     const bpm = roomBpm(name);
     const host = hostOf(name);
     const music = musicOf(name);
@@ -341,7 +328,7 @@ export function startServer({
         bpm,
         host: host?.id ?? null,
         music,
-        members: members.map((m, i) => ({ ...profiles[i], you: m === s, host: m === host, dancing: dancing(m) })),
+        members: members.map((m) => ({ id: m.id, you: m === s, host: m === host, dancing: dancing(m) })),
       });
     }
   };
@@ -349,7 +336,6 @@ export function startServer({
   // ---- Guests: who is dancing in this session's space ----
   const guestsMsg = (s) => ({
     type: 'guests',
-    people: s.people.map((p) => ({ ...profileOf(p), room: p.room })),
     ai: s.ai.map((d) => d.info),
     library: lib ? { clips: lib.size } : null,
     target: { bpm: targetBpm(s), music: !!musicBeat(s) },
@@ -357,7 +343,7 @@ export function startServer({
 
   /** How busy an AI dancer should look: as busy as this dancer, calm until we know. */
   const wantEnergy = (s) => energyOf(s.style.vector) || CALM_ENERGY;
-  /** A library clip for this dancer: their beat, their style, not one already on their floor. */
+  /** A library clip for this dancer: the music's beat, their style, not one already on their floor. */
   const pickClip = (s, exclude) => {
     const desc = lib.pick({ bpm: targetBpm(s), energy: wantEnergy(s), style: s.style.vector, exclude });
     return desc ? { desc, frames: lib.frames(desc) } : null;
@@ -401,44 +387,15 @@ export function startServer({
     }
   };
 
-  /**
-   * Other people as guests: fill each session's wish with dancers who are
-   * online and moving right now — those already there stay (stability),
-   * newcomers ranked by tempo compatibility, then by how many spaces they
-   * are already in (spread the load). Room-mates are never double-booked.
-   */
-  const assignPeople = (only = null) => {
-    const pool = dancersOnline().filter(dancing);
-    for (const s of only ? [only] : sessions.values()) {
-      if (s.watching) continue;
-      const want = Math.min(MAX_GUESTS, s.wants.people);
-      const keep = s.people.filter((p) => sessions.has(p.id) && dancing(p) && !roomMates(s, p));
-      const have = new Set(keep);
-      const tb = targetBpm(s);
-      const score = new Map();
-      const cands = pool.filter((p) => p !== s && !have.has(p) && !roomMates(s, p));
-      for (const p of cands) score.set(p, tempoGap(tb, targetBpm(p)) + 0.1 * p.hosts.size + 0.05 * Math.random());
-      cands.sort((a, b) => score.get(a) - score.get(b));
-      const next = [...keep, ...cands].slice(0, want);
-      for (const p of s.people) if (!next.includes(p)) p.hosts.delete(s);
-      for (const p of next) p.hosts.add(s);
-      const changed = next.length !== s.people.length || next.some((p, i) => p !== s.people[i]);
-      s.people = next;
-      if (changed) send(s, guestsMsg(s));
-    }
-  };
-
   wss.on('connection', (ws) => {
     const id = randomUUID().slice(0, 8);
     const s = {
       id, ws, room: null, watching: false,
       tab: null, alive: true, lastMsgAt: now(), // see the heartbeat and 'join'
-      detector: new BeatDetector(), style: new StyleWindow(), music: new EnvelopeTempo(),
-      roomBeat: new EnvelopeTempo(), roomBeatAt: 0, // the room's music, as this phone plays it
-      lastFrameAt: 0, lastFrameT: 0, aspect: 9 / 16, level: { video: 'points', music: 'motion' },
-      wants: { people: 0, ai: 0, variation: 0.5 },
-      people: [],          // sessions dancing in my space as "other people"
-      hosts: new Set(),    // sessions whose space I dance in
+      style: new StyleWindow(),
+      beat: new EnvelopeTempo(), beatAt: 0, // the music this phone plays or hears (see 'music')
+      lastFrameAt: 0, lastFrameT: 0, aspect: 9 / 16,
+      wants: { ai: 0, variation: 0.5 },
       ai: [],              // AiDancer[]
       rec: recordDir ? new SessionRecorder(recordDir, { id }) : null,
       booked: 0,           // bookings made on this connection (rate limit)
@@ -596,21 +553,12 @@ export function startServer({
           broadcastSchedule();
         } else if (msg.type === 'guests') {
           const n = (v) => Math.max(0, Math.min(MAX_GUESTS, Math.round(Number(v) || 0)));
-          s.wants.people = n(msg.people);
           s.wants.ai = n(msg.ai);
           if (msg.variation !== undefined) s.wants.variation = Math.max(0, Math.min(1, Number(msg.variation) || 0));
           if (msg.aspect > 0) { s.aspect = msg.aspect; s.style.aspect = msg.aspect; }
           ensureAi(s);
-          assignPeople(s);
           send(s, guestsMsg(s));
-          log(`~ ${id} wants guests: ${s.wants.people} people, ${s.wants.ai} AI`);
-        } else if (msg.type === 'level') {
-          if (LEVELS.video.includes(msg.video)) s.level.video = msg.video;
-          if (LEVELS.music.includes(msg.music)) s.level.music = msg.music;
-          const dims = msg.w > 0 && msg.h > 0 ? { w: msg.w, h: msg.h } : null;
-          if (dims) { s.aspect = dims.w / dims.h; s.style.aspect = s.aspect; }
-          s.rec?.label({ level: { ...s.level }, ...(dims ? { video: dims } : {}) });
-          if (s.level.music === 'motion') s.music.reset();
+          log(`~ ${id} wants ${s.wants.ai} AI dancers`);
         } else if (msg.type === 'visit') {
           if (s.visited) return; // once per page load
           s.visited = true;
@@ -618,17 +566,10 @@ export function startServer({
         } else if (msg.type === 'stats') {
           if (s.admin) send(s, statsMsg());
         } else if (msg.type === 'music') {
-          if (msg.from === 'room') {
-            if (!s.room) return;
-            if (now() - s.roomBeatAt > ROOM_BEAT_MS) s.roomBeat.reset(); // a new song or a new room
-            s.roomBeat.push(msg);
-            s.roomBeatAt = now();
-          } else {
-            s.music.push(msg);
-          }
+          if (now() - s.beatAt > BEAT_MS) s.beat.reset(); // a new song, a new room
+          s.beat.push(msg);
+          s.beatAt = now();
           s.rec?.music(msg);
-        } else if (msg.type === 'media') {
-          if (typeof msg.data === 'string') s.rec?.mediaChunk(msg.kind, msg.mime, Buffer.from(msg.data, 'base64'));
         }
         return;
       }
@@ -639,15 +580,12 @@ export function startServer({
       s.lastFrameAt = now();
       s.lastFrameT = frame.t;
       s.rec?.frame(frame);
-      s.detector.update(frame);
       s.style.push(frame);
 
-      // Relay to everyone who has this dancer on their floor: room-mates,
-      // spectators, and people who took this dancer in as a guest. They all
-      // render it through the same avatar path as delayed-replay guests.
+      // Relay to everyone who has this dancer on their floor: room-mates
+      // and spectators.
       const peers = rooms.peersOf(s);
       for (const w of sessions.values()) if (w.watching) peers.push(w);
-      for (const h of s.hosts) if (!peers.includes(h)) peers.push(h);
       if (peers.length) {
         const env = encodeEnvelope(s.id, new Uint8Array(buf));
         for (const p of peers) {
@@ -659,12 +597,7 @@ export function startServer({
       if (isHost(s)) roomMusic.delete(s.room);
       const left = rooms.leave(s);
       sessions.delete(id);
-      for (const p of s.people) p.hosts.delete(s);
-      for (const h of s.hosts) {
-        h.people = h.people.filter((p) => p !== s);
-        send(h, guestsMsg(h));
-      }
-      const r = s.rec?.close({ bpm: +s.detector.state.bpm.toFixed(1), musicBpm: +s.music.state.bpm.toFixed(1) });
+      const r = s.rec?.close({ musicBpm: +s.beat.state.bpm.toFixed(1) });
       if (r?.kept) {
         log(`● ${id} session kept for the library (${r.frames} frames)`);
         lib?.add(r.path);
@@ -700,23 +633,20 @@ export function startServer({
     }
   }, AI_TICK_MS);
 
-  // Opinion scan: profiles out, room tempo per room, guests.
+  // Opinion scan: each dancer's music tempo, rooms, AI dancers.
   const timer = setInterval(() => {
     for (const s of dancersOnline()) {
       const m = musicBeat(s) ?? { bpm: 0, confidence: 0 };
-      send(s, { type: 'profile', ...profileOf(s), warming: s.detector.state.warming, musicBpm: m.bpm, musicConfidence: m.confidence });
-      if (dancing(s)) {
-        s.rec?.tempo({ t: s.lastFrameT, ...s.detector.state, musicBpm: m.bpm, musicConfidence: m.confidence });
-      }
+      send(s, { type: 'tempo', bpm: m.bpm, confidence: m.confidence });
+      if (dancing(s)) s.rec?.tempo({ t: s.lastFrameT, musicBpm: m.bpm, musicConfidence: m.confidence });
     }
     broadcastLobby();
     if (schedule.prune()) broadcastSchedule();
     for (const name of silenced) if (!rooms.members(name).length) silenced.delete(name);
     for (const [name, until] of endedRooms) if (until <= Date.now()) endedRooms.delete(name);
     stats.save();
-    assignPeople();
     for (const s of sessions.values()) {
-      if (!s.wants.ai && !s.wants.people) continue;
+      if (!s.wants.ai) continue;
       refreshAi(s);
       send(s, guestsMsg(s));
     }

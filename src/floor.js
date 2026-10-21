@@ -3,7 +3,7 @@
  *
  * Connects to the dance server as a spectator ('watch'), receives every
  * dancer's PoseFrames plus 'floor' opinions (who is online, which room,
- * tempo per dancer and per room), and
+ * each room's music tempo), and
  * draws everyone as glowing stick figures grouped by room — the same
  * avatar the phones use. Music: a local audio file played through this
  * machine's speakers (the room speaker), picked from the top bar.
@@ -13,10 +13,10 @@
  * room's tempo and crowd, and no sound (OBS already has the DJ's mix).
  * Paste the link into OBS as a Browser Source. ?caption=0 hides the text.
  */
-import { StickFigureAvatar, bodyAnchors } from './avatar/stickFigure.js';
+import { StickFigureAvatar } from './avatar/stickFigure.js';
 import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl } from './net/serverUrl.js';
-import { deserializePoseFrame, KP, STRIDE } from './pose/poseFormat.js';
+import { deserializePoseFrame } from './pose/poseFormat.js';
 import { normalizeRoomName } from './net/roomNames.js';
 
 const $ = (id) => document.getElementById(id);
@@ -41,7 +41,7 @@ const COLORS = [
   { color: '#ffd27d', glow: '#ffe9c2' }, // amber
 ];
 
-// dancerId -> { avatar, pose, lastSeen, bpm, confidence, room }
+// dancerId -> { avatar, pose, lastSeen, room }
 const dancers = new Map();
 let colorsUsed = 0;
 let floorState = { dancers: [], rooms: [] };
@@ -71,8 +71,6 @@ if (!serverUrl) {
       if (ONLY_ROOM && d.room !== ONLY_ROOM) continue;
       known.add(d.id);
       const e = entry(d.id);
-      e.bpm = d.bpm;
-      e.confidence = d.confidence;
       e.room = d.room;
     }
     for (const id of dancers.keys()) if (!known.has(id)) dancers.delete(id);
@@ -90,7 +88,7 @@ function entry(id) {
   if (!e) {
     e = {
       avatar: new StickFigureAvatar(COLORS[colorsUsed++ % COLORS.length]),
-      pose: null, lastSeen: 0, bpm: 0, confidence: 0, room: null,
+      pose: null, lastSeen: 0, room: null,
     };
     dancers.set(id, e);
   }
@@ -190,7 +188,6 @@ function render() {
       ctx.translate(cx, cy);
       ctx.beginPath(); ctx.rect(0, 0, cellW, cellH); ctx.clip();
       m.avatar.render(ctx, m.pose, { width: cellW, height: cellH }, null);
-      if (m.bpm && m.confidence > 0.3) drawBpmLabel(m.pose, m.bpm, m.avatar.color, cellW, cellH);
       ctx.restore();
     });
     y += bandH;
@@ -227,27 +224,6 @@ function renderOverlay(row, W, H) {
   ctx.shadowBlur = size * 0.5;
   ctx.fillStyle = 'rgba(240,238,255,0.92)';
   ctx.fillText(parts.join('  ·  '), size * 0.8, H - size * 0.5);
-  ctx.restore();
-}
-
-/** Tempo tag floating above the dancer's head, same look as on the phones. */
-function drawBpmLabel(pose, bpm, color, W, H) {
-  const at = (i) => ({ x: pose.keypoints[i * STRIDE] * W, y: pose.keypoints[i * STRIDE + 1] * H, v: pose.keypoints[i * STRIDE + 3] });
-  const nose = at(KP.NOSE);
-  if (nose.v < 0.4) return;
-  // Clear the head circle: the avatar draws it with radius 0.28 × torso length.
-  const body = bodyAnchors(pose, W, H);
-  if (!body) return;
-  const r = Math.max(6, body.torsoLen * 0.28);
-  const size = Math.max(14, H * 0.05);
-  ctx.save();
-  ctx.font = `700 ${size}px system-ui, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = size * 0.4;
-  ctx.fillStyle = color;
-  ctx.fillText(`${Math.round(bpm)}`, nose.x, nose.y - r - size * 0.3);
   ctx.restore();
 }
 

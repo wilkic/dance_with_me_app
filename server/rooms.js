@@ -6,9 +6,7 @@
  * its host: the one who can play music to the room. The host is known by a
  * key their browser made (session.hostKey), so they get the role back
  * after a reconnect; index.js lets a booked DJ's token override it.
- * The one thing assessed per room today is tempo: each member's BPM and a
- * room-level consensus BPM. Later, the room is where the app picks music
- * for everyone (tastes × each dancer's tempo × the room's tempo).
+ * A room's tempo is its music's (index.js), never its dancers' movement.
  */
 import { normalizeRoomName } from '../src/net/roomNames.js';
 
@@ -74,24 +72,4 @@ export class Rooms {
   get names() {
     return [...this.rooms.keys()];
   }
-}
-
-/**
- * Room tempo: confidence-weighted median of the members that have a
- * trustworthy read. Raw BPM (no octave folding) — this is what the room
- * "feels like"; half/double-time equivalence is tempoGap's job (tempo.js).
- * profiles: [{ bpm, confidence }] → bpm (0 if nobody is confident yet)
- */
-export function roomTempo(profiles, { minConfidence = 0.3 } = {}) {
-  const ready = profiles
-    .filter((p) => p.bpm > 0 && p.confidence >= minConfidence)
-    .sort((a, b) => a.bpm - b.bpm);
-  if (!ready.length) return 0;
-  const total = ready.reduce((acc, p) => acc + p.confidence, 0);
-  let acc = 0;
-  for (const p of ready) {
-    acc += p.confidence;
-    if (acc >= total / 2) return p.bpm;
-  }
-  return ready[ready.length - 1].bpm;
 }
