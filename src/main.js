@@ -98,11 +98,14 @@ const roomState = { name: null, bpm: 0, members: [], host: false, hostId: null, 
 // the booked DJ — plays music; everyone else in the room hears it. This
 // browser's host key lets the server recognise the host after a reconnect
 // or reload; a booking token (saved by /schedule in this browser) makes
-// the DJ the host of their booked room.
+// the DJ the host of their booked room. The key is kept for good (one per
+// browser, not per tab) because it's also the OBS stream key: set up once
+// in OBS, it streams into whichever room this browser shares.
 const hostKey = (() => {
   try {
-    let k = sessionStorage.getItem('dwm.hostKey');
-    if (!k) sessionStorage.setItem('dwm.hostKey', (k = crypto.randomUUID()));
+    let k = localStorage.getItem('dwm.hostKey') || sessionStorage.getItem('dwm.hostKey');
+    if (!k) k = crypto.randomUUID();
+    localStorage.setItem('dwm.hostKey', k);
     return k;
   } catch { return crypto.randomUUID(); }
 })();
