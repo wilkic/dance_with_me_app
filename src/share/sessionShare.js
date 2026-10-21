@@ -17,9 +17,10 @@
  * Goes over the existing server link as JSON control messages ('level',
  * 'music'); see server/index.js.
  */
+import { OnsetEnvelope } from '../audio/onsetEnvelope.js';
+
 export const VIDEO_LEVELS = ['points'];
 export const MUSIC_LEVELS = ['motion', 'beat'];
-const ENVELOPE_HZ = 30;
 
 export class SessionShare {
   /**
@@ -33,7 +34,7 @@ export class SessionShare {
     // The old menu dials were remembered here; they're gone.
     try { localStorage.removeItem('dwm.share'); } catch { /* storage unavailable */ }
     this.active = false;
-    this.mic = null;        // { stream, ctx, analyser, timer, prev, batch, t0 }
+    this.mic = null;        // { stream, beat: OnsetEnvelope }
     this.dims = null;
   }
 
@@ -83,32 +84,8 @@ export class SessionShare {
       this.announce();
       return false;
     }
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new Ctx();
-    const src = ctx.createMediaStreamSource(stream);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0;
-    src.connect(analyser);
-    const bins = Math.min(analyser.frequencyBinCount, Math.ceil(5000 / (ctx.sampleRate / analyser.fftSize)));
-    const cur = new Uint8Array(analyser.frequencyBinCount);
-    const mic = { stream, ctx, analyser, prev: new Uint8Array(analyser.frequencyBinCount), batch: [], t0: performance.now(), timer: null };
-    // Spectral flux at 30 Hz: how much louder each band got since the last
-    // tick, summed — the classic onset signal. Batched once per second.
-    mic.timer = setInterval(() => {
-      analyser.getByteFrequencyData(cur);
-      let flux = 0;
-      for (let i = 0; i < bins; i++) { const d = cur[i] - mic.prev[i]; if (d > 0) flux += d; }
-      mic.prev.set(cur);
-      mic.batch.push(+(flux / bins / 255).toFixed(3));
-      if (mic.batch.length >= ENVELOPE_HZ) {
-        this.link?.sendJSON({ type: 'music', t0: Math.round(mic.t0), hz: ENVELOPE_HZ, e: mic.batch });
-        mic.batch = [];
-        mic.t0 = performance.now();
-      }
-    }, 1000 / ENVELOPE_HZ);
-    this.mic = mic;
-    ctx.resume?.();
+    const beat = new OnsetEnvelope(stream, (batch) => this.link?.sendJSON({ type: 'music', ...batch }));
+    this.mic = { stream, beat };
     this.onStatus('listening for the beat');
     return true;
   }
@@ -116,9 +93,8 @@ export class SessionShare {
   #stopMic() {
     const m = this.mic;
     if (!m) return;
-    clearInterval(m.timer);
+    m.beat.stop();
     for (const t of m.stream.getTracks()) t.stop();
-    m.ctx.close?.();
     this.mic = null;
   }
 }

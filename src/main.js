@@ -124,6 +124,7 @@ const peopleGuests = new Set(); // dancer ids the server brought into my space
 const aiInfo = new Map(); // ai dancer id -> { tag, title, bpm, base, moves, borrowing }
 let libraryClips = null;
 let myBpm = 0;
+let myWarming = false; // moving, but no tempo we trust yet
 let musicBpm = 0;
 
 function onServerStatus(state) {
@@ -249,6 +250,7 @@ function renderRoomButton() {
 function onServerMessage(msg) {
   if (msg.type === 'profile') {
     myBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
+    myWarming = !!msg.warming;
     musicBpm = msg.musicBpm > 0 && msg.musicConfidence > 0.25 ? msg.musicBpm : 0;
     renderBpm();
   } else if (msg.type === 'rooms') {
@@ -325,9 +327,11 @@ function pruneReal() {
   for (const id of peerBpm.keys()) if (!present.has(id)) peerBpm.delete(id);
 }
 
+/** Top of the dance screen: the music's tempo once we hear it, and yours once it locks. */
 function renderBpm() {
-  const you = myBpm ? `${myBpm.toFixed(0)} bpm` : '-- bpm';
-  $('hud-bpm').textContent = musicBpm ? `${you} · ♫ ${musicBpm.toFixed(0)}` : you;
+  const you = myBpm ? `${myBpm.toFixed(0)} bpm` : myWarming ? 'finding your beat…' : '-- bpm';
+  const music = `♫ ${musicBpm.toFixed(0)} bpm`;
+  $('hud-bpm').textContent = !musicBpm ? you : myBpm ? `${music} · you ${myBpm.toFixed(0)}` : music;
 }
 
 function renderRoomLine() {
@@ -761,6 +765,7 @@ function exitToStart() {
   smoother.reset();
   lastPose = null;
   myBpm = 0;
+  myWarming = false;
   musicBpm = 0;
   fpsEma = 0;
   lastFrameT = 0;
