@@ -3,7 +3,7 @@
  * relay envelope round-trip, and room-name normalization.
  */
 import assert from 'node:assert/strict';
-import { Rooms, roomTempo } from '../rooms.js';
+import { Rooms } from '../rooms.js';
 import { encodeEnvelope, decodeEnvelope } from '../../src/net/envelope.js';
 import { normalizeRoomName, randomRoomName } from '../../src/net/roomNames.js';
 import { serializePoseFrame, deserializePoseFrame, emptyPoseFrame } from '../../src/pose/poseFormat.js';
@@ -39,19 +39,6 @@ test('join creates, second join joins, leave closes when empty', () => {
   assert.deepEqual(rooms.names, ['other']);            // funky-otter closed
   rooms.leave(a);
   assert.deepEqual(rooms.names, []);
-});
-
-test('room tempo is the confidence-weighted median of confident dancers', () => {
-  assert.equal(roomTempo([]), 0);
-  assert.equal(roomTempo([{ bpm: 120, confidence: 0.1 }]), 0);
-  assert.equal(roomTempo([{ bpm: 120, confidence: 0.9 }]), 120);
-  assert.equal(roomTempo([
-    { bpm: 90, confidence: 0.4 },
-    { bpm: 120, confidence: 0.9 },
-    { bpm: 200, confidence: 0.5 },
-  ]), 120);
-  // Two confident dancers: the more confident one carries the room.
-  assert.equal(roomTempo([{ bpm: 100, confidence: 0.5 }, { bpm: 130, confidence: 0.9 }]), 130);
 });
 
 test('envelope round-trips id + PoseFrame', () => {

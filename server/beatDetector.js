@@ -1,5 +1,5 @@
 import { KP, getKeypoint } from '../src/pose/poseFormat.js';
-import { dominantTempo, tempoGap } from './tempo.js';
+import { dominantTempo } from './tempo.js';
 
 // Joints that carry the most rhythmic information, weighted accordingly.
 const TRACKED = [
@@ -20,17 +20,6 @@ const SAMPLE_HZ = 30;           // uniform grid the energy signal is resampled t
 const WINDOW_S = 6;             // analysis window
 const MIN_BPM = 50;
 const MAX_BPM = 200;
-// Before a tempo is reported at all ("locking"): people opening the app
-// aren't dancing yet — setting the phone down and stepping back reads as a
-// confident, steady and wrong tempo. So the last LOCK_N estimates must
-// agree (within LOCK_GAP, half/double time being one groove) and the
-// movement must be even across a full window, with the same beat in its
-// recent half on its own (dancing now, not a few steps up to the phone and
-// then standing still).
-const LOCK_N = 3;
-const LOCK_GAP = 0.1;
-const MIN_MOVE = 0.05;          // window mean energy (torso-lengths/s) below which nobody is dancing
-const MAX_UNEVEN = 3;           // louder half of the window ÷ quieter half
 
 /**
  * BeatDetector: estimates tempo and beats purely from body motion — no
@@ -44,18 +33,13 @@ const MAX_UNEVEN = 3;           // louder half of the window ÷ quieter half
  *  3. About once a second, autocorrelation over a 6 s window finds the
  *     dominant repetition period in the 50–200 BPM range → tempo +
  *     confidence.
- *  4. No tempo is reported until it has locked: the last few estimates
- *     agree and the movement is steady (see LOCK_N) — until then `warming`
- *     says someone is moving but we don't trust a tempo yet.
- *  5. Beats are marked at energy peaks (adaptive threshold), which also
+ *  4. Beats are marked at energy peaks (adaptive threshold), which also
  *     gives beat phase for future cross-dancer sync.
  *
- * Output (`.state`): { bpm, confidence, lastBeatAt, energy, warming }
+ * Output (`.state`): { bpm, confidence, lastBeatAt, energy }
  */
 export class BeatDetector {
-  /** lock=false: report from the first estimate (rating library clips, which are dancing from the first frame). */
-  constructor({ lock = true } = {}) {
-    this.lock = lock;
+  constructor() {
     this.prevFrame = null;
     this.samples = [];       // { t, e } raw energy samples
     this.grid = [];          // uniform 30 Hz energy values
@@ -63,8 +47,7 @@ export class BeatDetector {
     this.lastAnalysis = 0;
     this.emaEnergy = 0;
     this.emaAbsDev = 0.05;
-    this.recent = [];        // last raw estimates (bpm, 0 = none), for locking
-    this.state = { bpm: 0, confidence: 0, lastBeatAt: null, energy: 0, warming: false };
+    this.state = { bpm: 0, confidence: 0, lastBeatAt: null, energy: 0 };
   }
 
   update(frame) {
@@ -90,8 +73,7 @@ export class BeatDetector {
     this.samples = [];
     this.grid = [];
     this.gridStartT = null;
-    this.recent = [];
-    this.state = { bpm: 0, confidence: 0, lastBeatAt: null, energy: 0, warming: false };
+    this.state = { bpm: 0, confidence: 0, lastBeatAt: null, energy: 0 };
   }
 
   /** Weighted joint speed, normalized by torso length (body-size invariant). */
@@ -158,64 +140,22 @@ export class BeatDetector {
     }
   }
 
-  /** Autocorrelation of the energy signal → dominant tempo (see tempo.js), once locked. */
+  /** Autocorrelation of the energy signal → dominant tempo (see tempo.js). */
   #analyzeTempo() {
     if (this.grid.length < SAMPLE_HZ * 3) return; // need ≥3s of motion
     const { bpm, confidence, flat } = dominantTempo(this.grid, SAMPLE_HZ, { minBpm: MIN_BPM, maxBpm: MAX_BPM });
-    this.recent.push(confidence >= 0.3 ? bpm : 0);
-    if (this.recent.length > LOCK_N) this.recent.shift();
-    const moving = this.#steadyMovement();
     if (flat) {
       this.state.bpm = 0;
       this.state.confidence = 0;
-    } else if (!this.state.bpm) {
-      // Not locked: report nothing until the estimates agree while dancing.
-      const agreed = this.lock && moving ? this.#agreed() : 0;
-      const lock = this.lock ? (agreed && this.#recentlyAt(agreed) ? agreed : 0) : bpm;
-      if (lock) {
-        this.state.bpm = lock;
-        this.state.confidence = confidence;
-      }
     } else if (bpm > 0) {
       // Smooth tempo estimate to avoid HUD flicker.
-      this.state.bpm = this.state.bpm * 0.7 + bpm * 0.3;
+      this.state.bpm = this.state.bpm > 0
+        ? this.state.bpm * 0.7 + bpm * 0.3
+        : bpm;
       this.state.confidence = confidence;
     } else {
       this.state.confidence *= 0.8;
       if (this.state.confidence < 0.1) this.state.bpm = 0;
     }
-    this.state.warming = moving !== null && !this.state.bpm;
-  }
-
-  /**
-   * Is the window someone dancing? true: moving, evenly; false: moving but
-   * unevenly (walking up, settling in); null: not moving at all.
-   */
-  #steadyMovement() {
-    const g = this.grid;
-    const half = Math.floor(g.length / 2);
-    let a = 0;
-    let b = 0;
-    for (let i = 0; i < half; i++) a += g[i];
-    for (let i = half; i < g.length; i++) b += g[i];
-    a /= half;
-    b /= g.length - half;
-    if ((a + b) / 2 < MIN_MOVE) return null;
-    if (g.length < WINDOW_S * SAMPLE_HZ) return false; // not a full window yet
-    return Math.max(a, b) / Math.max(1e-6, Math.min(a, b)) <= MAX_UNEVEN;
-  }
-
-  /** Does the recent half of the window, on its own, beat at `bpm`? */
-  #recentlyAt(bpm) {
-    const recent = this.grid.slice(-Math.floor(this.grid.length / 2));
-    const r = dominantTempo(recent, SAMPLE_HZ, { minBpm: MIN_BPM, maxBpm: MAX_BPM });
-    return r.bpm > 0 && r.confidence >= 0.3 && tempoGap(r.bpm, bpm) <= LOCK_GAP;
-  }
-
-  /** The median of the last LOCK_N estimates if they all agree with it, else 0. */
-  #agreed() {
-    if (this.recent.length < LOCK_N || this.recent.some((b) => !b)) return 0;
-    const mid = [...this.recent].sort((x, y) => x - y)[LOCK_N >> 1];
-    return this.recent.every((b) => tempoGap(b, mid) <= LOCK_GAP) ? mid : 0;
   }
 }

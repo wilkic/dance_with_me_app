@@ -63,7 +63,7 @@
       <div class="hud">
         <span id="hud-room" class="hidden"></span>
         <span id="hud-fps">-- fps</span>
-        <span id="hud-bpm">-- bpm</span>
+        <span id="hud-bpm" class="hidden"></span>
         <span id="hud-guests" class="hidden"></span>
         <span id="hud-music" class="hidden"></span>
         <span id="hud-status"></span>
@@ -120,6 +120,7 @@
     <div id="music-sheet" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="music-title">
       <div class="modal-box music-box">
         <p id="music-title">Play music to your room</p>
+        <p id="music-solo-hint" class="hint hidden">Only you hear it. Your AI dancers dance to its beat.</p>
         <div class="music-sources">
           <button id="src-file" class="primary">A file on this device</button>
           <button id="src-mic">Mic or line in</button>

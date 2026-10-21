@@ -5,14 +5,14 @@ import { RoomModel } from './room/roomModel.js';
 import { StickFigureAvatar } from './avatar/stickFigure.js';
 import {
   PoseChannel,
-  LoopbackTransport,
   WebSocketTransport,
+  CompositeTransport,
+  DelayedLoopbackTransport,
 } from './net/poseChannel.js';
 import { randomRoomName } from './net/roomNames.js';
 import { resolveServerUrl, whipUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
-import { SessionShare } from './share/sessionShare.js';
 import { joinable, phase, whenText, FINE_PRINT, visitMsg } from './net/schedule.js';
 import { RoomMusic, canShareScreenAudio, listSoundInputs } from './net/roomMusic.js';
 
@@ -34,20 +34,22 @@ const smoother = new PoseSmoother();
 const room = new RoomModel();
 
 // Guest dancers: "remote" dancers whose frames arrive via the channel.
-// Two kinds share one path:
-//   people  — real dancers: room-mates, or anyone online the server brings
-//             into your space
+// Three kinds share one path:
+//   peer    — room-mates (always shown, and they take seats)
+//   replay  — you, replayed on a delay (DelayedLoopbackTransport): the
+//             guests when there's no music
 //   ai      — AI dancers the server builds from the dance library (a real
-//             person's recorded dance on your beat, with borrowed moves)
+//             person's recorded dance on the music's beat, as busy as you,
+//             with borrowed moves): the guests when music plays — the
+//             room's, or alone, your own (♫ Play music)
 // The dancer only picks HOW MANY guests (one slider on the dance screen);
-// planGuests() decides who. Seats open one per spacingSec; real people
-// take an open seat first, AI dancers fill the rest. Room-mates are always
-// shown and count against the seats.
-const GUEST_FADE_MS = { peer: 2_000, ai: 4_000 };
+// planGuests() decides who. Seats open one per spacingSec.
+const GUEST_FADE_MS = { replay: 12_000, peer: 2_000, ai: 4_000 };
 const PEER_STALE_MS = 6_000;
 const MAX_GUESTS = 3;
 const guestCfg = { count: 1, spacingSec: 15, opacity: 0.9, variation: 0.5, styleLabels: false };
-const guestPlan = { open: 0, ai: 0, nextAt: 0 }; // what planGuests() last decided
+const guestTransport = new DelayedLoopbackTransport();
+const guestPlan = { open: 0, ai: 0, replays: 0, nextAt: 0 }; // what planGuests() last decided
 let danceStartedAt = 0; // performance.now() when the dance screen opened
 
 // Dance server (rooms, guests, rhythm analysis, the dance library) — see
@@ -66,32 +68,25 @@ if (serverLink) {
 const clickBpm = Number(urlParams.get('click')) || 0;
 const metronome = clickBpm > 0 ? new Metronome(clickBpm) : null;
 
-// Tempo comes from movement; ?beat=1 adds the mic's beat (testing; see share/sessionShare.js).
-const share = new SessionShare(serverLink, {
-  music: urlParams.has('beat') ? 'beat' : 'motion',
-  onStatus: (m) => console.info(`[tempo] ${m}`),
-});
-
 if (serverLink) {
   let visitSent = false;
   serverLink.onOpen = () => {
     if (!visitSent) { serverLink.sendJSON(visitMsg('app')); visitSent = true; } // daily totals, once per page load
     // Every (re)connect: resend session state.
     if (clickBpm > 0) serverLink.sendJSON({ type: 'label', clickBpm });
-    share.announce();
     lastWants = '';
     planGuests();
   };
 }
 
 const channel = new PoseChannel(
-  serverLink ?? new LoopbackTransport(),
+  serverLink ? new CompositeTransport([guestTransport, serverLink]) : guestTransport,
 );
 channel.subscribe(onRemoteFrame);
 
 // ---- Dance room + guest state ----
-// The one thing assessed per room today: tempo. Each member's BPM, and the
-// room's consensus BPM, arrive in the server's 'room' opinions.
+// The server's 'room' opinions: members (who is dancing), host, music, and
+// the music's BPM (heard by the phones playing it).
 const roomState = { name: null, bpm: 0, members: [], host: false, hostId: null, music: null };
 
 // Room music (net/roomMusic.js): the room's host — whoever shared it, or
@@ -126,17 +121,14 @@ function joinExtra(room) {
 }
 const music = new RoomMusic({
   send: (msg) => serverLink?.sendJSON(msg),
-  onState: () => renderMusic(),
+  onState: () => { renderMusic(); planGuests(); }, // own music on/off: AI dancers ⇄ delayed-yous
 });
 if (urlParams.has('debug')) window.dwm = { music, roomState }; // console poking / browser tests
-let lobby = []; // open rooms from the server: [{ name, dancers, bpm }]
+let lobby = []; // open rooms from the server: [{ name, dancers, bpm }] (bpm: its music's, 0 = none)
 let bookings = []; // DJ sets booked ahead (see net/schedule.js), soonest first
-const peopleGuests = new Set(); // dancer ids the server brought into my space
 const aiInfo = new Map(); // ai dancer id -> { tag, title, bpm, base, moves, borrowing }
 let libraryClips = null;
-let myBpm = 0;
-let myWarming = false; // moving, but no tempo we trust yet
-let musicBpm = 0;
+let musicBpm = 0; // the music I dance to (the room's, or my own), 0 until heard
 
 function onServerStatus(state) {
   const el = $('server-status');
@@ -169,7 +161,7 @@ function renderJoinPicker() {
   // before anyone is in them.
   const now = Date.now();
   const sets = bookings.filter((b) => joinable(b, now) && !lobby.some((r) => r.name === b.room));
-  const key = JSON.stringify([lobby.map((r) => [r.name, r.dancers]), sets.map((b) => b.id)]);
+  const key = JSON.stringify([lobby.map((r) => [r.name, r.dancers, Math.round(r.bpm || 0)]), sets.map((b) => b.id)]);
   if (key === joinKey) return;
   joinKey = key;
   const placeholder = new Option('Join a room', '', true, true);
@@ -183,7 +175,9 @@ function renderJoinPicker() {
   }
   for (const r of lobby) {
     const dj = bookings.find((b) => b.room === r.name && joinable(b, now));
-    opts.push(new Option(`${r.name} · ${r.dancers} dancing${dj ? ' · DJ set' : ''}`, r.name));
+    // The room's music tempo, when music plays there and it's been heard.
+    const bpm = r.bpm > 0 ? ` · ${Math.round(r.bpm)} BPM` : '';
+    opts.push(new Option(`${r.name} · ${r.dancers} dancing${bpm}${dj ? ' · DJ set' : ''}`, r.name));
   }
   for (const b of sets) opts.push(new Option(`${b.room} · DJ set`, b.room));
   sel.replaceChildren(...opts);
@@ -259,10 +253,8 @@ function renderRoomButton() {
 }
 
 function onServerMessage(msg) {
-  if (msg.type === 'profile') {
-    myBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
-    myWarming = !!msg.warming;
-    musicBpm = msg.musicBpm > 0 && msg.musicConfidence > 0.25 ? msg.musicBpm : 0;
+  if (msg.type === 'tempo') {
+    musicBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
     renderBpm();
   } else if (msg.type === 'rooms') {
     lobby = msg.rooms;
@@ -299,8 +291,6 @@ function onServerMessage(msg) {
     renderRoomLine();
     planGuests(); // room-mates take guest seats
   } else if (msg.type === 'guests') {
-    peopleGuests.clear();
-    for (const p of msg.people) peopleGuests.add(p.id);
     aiInfo.clear();
     for (const a of msg.ai) aiInfo.set(a.id, a);
     libraryClips = msg.library?.clips ?? null;
@@ -324,18 +314,17 @@ function onServerMessage(msg) {
   }
 }
 
-/** Real people who are neither room-mates nor assigned guests stop rendering right away. */
+/** Real people who are no longer room-mates stop rendering right away. */
 function pruneReal() {
-  const present = new Set(peopleGuests);
-  for (const m of roomState.members) present.add(m.id);
+  const present = new Set(roomState.members.map((m) => m.id));
   for (const [id, g] of guests) if (g.kind === 'peer' && !present.has(id)) guests.delete(id);
 }
 
-/** Top of the dance screen: the music's tempo once we hear it, and yours once it locks. */
+/** Top of the dance screen: the music's tempo once it's heard; nothing without music. */
 function renderBpm() {
-  const you = myBpm ? `${myBpm.toFixed(0)} bpm` : myWarming ? 'finding your beat…' : '-- bpm';
-  const music = `♫ ${musicBpm.toFixed(0)} bpm`;
-  $('hud-bpm').textContent = !musicBpm ? you : myBpm ? `${music} · you ${myBpm.toFixed(0)}` : music;
+  const el = $('hud-bpm');
+  el.textContent = musicBpm ? `♫ ${musicBpm.toFixed(0)} bpm` : '';
+  el.classList.toggle('hidden', !musicBpm);
 }
 
 function renderRoomLine() {
@@ -350,18 +339,16 @@ function renderRoomLine() {
   // up, or a dropped phone, isn't dancing yet).
   const n = 1 + roomState.members.filter((m) => !m.you && m.dancing).length;
   const who = n <= 1 ? 'just you' : `${n} dancing`;
-  const tempo = roomState.bpm > 0 ? ` · room ${Math.round(roomState.bpm)} bpm` : '';
-  hud.textContent = `${who}${tempo}`; // the name is on the room button
+  hud.textContent = who; // the name is on the room button; the music's bpm is in hud-bpm
   hud.classList.remove('hidden');
   cap.textContent = `Room “${roomState.name}” · ${who}`;
   cap.classList.remove('hidden');
 }
 
-/** HUD: who the server put in your space (people count, AI dancers' styles). */
+/** HUD: the AI dancers' styles. */
 function renderGuestLine() {
   const el = $('hud-guests');
   const parts = [];
-  if (peopleGuests.size) parts.push(`👥 ${peopleGuests.size}`);
   for (const a of aiInfo.values()) parts.push(`✨ ${a.tag ?? 'dancer'}${a.borrowing?.length ? ` +${a.borrowing.join('+')}` : ''}`);
   el.textContent = parts.join(' · ');
   el.classList.toggle('hidden', !parts.length);
@@ -369,6 +356,12 @@ function renderGuestLine() {
 
 const guests = new Map(); // dancerId -> { avatar, pose, bornAt, lastSeen, kind, slot, dx, dy, scale }
 
+// Delayed-yous: a tint per seat so several read as different dancers.
+const REPLAY_COLORS = [
+  { color: '#ff7dc5', glow: '#ffc2e4' }, // pink
+  { color: '#7dd3ff', glow: '#c2ecff' }, // cyan
+  { color: '#ffd27d', glow: '#ffe9c2' }, // amber
+];
 // Real people get their own palette so they never look like AI dancers.
 const PEER_COLORS = [
   { color: '#7dffb0', glow: '#c2ffdc' }, // mint
@@ -387,11 +380,13 @@ let peersSeen = 0;
 function onRemoteFrame(dancerId, frame) {
   let g = guests.get(dancerId);
   if (!g) {
+    const replay = /^guest-(\d+)-/.exec(dancerId);
     const ai = /^ai-(\d+)-/.exec(dancerId);
-    const kind = ai ? 'ai' : 'peer';
+    const kind = replay ? 'replay' : ai ? 'ai' : 'peer';
     if (kind === 'ai' && !aiInfo.has(dancerId) && parseInt(ai[1], 10) > guestPlan.ai) return; // no longer wanted
-    const slot = ai ? parseInt(ai[1], 10) : ++peersSeen;
-    const palette = kind === 'ai' ? AI_COLORS : PEER_COLORS;
+    if (kind === 'replay' && parseInt(replay[1], 10) > guestPlan.replays) return;
+    const slot = replay ? parseInt(replay[1], 10) : ai ? parseInt(ai[1], 10) : ++peersSeen;
+    const palette = kind === 'replay' ? REPLAY_COLORS : kind === 'ai' ? AI_COLORS : PEER_COLORS;
     g = {
       // Guests are drawn without any glow: plain and cheap (bench.html),
       // so you stay the one that shines.
@@ -527,7 +522,7 @@ function loop() {
   if (raw) {
     perf.detect = ema(perf.detect, detected - loopStart);
     lastPose = smoother.apply(raw);
-    channel.publish(lastPose); // → dance server (relay, analysis, library)
+    channel.publish(lastPose); // → delayed-yous + dance server (relay, library)
     updateFps(raw.t);
   }
 
@@ -535,9 +530,10 @@ function loop() {
   // capped at guestCfg.opacity (default 90%) so they never crowd it out.
   const now = performance.now();
   if (now >= guestPlan.nextAt) planGuests();
+  guestTransport.tick(now); // delayed-yous whose time has come
   for (const [id, g] of guests) {
     if (!g.pose) continue;
-    if (now - g.lastSeen > PEER_STALE_MS) { guests.delete(id); continue; }
+    if (g.kind !== 'replay' && now - g.lastSeen > PEER_STALE_MS) { guests.delete(id); continue; }
     const fade = Math.min(1, (now - g.bornAt) / GUEST_FADE_MS[g.kind]);
     g.avatar.alpha = fade * guestCfg.opacity;
     g.avatar.render(ctx, g.pose, { width: W, height: H });
@@ -657,22 +653,25 @@ function leaveRoom() {
 }
 
 /**
- * Room music controls. Host: "♫ Play music" (opens the source picker) or
- * "■ Stop music · <what's playing>". Everyone else: what's playing in the
- * HUD, and "Tap to hear the music" if the browser blocked autoplay.
+ * Music controls. Alone, or as a room's host: "♫ Play music" (opens the
+ * source picker) or "■ Stop music · <what's playing>". Alone, the music
+ * stays on this phone; only its beat (numbers) goes to the server, for
+ * your AI dancers. In a room, everyone else hears it: they see what's
+ * playing in the HUD, and "Tap to hear the music" if autoplay was blocked.
  */
+const canPlayMusic = () => !roomState.name || roomState.host;
 function renderMusic() {
   const st = music.state;
   const btn = $('btn-music');
   const live = !!roomState.music?.live;
-  btn.classList.toggle('hidden', !roomState.host);
+  btn.classList.toggle('hidden', !canPlayMusic());
   btn.classList.toggle('playing', st.hosting || live);
   btn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music';
   // The ☰ menu has the same button (where the old "record audio" chip was).
   const menuBtn = $('menu-music');
-  menuBtn.classList.toggle('hidden', !roomState.host);
+  menuBtn.classList.toggle('hidden', !canPlayMusic());
   menuBtn.classList.toggle('playing', st.hosting || live);
-  menuBtn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music to the room';
+  menuBtn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : roomState.name ? '♫ Play music to the room' : '♫ Play music';
   $('btn-hear').classList.toggle('hidden', !st.needsTap);
   const hud = $('hud-music');
   const label = roomState.music && (!roomState.host || roomState.music.live) ? roomState.music.label : '';
@@ -682,8 +681,10 @@ function renderMusic() {
 
 function openMusicSheet() {
   $('music-msg').textContent = '';
+  $('music-title').textContent = roomState.name ? 'Play music to your room' : 'Play music';
+  $('music-solo-hint').classList.toggle('hidden', !!roomState.name);
   $('src-screen').classList.toggle('hidden', !canShareScreenAudio());
-  $('src-obs').classList.toggle('hidden', !canShareScreenAudio());
+  $('src-obs').classList.toggle('hidden', !canShareScreenAudio() || !roomState.name); // OBS plays to a room
   $('music-inputs').classList.add('hidden');
   $('music-obs').classList.add('hidden');
   $('music-sheet').classList.remove('hidden');
@@ -756,7 +757,6 @@ function exitToStart() {
   metronome?.stop();
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
-  share.stop();
   camera.stop();
   room.clear();
   showPlate(false);
@@ -764,8 +764,6 @@ function exitToStart() {
   leaveRoom();
   smoother.reset();
   lastPose = null;
-  myBpm = 0;
-  myWarming = false;
   musicBpm = 0;
   fpsEma = 0;
   lastFrameT = 0;
@@ -773,7 +771,6 @@ function exitToStart() {
   ctx.clearRect(0, 0, stage.width, stage.height);
   showScreen('start');
   planGuests(); // mode is 'start' → the server clears our guests
-  peopleGuests.clear();
   aiInfo.clear();
   renderGuestLine();
   $('sel-join').value = '';
@@ -801,7 +798,6 @@ async function captureRoom() {
   danceStartedAt = performance.now();
   planGuests();
   metronome?.start();
-  share.start({ w: camera.width, h: camera.height });
 }
 
 /** The room photo layer under the stage (see loop()). */
@@ -816,41 +812,50 @@ function showPlate(on) {
 }
 
 // ---- Guests: who dances in our space ----
+/** Is there music to dance to: the room's, or (alone) my own ♫ Play music? */
+const hasMusic = () => (roomState.name ? !!roomState.music : music.state.hosting);
+
 /**
  * Decide who fills the guest seats, from the slider count and the time
  * since dancing started. Room-mates sit in seats first (always shown).
  * The other seats open one every spacingSec — seat 1 after one spacing,
- * seat 2 after two, … An open seat goes to a real person the server found,
- * otherwise to an AI dancer. No server, no guests.
+ * seat 2 after two, … With music they go to AI dancers on its beat;
+ * without music (or no dance server) to delayed-yous: seat N replays you
+ * from N spacings ago, so it appears on time by itself.
  * Called on every input change and once a second from loop().
  */
 function planGuests() {
   const now = performance.now();
   const dancing = mode === 'dance';
   const roomMates = roomState.members.filter((m) => !m.you && m.dancing).length;
-  const seats = dancing && serverLink && serverOnline ? Math.max(0, guestCfg.count - roomMates) : 0;
+  const seats = dancing ? Math.max(0, guestCfg.count - roomMates) : 0;
   const spacing = guestCfg.spacingSec * 1000;
   const elapsed = now - danceStartedAt;
+  const aiOk = hasMusic() && serverLink && serverOnline && libraryClips !== 0;
   const open = Math.min(seats, Math.floor(elapsed / spacing));
-  const people = Math.min(peopleGuests.size, open);
-  const ai = libraryClips !== 0 ? open - people : 0;
+  const ai = aiOk ? open : 0;
+  const replayDelaysMs = aiOk ? [] : Array.from({ length: seats }, (_, i) => (i + 1) * spacing);
   guestPlan.open = open;
   guestPlan.ai = ai;
+  guestPlan.replays = replayDelaysMs.length;
   guestPlan.nextAt = now + 1000;
   guestPlan.opensIn = open < seats ? (open + 1) * spacing - elapsed : 0;
 
-  for (const [id, g] of guests) if (g.kind === 'ai' && g.slot > ai) guests.delete(id);
-  sendGuestWants(open, ai);
+  guestTransport.configure({ delaysMs: replayDelaysMs });
+  for (const [id, g] of guests) {
+    if (g.kind === 'ai' && g.slot > ai) guests.delete(id);
+    if (g.kind === 'replay' && g.slot > replayDelaysMs.length) guests.delete(id);
+  }
+  sendGuestWants(ai);
   renderGuestSlider();
 }
 
 let lastWants = '';
-/** Tell the server how many real people and AI dancers to bring in (sent only on change). */
-function sendGuestWants(people = 0, ai = 0) {
+/** Tell the server how many AI dancers to bring in (sent only on change). */
+function sendGuestWants(ai = 0) {
   if (!serverLink) return;
   const msg = {
     type: 'guests',
-    people,
     ai,
     aspect: camera.width && camera.height ? camera.width / camera.height : 9 / 16,
     variation: guestCfg.variation,
@@ -862,6 +867,7 @@ function sendGuestWants(people = 0, ai = 0) {
 }
 
 function resetGuests() {
+  guestTransport.clear();
   guests.clear();
   danceStartedAt = performance.now();
 }

@@ -6,8 +6,8 @@
  *   { type:'label', session:true, id, at, ... }   provenance + sharing levels
  *   { type:'label', clickBpm }                    metronome ground truth (?click=)
  *   { t, k:[132 numbers] }                        PoseFrames — the "points" video level
- *   { type:'tempo', t, bpm, confidence, musicBpm, musicConfidence }  every scan
- *   { type:'music', t0, hz, e:[...], from? }      onset envelope (music level "beat"/"audio"; from 'room': the room's music)
+ *   { type:'tempo', t, musicBpm, musicConfidence }  every scan: the music's tempo
+ *   { type:'music', t0, hz, e:[...] }             onset envelope of the music the phone plays or hears
  * Full media, when the dancer shares it, lands next to it as
  * <session>.audio.<ext> / <session>.video.<ext> (MediaRecorder chunks).
  *
@@ -64,14 +64,13 @@ export class SessionRecorder {
     this.#line({ t: Math.round(frame.t), k: Array.from(frame.keypoints, (v) => +v.toFixed(4)) });
   }
 
-  tempo({ t, bpm, confidence, musicBpm = 0, musicConfidence = 0 }) {
-    this.#line({ type: 'tempo', t: Math.round(t), bpm: +bpm.toFixed(1), confidence: +confidence.toFixed(2),
-      musicBpm: +musicBpm.toFixed(1), musicConfidence: +musicConfidence.toFixed(2) });
+  tempo({ t, musicBpm = 0, musicConfidence = 0 }) {
+    this.#line({ type: 'tempo', t: Math.round(t), musicBpm: +musicBpm.toFixed(1), musicConfidence: +musicConfidence.toFixed(2) });
   }
 
   music(batch) {
     if (!Array.isArray(batch.e)) return;
-    this.#line({ type: 'music', t0: Math.round(batch.t0 ?? 0), hz: batch.hz ?? 30, e: batch.e.map((v) => +(+v).toFixed(3)), ...(batch.from === 'room' ? { from: 'room' } : {}) });
+    this.#line({ type: 'music', t0: Math.round(batch.t0 ?? 0), hz: batch.hz ?? 30, e: batch.e.map((v) => +(+v).toFixed(3)) });
   }
 
   /** A MediaRecorder chunk: kind 'audio' | 'video', mime like 'audio/webm;codecs=opus'. */
