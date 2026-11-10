@@ -102,6 +102,8 @@ button:active { transform: scale(0.97); }
 
 .bottom-bar {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.8rem;
   margin-bottom: calc(env(safe-area-inset-bottom, 0) + 0.5rem);
 }
