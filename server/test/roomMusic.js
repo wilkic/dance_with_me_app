@@ -97,5 +97,31 @@ await test('during a booked set the DJ (booking token) is the host, not the crea
   early.ws.close(); dj.ws.close();
 });
 
+await test('share your booth: on by default, the host switches it, a booking carries its own choice', async () => {
+  const a = await connect();
+  const b = await connect();
+  sendTo(a, { type: 'join', room: 'booth-room', hostKey: 'key-a' });
+  await next(a, (m) => m.type === 'joined');
+  sendTo(b, { type: 'join', room: 'booth-room', hostKey: 'key-b' });
+  assert.equal((await next(b, (m) => m.type === 'room' && m.members.length === 2)).booth, true);
+  sendTo(b, { type: 'booth', on: false }); // not the host: ignored
+  await quiet(a, (m) => m.type === 'room' && m.booth === false);
+  sendTo(a, { type: 'booth', on: false });
+  await next(b, (m) => m.type === 'room' && m.booth === false);
+  sendTo(a, { type: 'booth', on: true });
+  await next(b, (m) => m.type === 'room' && m.booth === true);
+  a.ws.close(); b.ws.close();
+
+  // Booked without the booth: off from the start, until the DJ turns it on.
+  const { booking, token } = server.schedule.book({ dj: 'DJ Shy', start: Date.now() + 5 * 60_000, minutes: 60, booth: false });
+  server.schedule.approve(booking.id);
+  const dj = await connect();
+  sendTo(dj, { type: 'join', room: 'dj-shy', bookingToken: token });
+  assert.equal((await next(dj, (m) => m.type === 'room')).booth, false);
+  sendTo(dj, { type: 'booth', on: true });
+  await next(dj, (m) => m.type === 'room' && m.booth === true);
+  dj.ws.close();
+});
+
 server.close();
 process.exit(failed ? 1 : 0);

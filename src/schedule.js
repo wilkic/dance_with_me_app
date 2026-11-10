@@ -160,6 +160,7 @@ $('book').addEventListener('submit', (e) => {
     setInfo: $('f-set').value,
     bio: $('f-bio').value,
     link: $('f-link').value,
+    booth: $('f-booth').checked,
   });
 });
 

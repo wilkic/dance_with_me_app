@@ -46,6 +46,9 @@ form {
 }
 label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: #aab; }
 .opt { color: #667; font-size: 0.75rem; }
+label.check { flex-direction: row; align-items: flex-start; gap: 0.6rem; color: #eee; }
+label.check input { width: 1.2rem; height: 1.2rem; flex: none; margin-top: 0.1rem; accent-color: #b84ce7; }
+label.check .hint { display: block; margin-top: 0.2rem; }
 .row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 0.6rem; }
 @media (max-width: 26rem) { .row { grid-template-columns: 1fr 1fr; } .row label:first-child { grid-column: 1 / -1; } }
 

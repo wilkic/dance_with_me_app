@@ -175,14 +175,13 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
 <div class="wrap">
 <header>
   <div>
-    <div class="eyebrow">Software overview · 21 Sep 2026</div>
+    <div class="eyebrow">Software overview · 10 Nov 2026</div>
     <h1>Dance With Me</h1>
     <p class="lede">A phone app that removes you from your own room and puts a glowing stick figure in your place. Dance alone, or fill the room with real people and AI dancers built from real recordings.</p>
     <div class="chips">
-      <span class="chip">branch <b>dance-rooms</b></span>
-      <span class="chip">commit <b>2f9cd2f</b></span>
-      <span class="chip">about <b>6,700</b> lines of JS, Python and shell</span>
-      <span class="chip"><b>40</b> server checks passing</span>
+      <span class="chip">branch <b>dj-position</b></span>
+            <span class="chip">about <b>9,250</b> lines of JS, Python and shell</span>
+      <span class="chip"><b>64</b> server checks passing</span>
     </div>
   </div>
   <svg class="hero-figs" viewBox="0 0 320 100" role="img" aria-label="Four stick figures in different poses, one per kind of dancer">
@@ -388,6 +387,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
   <h2>DJ tools</h2>
   <p>Everything a DJ needs is on <code>/dj/</code> (<code>dj/index.html</code>), linked from the music sheet and <code>/schedule</code>:</p>
   <ul>
+    <li><b>DJ booth</b> (issue #26, <code>src/avatar/booth.js</code>): while a room's host plays music to the room they are its DJ, and everyone else sees their stick figure small, up and in the middle of the screen, marked "DJ", as if at the back of the room. Whatever the DJ's camera sees (a whole body, or head and shoulders at a laptop) the figure lands on the same spot at the same size: torso 8% of the screen height, its middle at 34% from the top; size and position follow over about 1.5 s, so dancing shows and wandering doesn't. The DJ is drawn first (furthest back) and doesn't take a guest seat. It's the room's <b>Share your booth</b> setting, on by default: a checkbox on the <code>/schedule</code> form (kept with the booking as <code>booth</code>) and, for any host, in the ☰ menu during the set (<code>booth</code> message; the server remembers it until the room closes). Off, or when the music stops: the host is among the dancers like anyone else.</li>
     <li><b>OBS overlay</b> (<code>src/floor.js</code>): <code>floor.html?room=NAME&amp;overlay=1</code> draws one room's dancers in a row on a transparent canvas with a caption (room · crowd · tempo; <code>&amp;caption=0</code> hides it), no bar, no sound. Pasted into OBS as a Browser Source. <code>/schedule</code> offers "Copy OBS overlay link" on approved bookings.</li>
     <li><b>Sound input</b> (<code>listSoundInputs</code> in <code>src/net/roomMusic.js</code>): on a computer with several inputs, "Mic or line in" shows a picker, so a DJ controller's sound card, a USB interface, a line-in or a virtual cable (VB-Cable, BlackHole) carries the mix. The choice is remembered (<code>dwm.musicInput</code>).</li>
     <li><b>OBS streaming</b> (<code>server/whip.js</code>, library <code>werift</code>): OBS sends its mix over WHIP to <code>POST /whip</code> on the dance server (same port as the WebSocket; Caddy routes <code>/whip*</code>). The key is a booking token (from an hour before the set) or the host key of a room shared from a computer, as long as no booked DJ has the room. The server is ICE-lite with UDP ports <code>WHIP_PORTS</code> (default 50000-50999) and names <code>WHIP_PUBLIC_IP</code> in its answer; it takes the Opus audio, marks the video inactive, and forwards the packets to one connection per listener (everyone in the room but the host). Phones see <code>music: { label: 'Live from OBS', live: true }</code> and take the offer from <code>live:&lt;room&gt;</code> with the same listener code. The host's phone can only stop it; admins' Stop music / End room end it too; a stream with no audio for 20 s is dropped; OBS reconnecting replaces its old stream. The UDP range is open in both the VM's iptables and the Oracle VCN security list; a live check on 2026-10-20 (stand-in OBS from home → server → a listener) passed. The DJ guide prints the address, <code>https://ws.wilkinscoffee.be/whip</code>.</li>
@@ -409,6 +409,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>label</code></td><td class="sub">ground-truth click BPM, for the lab</td></tr>
         <tr><td><code>watch</code></td><td class="sub">become a spectator, for the dance floor</td></tr>
         <tr><td><code>room-music</code></td><td class="sub">host: music to the room on or off, with a label</td></tr>
+        <tr><td><code>booth</code></td><td class="sub">host: share your booth (the DJ drawn at the back while music plays) on or off</td></tr>
         <tr><td><code>rtc</code></td><td class="sub">WebRTC signalling to a room's host or member (<code>join</code> also carries <code>hostKey</code> and <code>bookingToken</code>)</td></tr>
         <tr><td><code>book</code></td><td class="sub">book a DJ set: dj, start, minutes, set info, bio, link</td></tr>
         <tr><td><code>cancel</code></td><td class="sub">cancel a booking with its token</td></tr>
@@ -425,7 +426,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
         <tr><td><code>welcome</code></td><td class="sub">your session id</td></tr>
         <tr><td><code>rooms</code></td><td class="sub">the lobby: open rooms, counts, their music's BPM</td></tr>
         <tr><td><code>joined</code></td><td class="sub">room name, and whether you created it</td></tr>
-        <tr><td><code>room</code></td><td class="sub">members (who is dancing), host, music, its BPM</td></tr>
+        <tr><td><code>room</code></td><td class="sub">members (who is dancing), host, music, its BPM, and <code>booth</code>: draw the host at the back while music plays</td></tr>
         <tr><td><code>tempo</code></td><td class="sub">the BPM of the music you dance to (0: none heard)</td></tr>
         <tr><td><code>guests</code></td><td class="sub">who is dancing in your space, library size</td></tr>
         <tr><td><code>floor</code></td><td class="sub">to spectators: everyone online, each room's music BPM</td></tr>
@@ -454,7 +455,8 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>src/pose/poseFormat.js</code></td><td>The PoseFrame contract, binary serialize and deserialize</td><td class="num">111</td></tr>
       <tr><td><code>src/pose/poseDetector.js</code></td><td>MediaPipe behind a swappable interface; timed loading, warm-up</td><td class="num">112</td></tr>
       <tr><td><code>src/pose/smoothing.js</code></td><td>One Euro filter per joint</td><td class="num">71</td></tr>
-      <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur, halo or no glow</td><td class="num">144</td></tr>
+      <tr><td><code>src/avatar/stickFigure.js</code></td><td>The glowing stick figure, 1D or 2D torso, blur, halo or no glow</td><td class="num">165</td></tr>
+      <tr><td><code>src/avatar/booth.js</code></td><td>The DJ booth: places the room's DJ small at the back of everyone else's screen</td><td class="num">53</td></tr>
       <tr><td><code>src/room/roomModel.js</code></td><td>Clean-plate room capture, metadata, room for future 3D</td><td class="num">96</td></tr>
       <tr><td><code>src/net/poseChannel.js</code></td><td>Publish and subscribe seam, WebSocket and composite transports</td><td class="num">147</td></tr>
       <tr><td><code>src/net/roomMusic.js</code></td><td>Room music: file, mic or tab sound from the host to each member over WebRTC; measures its beat</td><td class="num">324</td></tr>
@@ -477,7 +479,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td><code>server/schedule.js</code></td><td>DJ bookings: JSON file, approval, clashes, cancel tokens</td><td class="num">137</td></tr>
       <tr><td><code>server/rooms.js</code></td><td>Room registry and its host</td><td class="num">82</td></tr>
       <tr class="grp"><td colspan="3">Tests and tooling</td></tr>
-      <tr><td><code>server/test/*.js</code></td><td>Rooms, DJ schedule, room music host and signalling, library and AI dancer, music tempo (room and alone), ghost members, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
+      <tr><td><code>server/test/*.js</code></td><td>Rooms, the DJ booth, DJ schedule, room music host and signalling, library and AI dancer, music tempo (room and alone), ghost members, and a synthetic end-to-end run with fake dancers</td><td class="num">673</td></tr>
       <tr><td><code>server/lab/*</code></td><td>Dance lab: scenarios, waterfalls, harvesting, video ingestion</td><td class="num">~1,760</td></tr>
       <tr><td><code>bench.html</code></td><td>Dev-only guest-drawing benchmark (not in the build)</td><td class="num">120</td></tr>
       <tr><td><code>dance-lan.sh</code></td><td>Starts server and Vite, prints a phone QR code, opens the dance floor</td><td class="num">90</td></tr>
@@ -535,13 +537,14 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
       <tr><td>Branch</td><td><span class="pill p-ok">released</span></td><td class="sub"><code>dance-rooms</code> merged into <code>main</code> (lab included) and published to <code>release</code> on 15 Oct 2026.</td></tr>
       <tr><td>Room music: the host plays to the room (issue #4)</td><td><span class="pill p-ok">verified</span></td><td class="sub">18 Oct 2026, on branch <code>room-music</code>: 2 server tests cover host rules and signalling. Two headless Chrome tabs with fake cameras: the host shared a room and played a file, the listener received Opus stereo at 128 kb/s with a real signal level and saw "♫ tone.wav"; stop cleared it; the mic source worked too. Tab or computer sound and real phones are untested; there's no TURN server.</td></tr>
       <tr><td>DJ tools: OBS overlay, sound-input picker, OBS streaming (issues #12–#14)</td><td><span class="pill p-ok">built</span></td><td class="sub">18 Oct 2026. Overlay: <code>floor.html?room=X&amp;overlay=1</code> drew one room's synthetic dancer on a transparent canvas with a caption, the solo dancer left out. Picker: headless Chrome listed its fake inputs, the chosen one became the room's music and was remembered. OBS: 3 server tests with a werift stand-in for OBS (host key and booking token, two listeners, host stop, DELETE); in headless Chrome a listener received the server's stream (75 packets, 0 lost) and the host's phone stopped it. Not yet tried with real OBS, nor on the VM (UDP ports).</td></tr>
+      <tr><td>DJ booth: the room's DJ at the back (issue #26)</td><td><span class="pill p-ok">built</span></td><td class="sub">10 Nov 2026, branch <code>dj-position</code>, not merged. 4 placement tests and 1 server test (default on, only the host switches it, a booking carries its own choice). Headless Chrome with two scripted room-mates: the host playing music showed small, up and in the middle with "DJ" over their head, both as a whole body and as head and shoulders; switching the booth off put them back among the dancers; the checkbox showed in the host's ☰ menu and on <code>/schedule</code>. Not yet seen on real phones.</td></tr>
       <tr><td>Ghost room members (issue #22)</td><td><span class="pill p-ok">built</span></td><td class="sub">22 Oct 2026: a phone that reconnected left its old connection in the room, so "3 dancing" for 2 people and the ghost took the guest seat. Now the server pings every 15 s and drops silent connections, a rejoining tab (<code>tab</code> id in <code>join</code>) replaces its quiet old connection, and "N dancing" and guest seats only count room-mates whose frames arrive (<code>members[].dancing</code>). 4 tests. Known, parked: with OBS the room's ♫ bpm can stay empty (the beat meter reads silence until something plays the stream out loud).</td></tr>
       <tr><td>Song titles, partner matching (issue #21)</td><td><span class="pill p-ok">removed</span></td><td class="sub">21 Oct 2026: we can't know what's playing, so no song titles anywhere (phone, dance floor, OBS overlay) and no partner match line; the stub catalog and matcher are gone. The bare BPM number over room-mates' heads went too. Tempo is shown as BPM only.</td></tr>
     </tbody>
   </table></div>
 </section>
 
-<footer>Generated from the repository at commit 2f9cd2f on branch dance-rooms, 21 September 2026. Counts are from the code and the library index on that day.</footer>
+<footer>Last updated 10 November 2026 on branch dj-position (DJ booth, issue #26). Line counts in the code map are from the day each row was last touched.</footer>
 </div>
 </body>
 </html>
