@@ -12,10 +12,11 @@
  *   → { type: 'welcome', id }                     on connect
  *   → { type: 'rooms', rooms }                    lobby: open rooms to pick from
  *   → { type: 'joined', room, created, host }     after a join (host: you can play music)
- *   → { type: 'room', name, bpm, members, host, music }   who's in your room; bpm: its music's
+ *   → { type: 'room', name, bpm, members, host, music, booth }   who's in your room; bpm: its music's
  *                                                 (0: none or not heard yet); members[].dancing:
  *                                                 their frames are arriving;
- *                                                 host = the host's id, music = { label } while playing
+ *                                                 host = the host's id, music = { label } while playing,
+ *                                                 booth: draw the host at the back while music plays
  *   → { type: 'rtc', from, data }                 WebRTC signalling for room music (host ↔ member)
  *   → { type: 'tempo', bpm, confidence }          the tempo of the music you dance to: the room's,
  *                                                 or alone, what you play (0: no music heard)
@@ -43,6 +44,7 @@
  *   ← { type: 'leave' }                           back to solo
  *   ← { type: 'guests', ai, aspect, variation }   how many AI dancers I want (only with music)
  *   ← { type: 'room-music', on, label }           host: music to the room started/stopped
+ *   ← { type: 'booth', on }                       host: share your booth (the DJ at the back) or not
  *   ← { type: 'rtc', to, data }                   WebRTC signalling, relayed host ↔ member only
  *   ← { type: 'music', t0, hz, e }                onset envelope (beat numbers, never sound) of the
  *                                                 music this phone plays or hears: the room's, or
@@ -218,6 +220,11 @@ export function startServer({
     if (m && !hostOf(name)) roomMusic.delete(name); // host left: the music stopped with them
     return roomMusic.get(name) ?? null;
   };
+  // Share your booth: while the host plays music, the others see them small
+  // at the back of their room (src/avatar/booth.js). On unless the host
+  // switched it off — in the ☰ menu, or when booking the set.
+  const boothPref = new Map(); // room name -> what its host last chose
+  const boothOf = (name) => boothPref.get(name) ?? (schedule.current(name)?.booth !== false);
   // DJs stream from OBS with a key: a booking token (the booked DJ) or the
   // host key of a room shared from a computer (shown in its music sheet).
   const whip = new WhipIngest({
@@ -328,6 +335,7 @@ export function startServer({
         bpm,
         host: host?.id ?? null,
         music,
+        booth: boothOf(name),
         members: members.map((m) => ({ id: m.id, you: m === s, host: m === host, dancing: dancing(m) })),
       });
     }
@@ -443,6 +451,7 @@ export function startServer({
           }
           const res = rooms.join(s, msg.room);
           if (!res) return send(s, { type: 'error', error: 'bad room name' });
+          if (res.created) boothPref.delete(res.name);
           send(s, { type: 'joined', room: res.name, created: res.created, host: isHost(s) });
           if (res.created || before !== res.name) stats.count(res.created ? 'shared' : 'joined');
           log(`> ${id} ${res.created ? 'opened' : 'joined'} room ${res.name} (${rooms.members(res.name).length} dancing)`);
@@ -464,6 +473,11 @@ export function startServer({
           log(`♪ ${id} ${msg.on ? `plays music to room ${s.room}` : `stopped the music in room ${s.room}`}`);
           broadcastRoom(s.room);
           broadcastLiveRooms();
+        } else if (msg.type === 'booth') {
+          if (!isHost(s)) return;
+          boothPref.set(s.room, !!msg.on);
+          log(`♪ ${id} ${msg.on ? 'shares' : 'stopped sharing'} their booth in room ${s.room}`);
+          broadcastRoom(s.room);
         } else if (msg.type === 'rtc') {
           if (JSON.stringify(msg.data ?? null).length > MAX_RTC_BYTES) return;
           // To the live stream: the server itself is the other end.
@@ -643,6 +657,7 @@ export function startServer({
     broadcastLobby();
     if (schedule.prune()) broadcastSchedule();
     for (const name of silenced) if (!rooms.members(name).length) silenced.delete(name);
+    for (const name of boothPref.keys()) if (!rooms.members(name).length) boothPref.delete(name);
     for (const [name, until] of endedRooms) if (until <= Date.now()) endedRooms.delete(name);
     stats.save();
     for (const s of sessions.values()) {

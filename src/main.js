@@ -3,6 +3,7 @@ import { PoseDetector } from './pose/poseDetector.js';
 import { PoseSmoother } from './pose/smoothing.js';
 import { RoomModel } from './room/roomModel.js';
 import { StickFigureAvatar } from './avatar/stickFigure.js';
+import { placeAtBooth } from './avatar/booth.js';
 import {
   PoseChannel,
   WebSocketTransport,
@@ -87,7 +88,11 @@ channel.subscribe(onRemoteFrame);
 // ---- Dance room + guest state ----
 // The server's 'room' opinions: members (who is dancing), host, music, and
 // the music's BPM (heard by the phones playing it).
-const roomState = { name: null, bpm: 0, members: [], host: false, hostId: null, music: null };
+const roomState = { name: null, bpm: 0, members: [], host: false, hostId: null, music: null, booth: true };
+// The DJ booth (avatar/booth.js): while the room's host plays music to the
+// room they are its DJ, and — unless they chose not to share their booth —
+// everyone else sees them small at the back instead of among the guests.
+const atBooth = (id) => roomState.booth && !!roomState.music && !!id && id === roomState.hostId;
 
 // Room music (net/roomMusic.js): the room's host — whoever shared it, or
 // the booked DJ — plays music; everyone else in the room hears it. This
@@ -272,6 +277,7 @@ function onServerMessage(msg) {
     renderRoomLine();
     renderRoomButton();
     renderMusic();
+    renderBooth();
   } else if (msg.type === 'room') {
     if (msg.name !== roomState.name) return;
     roomState.bpm = msg.bpm;
@@ -279,6 +285,8 @@ function onServerMessage(msg) {
     roomState.host = !!msg.members.find((m) => m.you)?.host;
     roomState.hostId = msg.host;
     roomState.music = msg.music;
+    roomState.booth = msg.booth !== false;
+    renderBooth();
     // An OBS stream (whip.js) is the server playing to the room: listeners
     // take it from 'live:<room>'; the host's own music gives way.
     const live = msg.music?.live ? `live:${msg.name}` : null;
@@ -355,7 +363,7 @@ function renderGuestLine() {
   el.classList.toggle('hidden', !parts.length);
 }
 
-const guests = new Map(); // dancerId -> { avatar, pose, bornAt, lastSeen, kind, slot, dx, dy, scale }
+const guests = new Map(); // dancerId -> { avatar, pose, bornAt, lastSeen, kind, slot, dx, dy, scale, booth }
 
 // Delayed-yous: a tint per seat so several read as different dancers.
 const REPLAY_COLORS = [
@@ -402,8 +410,21 @@ function onRemoteFrame(dancerId, frame) {
       dx: (0.12 + Math.random() * 0.15) * (slot % 2 ? -1 : 1),
       dy: -0.05,
       scale: 0.85,
+      booth: null, // the DJ's follower state while they're at the booth
     };
     guests.set(dancerId, g);
+  }
+  // The room's DJ stands at the booth, way at the back; fading in again
+  // whenever they move there or come back among the dancers.
+  const dj = g.kind === 'peer' && atBooth(dancerId);
+  if (dj !== !!g.booth) {
+    g.booth = dj ? {} : null;
+    g.bornAt = performance.now();
+  }
+  if (dj) {
+    g.pose = placeAtBooth(frame, g.booth, stage.width || 9, stage.height || 16) ? frame : null;
+    g.lastSeen = performance.now();
+    return;
   }
   // Place the guest "behind": shrink about the hip midpoint, then shift.
   const kp = frame.keypoints;
@@ -532,15 +553,21 @@ function loop() {
   const now = performance.now();
   if (now >= guestPlan.nextAt) planGuests();
   guestTransport.tick(now); // delayed-yous whose time has come
-  for (const [id, g] of guests) {
-    if (!g.pose) continue;
-    if (g.kind !== 'replay' && now - g.lastSeen > PEER_STALE_MS) { guests.delete(id); continue; }
-    const fade = Math.min(1, (now - g.bornAt) / GUEST_FADE_MS[g.kind]);
-    g.avatar.alpha = fade * guestCfg.opacity;
-    g.avatar.render(ctx, g.pose, { width: W, height: H });
-    if (g.kind === 'ai') {
-      const a = aiInfo.get(id);
-      if (guestCfg.styleLabels && a?.tag) drawLabel(g.pose, a.tag, g.avatar.color, g.avatar.alpha, W, H);
+  // The DJ at the booth is furthest back: drawn before everyone else.
+  for (const back of [true, false]) {
+    for (const [id, g] of guests) {
+      if (!!g.booth !== back) continue;
+      if (g.kind !== 'replay' && now - g.lastSeen > PEER_STALE_MS) { guests.delete(id); continue; }
+      if (!g.pose) continue;
+      const fade = Math.min(1, (now - g.bornAt) / GUEST_FADE_MS[g.kind]);
+      g.avatar.alpha = fade * guestCfg.opacity;
+      g.avatar.render(ctx, g.pose, { width: W, height: H });
+      if (g.booth) {
+        drawLabel(g.pose, 'DJ', g.avatar.color, g.avatar.alpha, W, H, 0.025);
+      } else if (g.kind === 'ai') {
+        const a = aiInfo.get(id);
+        if (guestCfg.styleLabels && a?.tag) drawLabel(g.pose, a.tag, g.avatar.color, g.avatar.alpha, W, H);
+      }
     }
   }
   perf.guests = ema(perf.guests, performance.now() - now);
@@ -562,11 +589,11 @@ function loop() {
  * Tag floating above a dancer's head (tempo, or an AI dancer's style), in
  * that dancer's color. Bare-bones on purpose: plain text, no shadow or emoji.
  */
-function drawLabel(pose, text, color, alpha, W, H) {
+function drawLabel(pose, text, color, alpha, W, H, scale = 0.03) {
   const kp = pose.keypoints;
   const nose = { x: kp[KP.NOSE * STRIDE], y: kp[KP.NOSE * STRIDE + 1], v: kp[KP.NOSE * STRIDE + 3] };
   if (nose.v < 0.4) return;
-  const size = Math.max(14, H * 0.03);
+  const size = Math.max(14, H * scale);
   ctx.globalAlpha = alpha;
   ctx.font = `${size}px sans-serif`;
   ctx.textAlign = 'center';
@@ -678,12 +705,14 @@ function switchRoom(name) {
   roomState.bpm = 0;
   roomState.members = [];
   roomState.music = null;
+  roomState.hostId = null;
   pruneReal();
   pendingRoom = name;
   serverLink.join(name, joinExtra(name));
   renderRoomButton();
   renderRoomLine();
   renderMusic();
+  renderBooth();
   planGuests();
 }
 
@@ -702,6 +731,13 @@ function leaveRoom() {
   renderRoomLine();
   renderRoomButton();
   renderMusic();
+  renderBooth();
+}
+
+/** ☰ menu, host only: "Share your booth" (see atBooth). */
+function renderBooth() {
+  $('booth-row').classList.toggle('hidden', !(roomState.name && roomState.host));
+  $('cb-booth').checked = roomState.booth;
 }
 
 /**
@@ -880,7 +916,8 @@ const hasMusic = () => (roomState.name ? !!roomState.music : music.state.hosting
 function planGuests() {
   const now = performance.now();
   const dancing = mode === 'dance';
-  const roomMates = roomState.members.filter((m) => !m.you && m.dancing).length;
+  // Room-mates take guest seats — except the DJ, who has the booth.
+  const roomMates = roomState.members.filter((m) => !m.you && m.dancing && !atBooth(m.id)).length;
   const seats = dancing ? Math.max(0, guestCfg.count - roomMates) : 0;
   const spacing = guestCfg.spacingSec * 1000;
   const elapsed = now - danceStartedAt;
@@ -1059,6 +1096,10 @@ bindSlider('sl-variation', 'val-variation', (v) => `${v}%`, (v) => {
 });
 $('cb-style-labels').addEventListener('change', (e) => {
   guestCfg.styleLabels = e.target.checked;
+});
+$('cb-booth').addEventListener('change', (e) => {
+  roomState.booth = e.target.checked;
+  serverLink?.sendJSON({ type: 'booth', on: e.target.checked });
 });
 bindSlider('sl-guests', 'val-guests', () => '', (v) => {
   guestCfg.count = v;

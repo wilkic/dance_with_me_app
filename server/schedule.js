@@ -28,7 +28,7 @@ export class Schedule {
   constructor(file = null, { log = () => {} } = {}) {
     this.file = file;
     this.log = log;
-    // [{ id, token, status, dj, room, start, minutes, setInfo, bio, link, createdAt }]
+    // [{ id, token, status, dj, room, start, minutes, setInfo, bio, link, booth, createdAt }]
     this.bookings = [];
     if (file) {
       try {
@@ -72,10 +72,14 @@ export class Schedule {
     return this.#live(now).filter((b) => tokens[b.id] === b.token).map(pub);
   }
 
-  /** The token of the approved set that has `room` right now (open or live), or null. */
+  /** The approved set that has `room` right now (open or live), or null. */
+  current(room, now = Date.now()) {
+    return this.bookings.find((x) => x.status === 'approved' && x.room === room && joinable(x, now)) ?? null;
+  }
+
+  /** The token of the approved set that has `room` right now, or null. */
   djToken(room, now = Date.now()) {
-    const b = this.bookings.find((x) => x.status === 'approved' && x.room === room && joinable(x, now));
-    return b ? b.token : null;
+    return this.current(room, now)?.token ?? null;
   }
 
   /**

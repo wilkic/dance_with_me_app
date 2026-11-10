@@ -40,6 +40,8 @@ export function checkBooking(raw, now = Date.now()) {
       setInfo: text(raw?.setInfo, LIMITS.setInfo),
       bio: text(raw?.bio, LIMITS.bio),
       link,
+      // Share your booth: dancers see the DJ small at the back of their room.
+      booth: raw?.booth !== false,
     },
   };
 }
