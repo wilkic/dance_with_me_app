@@ -13,7 +13,7 @@ const test = async (label, fn) => {
   try { await fn(); console.log(`PASS  ${label}`); } catch (e) { failed++; console.log(`FAIL  ${label}\n      ${e.stack}`); }
 };
 
-const server = startServer({ whipPorts: '51000-51050',  port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, adminKey: 'k', statsFile: null, log: () => {} });
+const server = startServer({ whipPorts: '51000-51050',  port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, home: { room: 'Home', key: 'home-key' }, adminKey: 'k', statsFile: null, log: () => {} });
 await new Promise((r) => server.wss.on('listening', r));
 
 const connect = () => new Promise((resolve) => {
@@ -149,6 +149,27 @@ await test('booking token: the booked DJ streams without a phone; a late joiner 
   await next(dancer, (m) => m.type === 'room' && !m.music, 3000);
   obs.stop(); l.pc.close();
   admin.ws.close(); dj.ws.close(); dancer.ws.close();
+});
+
+await test('home studio: OBS streams into the standing room before anyone is there; whoever opens it hears it', async () => {
+  const obs = await obsOffer();
+  const res = await post('home-key', obs.sdp);
+  assert.equal(res.status, 201);
+  await obs.pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+  await sleep(500);
+  // The first one in would be the host of an ordinary room, and hosts don't listen.
+  const phone = await connect();
+  sendTo(phone, { type: 'join', room: 'home', hostKey: 'phone-key' });
+  assert.equal((await next(phone, (m) => m.type === 'joined')).host, false);
+  await next(phone, (m) => m.type === 'room' && m.music?.live, 5000);
+  const l = await listen(phone, 'home');
+  await sleep(2000);
+  assert.ok(l.got.rtp > 40, `rtp ${l.got.rtp}`);
+  // The phone's own key doesn't stream here, and the phone can't stop the stream.
+  assert.equal((await post('phone-key', obs.sdp)).status, 401);
+  sendTo(phone, { type: 'room-music', on: false });
+  await quiet(phone, (m) => m.type === 'rtc' && m.data?.bye);
+  obs.stop(); l.pc.close(); phone.ws.close();
 });
 
 server.close();

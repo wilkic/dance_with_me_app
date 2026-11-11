@@ -145,6 +145,10 @@ export function startServer({
   // OBS streaming (whip.js): UDP port range, and the public IP behind 1:1 NAT.
   whipPorts = process.env.WHIP_PORTS || '50000-50999',
   whipPublicIp = process.env.WHIP_PUBLIC_IP || null,
+  // Home studio (dance-home.sh): a standing room with its own OBS stream
+  // key. OBS streams into it whether or not anyone is there yet, and it has
+  // no host, so every phone that joins hears the stream. { room, key } or null.
+  home = process.env.HOME_ROOM && process.env.HOME_KEY ? { room: process.env.HOME_ROOM, key: process.env.HOME_KEY } : null,
   // Approves DJ bookings; null = read or create server/data/admin-key.
   adminKey = null,
   log = console.log,
@@ -167,6 +171,7 @@ export function startServer({
   };
   const lib = library === false ? null : (library ?? new Library({ log }).load());
   const now = () => performance.now();
+  const homeRoom = home?.key ? normalizeRoomName(home.room) : null;
 
   const send = (s, msg) => {
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(msg));
@@ -208,6 +213,7 @@ export function startServer({
   // the room's creator (see Rooms.createdBy).
   const isHost = (s, name = s.room) => {
     if (!name || s.room !== name) return false;
+    if (name === homeRoom) return false; // the home studio's music comes from OBS only
     const dj = schedule.djToken(name);
     return dj ? s.bookingToken === dj : rooms.createdBy(s, name);
   };
@@ -232,10 +238,11 @@ export function startServer({
     ports: whipPorts,
     publicIp: whipPublicIp,
     resolveKey: (key) => {
+      if (homeRoom && key === home.key) return homeRoom;
       const booked = schedule.roomForToken(key);
       if (booked) return silenced.has(booked) ? null : booked;
       // A room's creator — unless a booked DJ has the room right now.
-      for (const name of rooms.names) if (rooms.hostKeys.get(name) === key) return silenced.has(name) || schedule.djToken(name) ? null : name;
+      for (const name of rooms.names) if (name !== homeRoom && rooms.hostKeys.get(name) === key) return silenced.has(name) || schedule.djToken(name) ? null : name;
       return null;
     },
     send: (sid, msg) => { const s = sessions.get(sid); if (s) send(s, msg); },
@@ -411,7 +418,7 @@ export function startServer({
       admin: false, adminTries: 0,
     };
     sessions.set(id, s);
-    send(s, { type: 'welcome', id });
+    send(s, { type: 'welcome', id, ...(recordDir ? { recording: true } : {}) });
     send(s, lobby());
     send(s, scheduleMsg());
     log(`+ ${id} connected (${sessions.size} online)`);

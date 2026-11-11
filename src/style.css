@@ -245,6 +245,7 @@ button.danger {
 #share-box { display: flex; flex-direction: column; gap: 0.6rem; }
 #share-status { font-size: 0.75rem; }
 #hud-guests { color: #fff; }
+#hud-rec { color: #ff6b6b; font-weight: 600; }
 
 /* ---- Start screen: two buttons ---- */
 .start-buttons {

@@ -49,6 +49,13 @@ Nothing a dancer does is kept (see `/privacy/`). With `RECORD_DIR` set
 (lab sessions only) the server records PoseFrames and the music's tempo
 into a sessions folder for the library.
 
+**Home studio:** `./dance-home.sh` on the laptop starts everything for a
+training session at home: the LAN stack with recording on, a standing room
+`home`, and OBS (on its own profile, "Dance home") streaming the laptop's
+sound into that room. The phone opens the printed link (`…/?room=home`,
+worth saving to the home screen), which goes straight to the camera in the
+room. Sessions land in `server/library/sessions/`.
+
 The library itself (`server/library.js`) indexes `recordings_web/` (the
 harvested web clips, tagged by genre), `recordings/` (metronome sessions)
 and `library/sessions/`; each clip gets a descriptor — tempo (metronome

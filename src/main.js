@@ -10,7 +10,7 @@ import {
   CompositeTransport,
   DelayedLoopbackTransport,
 } from './net/poseChannel.js';
-import { randomRoomName } from './net/roomNames.js';
+import { randomRoomName, normalizeRoomName } from './net/roomNames.js';
 import { resolveServerUrl, whipUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
@@ -259,7 +259,14 @@ function renderRoomButton() {
 }
 
 function onServerMessage(msg) {
-  if (msg.type === 'tempo') {
+  if (msg.type === 'welcome') {
+    // A server started to record sessions (RECORD_DIR, e.g. dance-home.sh)
+    // says so; the public one never does.
+    $('hud-rec').classList.toggle('hidden', !msg.recording);
+    $('share-hint').textContent = msg.recording
+      ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.'
+      : SHARE_HINT;
+  } else if (msg.type === 'tempo') {
     musicBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
     renderBpm();
   } else if (msg.type === 'rooms') {
@@ -976,6 +983,7 @@ function renderGuestSlider() {
 PoseDetector.prefetch();
 
 // ---- Wire up UI ----
+const SHARE_HINT = $('share-hint').textContent;
 $('btn-start-room').addEventListener('click', () => enter(null));
 $('sel-join').addEventListener('change', (e) => {
   if (e.target.value) enter(e.target.value);
@@ -1110,3 +1118,8 @@ bindSlider('sl-guests', 'val-guests', () => '', (v) => {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && camera.stream && video.paused) video.play();
 });
+
+// A link straight into a room: /?room=home skips the start screen (the
+// home studio's phone link, see dance-home.sh).
+const linkRoom = normalizeRoomName(urlParams.get('room'));
+if (linkRoom && serverLink) enter(linkRoom);
