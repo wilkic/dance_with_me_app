@@ -46,9 +46,49 @@ const LIMB_BONES = [
   [KP.RIGHT_ANKLE, KP.RIGHT_FOOT],
 ];
 
+/**
+ * A spine that bends, from the four points we do have. The pose engine
+ * gives nothing between shoulders and hips, but the spine leaves the neck
+ * square to the shoulder line and arrives at the pelvis square to the hip
+ * line; when those two lines tilt differently (a hip sway, a side bend)
+ * the curve between them is the bend. Returns points from neck to pelvis;
+ * the middle one is the "core", the one a quarter down the "chest".
+ * Turned side-on the lines are too short to trust, and the spine goes
+ * straight again.
+ */
+export function spineOf(frame, W, H, body = bodyAnchors(frame, W, H), steps = 8) {
+  const { neck, pelvis, torsoLen } = body;
+  const px = (i) => { const k = getKeypoint(frame, i); return { x: k.x * W, y: k.y * H }; };
+  const down = unit(neck, pelvis);
+  // The direction square to a line (a→b), pointing down the body; `trust`
+  // fades it out as the line gets short.
+  const square = (a, b) => {
+    const l = unit(a, b);
+    let n = { x: -l.y, y: l.x };
+    if (n.x * down.x + n.y * down.y < 0) n = { x: -n.x, y: -n.y };
+    const trust = Math.max(0, Math.min(1, (l.d / torsoLen - 0.25) / 0.25));
+    const m = { x: down.x + (n.x - down.x) * trust, y: down.y + (n.y - down.y) * trust };
+    const d = Math.hypot(m.x, m.y) || 1;
+    return { x: m.x / d, y: m.y / d };
+  };
+  const out = square(px(KP.LEFT_SHOULDER), px(KP.RIGHT_SHOULDER));
+  const into = square(px(KP.LEFT_HIP), px(KP.RIGHT_HIP));
+  const c1 = { x: neck.x + out.x * torsoLen * 0.4, y: neck.y + out.y * torsoLen * 0.4 };
+  const c2 = { x: pelvis.x - into.x * torsoLen * 0.4, y: pelvis.y - into.y * torsoLen * 0.4 };
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, s = 1 - t;
+    pts.push({
+      x: s * s * s * neck.x + 3 * s * s * t * c1.x + 3 * s * t * t * c2.x + t * t * t * pelvis.x,
+      y: s * s * s * neck.y + 3 * s * s * t * c1.y + 3 * s * t * t * c2.y + t * t * t * pelvis.y,
+    });
+  }
+  return pts;
+}
+
 /** The ways a figure can be drawn (see StickFigureAvatar). */
-export const FIGURE_STYLES = ['stick', 'hands', 'curved'];
-export const FIGURE_NAMES = { stick: 'Stick', hands: 'Hands + feet', curved: 'Curved' };
+export const FIGURE_STYLES = ['stick', 'hands', 'shoulders', 'curved'];
+export const FIGURE_NAMES = { stick: 'Stick', hands: 'Hands + feet', shoulders: 'Hands + shoulders', curved: 'Curved' };
 
 const unit = (a, b) => {
   const dx = b.x - a.x, dy = b.y - a.y;
@@ -106,6 +146,8 @@ function bend(a, joint, b, steps = 10) {
  *  - 'stick' (default): the glowing stick figure.
  *  - 'hands': the stick figure with mitten hands and shoe feet — which
  *    way a hand or foot points makes a pose much easier to read.
+ *  - 'shoulders': 'hands', with the arms hanging off real shoulders that
+ *    round over from the neck, instead of off the neck itself.
  *  - 'curved': a chunky silhouette — a bean of a torso, arms that bend
  *    in a curve and taper to the wrist, tapered legs, a floating head.
  *
@@ -115,6 +157,9 @@ function bend(a, joint, b, steps = 10) {
  *  - '2d': anatomical torso — shoulder line, hip line, and side bones
  *    forming a quad (the original MVP look).
  *
+ * Spine (an experiment, see spineOf): 'straight' (default), or 'bent' —
+ * the spine curves when the shoulders tilt one way and the hips another.
+ *
  * Glow styles (canvas shadowBlur is the expensive part of drawing a figure —
  * see bench.html):
  *  - 'blur' (default): true shadowBlur glow, one blur pass per figure.
@@ -123,7 +168,7 @@ function bend(a, joint, b, steps = 10) {
  *  - 'none': no glow at all; used for guests.
  */
 export class StickFigureAvatar extends Avatar {
-  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'blur', style = 'stick' } = {}) {
+  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'blur', style = 'stick', spine = 'straight' } = {}) {
     super();
     this.color = color;
     this.glow = glow;
@@ -131,6 +176,7 @@ export class StickFigureAvatar extends Avatar {
     this.alpha = alpha; // 0..1, lets guests fade into the room
     this.glowStyle = glowStyle;
     this.style = style;
+    this.spine = spine;
   }
 
   render(ctx, frame, viewport, beat = null) {
@@ -171,32 +217,46 @@ export class StickFigureAvatar extends Avatar {
     const re = kpPx(KP.RIGHT_EAR);
     const headAt = le && re ? lerp(le, re, 0.5) : kpPx(KP.NOSE);
 
+    // The spine as points from neck to pelvis: two for a straight one.
+    const spine = this.spine === 'bent' && hipsVisible ? spineOf(frame, W, H, body) : [neck, pelvis];
+
     if (this.style === 'curved') {
-      this.#curved(solid, { neck, pelvis, hipsVisible, headAt, u, kpPx });
+      this.#curved(solid, { neck, pelvis, spine, hipsVisible, headAt, u, kpPx });
     } else {
-      const hands = this.style === 'hands';
+      const hands = this.style !== 'stick';
+      const ls = kpPx(KP.LEFT_SHOULDER), rs = kpPx(KP.RIGHT_SHOULDER);
       if (this.torso === '2d') {
         // Anatomical: every detected bone, including the shoulder/hip quad.
         for (const [a, b] of BONES) if (!hands || (b !== KP.LEFT_FOOT && b !== KP.RIGHT_FOOT)) push(kpPx(a), kpPx(b));
       } else {
         // True stick: limbs attach directly to the spine endpoints.
         for (const [a, b] of LIMB_BONES) if (!hands || (b !== KP.LEFT_FOOT && b !== KP.RIGHT_FOOT)) push(kpPx(a), kpPx(b));
-        push(neck, kpPx(KP.LEFT_ELBOW));
-        push(neck, kpPx(KP.RIGHT_ELBOW));
+        for (const [s, elbow] of [[ls, kpPx(KP.LEFT_ELBOW)], [rs, kpPx(KP.RIGHT_ELBOW)]]) {
+          if (this.style === 'shoulders' && s && elbow) {
+            // Out along the shoulder line, rounding over into the upper arm.
+            bones.moveTo(neck.x, neck.y);
+            bones.arcTo(s.x, s.y, elbow.x, elbow.y, u * 0.14);
+            bones.lineTo(elbow.x, elbow.y);
+          } else {
+            push(neck, elbow);
+          }
+        }
         if (hipsVisible) {
           push(pelvis, kpPx(KP.LEFT_KNEE));
           push(pelvis, kpPx(KP.RIGHT_KNEE));
         }
       }
       // Spine (running off the bottom of the frame when the hips aren't in it).
-      push(neck, pelvis);
+      bones.moveTo(spine[0].x, spine[0].y);
+      for (const p of spine.slice(1)) bones.lineTo(p.x, p.y);
       if (headAt) {
         const r = Math.max(6, torsoLen * 0.28);
         push(neck, { x: headAt.x, y: headAt.y + r * 0.7 }); // neck line up to the chin
         solid.moveTo(headAt.x + r, headAt.y);
         solid.arc(headAt.x, headAt.y, r, 0, Math.PI * 2);
       }
-      if (hands) this.#handsAndFeet(solid, u, kpPx);
+      // Barely thicker than the limbs they end: it's the direction that reads.
+      if (hands) this.#handsAndFeet(solid, u, kpPx, lineWidth * 1.15);
     }
 
     ctx.save();
@@ -230,7 +290,7 @@ export class StickFigureAvatar extends Avatar {
    * on along the forearm when they aren't seen); a foot runs from the
    * heel to the toes, never shorter than a shoe seen from the front.
    */
-  #handsAndFeet(solid, u, kpPx) {
+  #handsAndFeet(solid, u, kpPx, thick) {
     for (const [elbow, wrist, index, pinky] of [
       [KP.LEFT_ELBOW, KP.LEFT_WRIST, KP.LEFT_INDEX, KP.LEFT_PINKY],
       [KP.RIGHT_ELBOW, KP.RIGHT_WRIST, KP.RIGHT_INDEX, KP.RIGHT_PINKY],
@@ -241,8 +301,8 @@ export class StickFigureAvatar extends Avatar {
       const fingers = i && p ? lerp(i, p, 0.5) : i ?? p;
       const dir = fingers && Math.hypot(fingers.x - w.x, fingers.y - w.y) > u * 0.03 ? unit(w, fingers) : e ? unit(e, w) : null;
       if (!dir) continue;
-      const len = u * 0.26;
-      addTaper(solid, [w, { x: w.x + dir.x * len, y: w.y + dir.y * len }], u * 0.17, u * 0.2);
+      const len = u * 0.24;
+      addTaper(solid, [w, { x: w.x + dir.x * len, y: w.y + dir.y * len }], thick, thick * 1.15);
     }
     for (const [ankle, heel, toe] of [
       [KP.LEFT_ANKLE, KP.LEFT_HEEL, KP.LEFT_FOOT],
@@ -254,14 +314,14 @@ export class StickFigureAvatar extends Avatar {
       const from = kpPx(heel) ?? a;
       const dir = unit(from, t);
       const len = Math.max(dir.d, u * 0.22);
-      addTaper(solid, [from, { x: from.x + dir.x * len, y: from.y + dir.y * len }], u * 0.2, u * 0.15);
+      addTaper(solid, [from, { x: from.x + dir.x * len, y: from.y + dir.y * len }], thick * 1.15, thick);
     }
   }
 
   /** The chunky silhouette: everything is a filled, tapered shape. */
-  #curved(solid, { neck, pelvis, hipsVisible, headAt, u, kpPx }) {
+  #curved(solid, { neck, pelvis, spine, hipsVisible, headAt, u, kpPx }) {
     const chest = u * 0.5;
-    addTaper(solid, [neck, pelvis], chest, u * 0.4);
+    addTaper(solid, spine, chest, u * 0.4);
     // Arms: from just inside the shoulder, bending through the elbow.
     for (const [shoulder, elbow, wrist] of [
       [KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST],

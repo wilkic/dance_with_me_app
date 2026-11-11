@@ -26,14 +26,14 @@ body {
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 36px 64px;
 }
-.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 .eyebrow { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
 h1, h2 { font-family: var(--display); font-weight: 700; text-wrap: balance; line-height: 1.12; margin: 0; }
 h1 { font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -0.02em; margin-top: 10px; }
 h2 { font-size: 1.3rem; }
 p { margin: 0; max-width: 68ch; color: var(--ink-2); }
 p b, li b { color: var(--ink); font-weight: 600; }
-#stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+#stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 figure { margin: 0; min-width: 0; }
 canvas { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
 figcaption { font: 600 1.05rem/1 var(--display); padding: 12px 2px 0; }
@@ -54,7 +54,7 @@ footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--ink-
 <div class="wrap">
   <header>
     <div class="eyebrow">Dance With Me · issue #28 · 11 Nov 2026</div>
-    <h1>Three ways to draw a dancer</h1>
+    <h1>Four ways to draw a dancer</h1>
   </header>
   <p>The same dancer, drawn by the app's own code, in each style. In every picture the big purple one is <b>you</b>, the green one is a <b>guest</b> behind you, and the small yellow one is the size of the <b>DJ at the booth</b>.</p>
   <div class="controls">
@@ -62,19 +62,25 @@ footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--ink-
     <button id="t-room" type="button"></button>
     <button id="t-glow" type="button"></button>
     <button id="t-torso" type="button"></button>
+    <button id="t-spine" type="button"></button>
   </div>
   <div id="stages"></div>
   <section>
     <h2>What each one is</h2>
     <ul>
       <li><b>Stick</b> is what's live today.</li>
-      <li><b>Hands + feet</b> is the same figure with mitten hands and shoe feet. A hand points where the fingers are; a foot runs from heel to toe.</li>
+      <li><b>Hands + feet</b> is the same figure with slim hands and feet, barely thicker than the limbs. A hand points where the fingers are; a foot runs from heel to toe.</li>
+      <li><b>Hands + shoulders</b> adds real shoulders: the arms hang off the shoulder points, rounding over from the neck, instead of off the neck itself.</li>
       <li><b>Curved</b> is a filled silhouette: a thick torso, arms that bend in a curve and taper to the wrist, tapered legs with a straight thigh and shin, small feet, and a head floating clear of the shoulders.</li>
     </ul>
   </section>
   <section>
+    <h2>A spine that bends</h2>
+    <p>The camera's pose engine gives no points between the shoulders and the hips, so a "core" or "chest" point can't be measured. It can be worked out: the spine leaves the neck square to the shoulder line and reaches the pelvis square to the hip line, and when the two tilt differently the curve between them is the bend. <b>Spine: bends</b> draws that curve. Its middle is the core point and a quarter of the way down is the chest. It shows side bends and hip sways; bending toward or away from the camera stays invisible.</p>
+  </section>
+  <section>
     <h2>Try them on yourself</h2>
-    <p>On branch <code>figure-styles</code>, the dance screen has a fourth button at the bottom, <b>Figure</b>, that steps through the three. It applies to you and to everyone in your space, and is remembered on the phone.</p>
+    <p>On branch <code>figure-styles</code>, the dance screen has a fourth button at the bottom, <b>Figure</b>, that steps through the four. The bending spine is on this page only for now. It applies to you and to everyone in your space, and is remembered on the phone.</p>
     <p>The dancer on this page is a made-up puppet, so its hands and feet are always exactly where they should be. On a real camera the finger and toe points are the least steady ones, so the phone test is what counts for hands and feet.</p>
   </section>
   <footer>The drawing code on this page is the app's (<code>src/avatar/stickFigure.js</code>), bundled in. Rebuild with <code>doc/figure-styles.build.sh</code>.</footer>

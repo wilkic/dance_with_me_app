@@ -11,7 +11,7 @@ import { StickFigureAvatar, FIGURE_STYLES, FIGURE_NAMES } from './stickFigure.js
 import { demoPose } from './demoDancer.js';
 
 const W = 360, H = 480;
-const state = { glow: true, light: false, torso: '1d', playing: true };
+const state = { glow: true, light: false, torso: '1d', spine: 'straight', playing: true };
 const stages = FIGURE_STYLES.map((style) => {
   const fig = document.createElement('figure');
   const canvas = document.createElement('canvas');
@@ -46,7 +46,7 @@ function draw(now) {
     else { g.addColorStop(0, '#15131f'); g.addColorStop(0.62, '#1b1828'); g.addColorStop(0.63, '#221d2e'); g.addColorStop(1, '#17141f'); }
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
-    for (const a of [s.you, s.guest, s.far]) a.torso = state.torso;
+    for (const a of [s.you, s.guest, s.far]) { a.torso = state.torso; a.spine = state.spine; }
     s.you.glowStyle = state.glow ? 'blur' : 'none';
     // Back to front: the DJ at the booth, a guest behind you, you.
     s.far.render(ctx, demoPose(t + 900, { cx: 0.5, cy: 0.3, size: 0.08 }), view);
@@ -65,4 +65,5 @@ const toggle = (id, key, on, off, labels) => {
 toggle('t-glow', 'glow', true, false, ['Your glow: on', 'Your glow: off']);
 toggle('t-room', 'light', true, false, ['Room: bright', 'Room: dark']);
 toggle('t-torso', 'torso', '2d', '1d', ['Torso: 2D', 'Torso: 1D']);
+toggle('t-spine', 'spine', 'bent', 'straight', ['Spine: bends', 'Spine: straight']);
 toggle('t-play', 'playing', true, false, ['Pause', 'Play']);

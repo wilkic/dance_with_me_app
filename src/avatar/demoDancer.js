@@ -54,6 +54,8 @@ export function demoPose(tMs, { bpm = 112, aspect = 0.75, cx = 0.5, cy = 0.56, s
   const up = { x: Math.sin(m.lean * D), y: -Math.cos(m.lean * D) };
   const across = { x: -up.y, y: up.x };
   const neck = add(pelvis, up, 1);
+  // Hips tilt against the lean, as they do in a sway.
+  const hipLine = { x: Math.cos(-m.lean * 1.6 * D), y: Math.sin(-m.lean * 1.6 * D) };
   const headUp = { x: Math.sin((m.lean + m.tilt) * D), y: -Math.cos((m.lean + m.tilt) * D) };
   const nose = add(neck, headUp, 0.42);
   set(KP.NOSE, nose);
@@ -72,7 +74,7 @@ export function demoPose(tMs, { bpm = 112, aspect = 0.75, cx = 0.5, cy = 0.56, s
     set(J.sh, shoulder); set(J.el, elbow); set(J.wr, wrist);
     set(J.ix, add(knuckles, { x: -hand.y, y: hand.x }, 0.05));
     set(J.pk, add(knuckles, { x: -hand.y, y: hand.x }, -0.05));
-    const hip = add(pelvis, across, side * 0.2);
+    const hip = add(pelvis, hipLine, side * 0.2);
     const knee = add(hip, dir(a[3], side), 0.85);
     const ankle = add(knee, dir(a[4], side), 0.8);
     const foot = dir(a[5], side);
