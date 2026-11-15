@@ -263,6 +263,8 @@ function onServerMessage(msg) {
     // A server started to record sessions (RECORD_DIR, e.g. dance-home.sh)
     // says so; the public one never does.
     $('hud-rec').classList.toggle('hidden', !msg.recording);
+    // "coming soon" is only true where nothing is kept.
+    $('share-box').querySelector('.soon').textContent = msg.recording ? 'recording' : 'coming soon';
     $('share-hint').textContent = msg.recording
       ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.'
       : SHARE_HINT;
