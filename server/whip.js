@@ -181,8 +181,14 @@ export class WhipIngest {
     const l = this.streams.get(room)?.listeners.get(sid);
     if (!l || !data) return;
     try {
-      if (data.sdp?.type === 'answer') await l.pc.setRemoteDescription(data.sdp);
-      else if (data.candidate?.candidate) await l.pc.addIceCandidate(data.candidate);
+      // The phone's own candidates are ignored: it reaches us (we are ICE
+      // lite, on a fixed address) and we answer wherever its checks come
+      // from. Given a list, werift may send to an address it cannot reach
+      // (a phone's VPN or mobile-data address) and the music never arrives.
+      if (data.sdp?.type === 'answer') {
+        const sdp = data.sdp.sdp.split(/\r?\n/).filter((line) => !line.startsWith('a=candidate:')).join('\r\n');
+        await l.pc.setRemoteDescription({ type: 'answer', sdp });
+      }
     } catch (err) {
       this.log(`whip: signal from ${sid}: ${err.message}`);
     }
