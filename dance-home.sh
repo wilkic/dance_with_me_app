@@ -5,7 +5,8 @@
 #   ./dance-home.sh           (--no-obs to leave OBS alone)
 #
 # Starts the LAN stack (dance-lan.sh) with:
-#   - recording on: every session lands in server/library/sessions/
+#   - a ● Record button on the phone: each Record → Stop is one clip in
+#     server/library/sessions/ (nothing is recorded otherwise)
 #   - the room "home", always there, with its own OBS stream key
 #   - OBS, on its own profile "Dance home", streaming this laptop's sound
 #     (the music you play in a browser) into that room

@@ -258,16 +258,71 @@ function renderRoomButton() {
   btn.disabled = !name && !(serverLink && serverOnline);
 }
 
+// --- Recording ---------------------------------------------------------------
+// recAlways: the server records the whole session. recButton: it records
+// clips, each from ● Record (after a countdown, time to step back from the
+// phone) to ■ Stop.
+const REC_COUNTDOWN_S = 5;
+let recAlways = false;
+let recButton = false;
+let recState = 'idle'; // 'idle' | 'countdown' | 'on'
+let recAt = 0;         // countdown: when recording starts; on: when it started
+let recNote = '';      // what happened to the last clip, shown for a moment
+let recTick = null;
+
+function renderRec() {
+  const btn = $('btn-rec');
+  btn.classList.toggle('hidden', !recButton);
+  btn.classList.toggle('on', recState === 'on');
+  const secs = Math.max(0, Math.round(Math.abs(Date.now() - recAt) / 1000));
+  btn.textContent = recState === 'countdown' ? `Recording in ${Math.max(1, Math.ceil((recAt - Date.now()) / 1000))}… tap to cancel`
+    : recState === 'on' ? `■ Stop · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+      : recNote || '● Record';
+  $('hud-rec').classList.toggle('hidden', !(recAlways || recState === 'on'));
+}
+function recSet(state, at = 0) {
+  recState = state;
+  recAt = at;
+  clearInterval(recTick);
+  recTick = state === 'idle' ? null : setInterval(() => {
+    if (recState === 'countdown' && Date.now() >= recAt) {
+      serverLink?.sendJSON({ type: 'rec', on: true });
+      recSet('on', Date.now());
+    } else renderRec();
+  }, 250);
+  renderRec();
+}
+function recReset() { recNote = ''; recSet('idle'); }
+/** Stop a running clip (the server keeps it if it is long enough to be a dance). */
+function recStop() {
+  if (recState === 'on') serverLink?.sendJSON({ type: 'rec', on: false });
+  recSet('idle');
+}
+function recPress() {
+  if (recState === 'idle') { recNote = ''; recSet('countdown', Date.now() + REC_COUNTDOWN_S * 1000); } else recStop();
+}
+
 function onServerMessage(msg) {
   if (msg.type === 'welcome') {
     // A server started to record sessions (RECORD_DIR, e.g. dance-home.sh)
     // says so; the public one never does.
-    $('hud-rec').classList.toggle('hidden', !msg.recording);
+    // 'button': nothing is recorded until Record is pressed (the home studio).
+    recAlways = msg.recording === true;
+    recButton = msg.recording === 'button';
+    recReset(); // a new connection: the server isn't recording me
     // "coming soon" is only true where nothing is kept.
-    $('share-box').querySelector('.soon').textContent = msg.recording ? 'recording' : 'coming soon';
-    $('share-hint').textContent = msg.recording
-      ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.'
-      : SHARE_HINT;
+    $('share-box').querySelector('.soon').textContent = recButton ? 'record button' : recAlways ? 'recording' : 'coming soon';
+    $('share-hint').textContent = recButton
+      ? 'Press ● Record on the dance screen: your dance (as points) and the beat of the music are saved to this server\'s library when you press Stop. Nothing else is kept.'
+      : recAlways
+        ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.'
+        : SHARE_HINT;
+  } else if (msg.type === 'rec') {
+    if (msg.on) return;
+    const secs = Math.round(msg.frames / 30);
+    recNote = msg.kept ? `Clip saved · about ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'Too short, not kept';
+    setTimeout(() => { recNote = ''; renderRec(); }, 4000);
+    renderRec();
   } else if (msg.type === 'tempo') {
     musicBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
     renderBpm();
@@ -850,6 +905,7 @@ function notice(message) {
 }
 
 function exitToStart() {
+  recStop();
   $('menu-panel').classList.add('hidden');
   metronome?.stop();
   if (rafId) cancelAnimationFrame(rafId);
@@ -1087,6 +1143,7 @@ stage.addEventListener('click', () => {
   if (mode === 'dance') $('menu-panel').classList.toggle('hidden');
 });
 $('btn-exit').addEventListener('click', exitToStart);
+$('btn-rec').addEventListener('click', recPress);
 
 function bindSlider(id, valId, format, apply) {
   const el = $(id);

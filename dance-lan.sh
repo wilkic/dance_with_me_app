@@ -75,7 +75,7 @@ trap 'exit 130' INT TERM
 if [ "$HOME_MODE" = 1 ]; then
   mkdir -p server/data
   [ -s server/data/home-key ] || (umask 077; tr -d '-' < /proc/sys/kernel/random/uuid > server/data/home-key)
-  export HOME_ROOM="$HOME_ROOM_NAME" HOME_KEY="$(cat server/data/home-key)" RECORD_DIR="${RECORD_DIR:-library/sessions}"
+  export HOME_ROOM="$HOME_ROOM_NAME" HOME_KEY="$(cat server/data/home-key)" RECORD_DIR="${RECORD_DIR:-library/sessions}" RECORD_BUTTON=1
 fi
 # This laptop's address on the network (the phone link). OBS music goes to
 # the phones over the same one.
@@ -180,11 +180,11 @@ echo
 echo "  Serving: branch $(git branch --show-current) @ $(git rev-parse --short HEAD) — $(git log -1 --format=%s | cut -c1-60)"
 echo
 if [ "$HOME_MODE" = 1 ]; then
-  echo "  HOME STUDIO  ·  room \"$HOME_ROOM_NAME\"  ·  recording to server/$RECORD_DIR"
+  echo "  HOME STUDIO  ·  room \"$HOME_ROOM_NAME\"  ·  clips go to server/$RECORD_DIR"
   echo
   echo "  Phone:  $PHONE_URL"
   echo "  Save that link on the phone (Add to Home screen). It opens the camera in the"
-  echo "  room; tap Capture Room and dance. The session is saved when you close the page."
+  echo "  room; tap Capture Room. Press ● Record when ready (5 s countdown), ■ Stop to save the clip."
   echo
   echo "  Music:  play it in a browser here. ${OBS_NOTE:-OBS not started (--no-obs).}"
 else

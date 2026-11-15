@@ -108,6 +108,8 @@
       </div>
       <div class="dance-bottom">
         <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
+        <!-- Only on a server with a record button (dance-home.sh): one clip per Record → Stop. -->
+        <button id="btn-rec" class="music-btn hidden">&#9679; Record</button>
         <button id="btn-music" class="music-btn hidden">&#9835; Play music</button>
         <button id="btn-hear" class="music-btn hidden">&#128264; Tap to hear the music</button>
         <div class="guest-slider">

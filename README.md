@@ -54,7 +54,8 @@ training session at home: the LAN stack with recording on, a standing room
 `home`, and OBS (on its own profile, "Dance home") streaming the laptop's
 sound into that room. The phone opens the printed link (`…/?room=home`,
 worth saving to the home screen), which goes straight to the camera in the
-room. Sessions land in `server/library/sessions/`.
+room. Nothing is recorded until you press ● Record on the dance screen
+(5 s countdown); each Record → Stop is one clip in `server/library/sessions/`.
 
 The library itself (`server/library.js`) indexes `recordings_web/` (the
 harvested web clips, tagged by genre), `recordings/` (metronome sessions)

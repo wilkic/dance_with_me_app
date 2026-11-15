@@ -135,6 +135,10 @@ export function startServer({
   // records sessions (frames + tempo + what they chose to share) as library
   // material — for your own test sessions; the public server leaves it unset.
   recordDir = process.env.RECORD_DIR && process.env.RECORD_DIR !== '0' ? process.env.RECORD_DIR : null,
+  // With recording on: false = a whole session is one recording, from
+  // connecting to leaving (lab, harvest). true = nothing is recorded until
+  // the dancer presses Record; each Record → Stop is one clip (dance-home.sh).
+  recordButton = process.env.RECORD_BUTTON === '1',
   // The dance library behind AI dancers: a Library, null = load the
   // default one (recordings, recordings_web, library/sessions), false = none.
   library = null,
@@ -402,6 +406,17 @@ export function startServer({
     }
   };
 
+  /** Close a dancer's recording; one long enough to be a dance joins the library. */
+  const endRecording = (s) => {
+    const r = s.rec.close({ musicBpm: +s.beat.state.bpm.toFixed(1) });
+    s.rec = null;
+    if (r.kept) {
+      log(`● ${s.id} ${recordButton ? 'clip' : 'session'} kept for the library (${r.frames} frames)`);
+      lib?.add(r.path);
+    } else if (recordButton) log(`● ${s.id} clip too short, not kept (${r.frames} frames)`);
+    return r;
+  };
+
   wss.on('connection', (ws) => {
     const id = randomUUID().slice(0, 8);
     const s = {
@@ -412,13 +427,13 @@ export function startServer({
       lastFrameAt: 0, lastFrameT: 0, aspect: 9 / 16,
       wants: { ai: 0, variation: 0.5 },
       ai: [],              // AiDancer[]
-      rec: recordDir ? new SessionRecorder(recordDir, { id }) : null,
+      rec: recordDir && !recordButton ? new SessionRecorder(recordDir, { id }) : null,
       booked: 0,           // bookings made on this connection (rate limit)
       myBookings: null,    // { id: token } — this DJ's requests, followed for status
       admin: false, adminTries: 0,
     };
     sessions.set(id, s);
-    send(s, { type: 'welcome', id, ...(recordDir ? { recording: true } : {}) });
+    send(s, { type: 'welcome', id, ...(recordDir ? { recording: recordButton ? 'button' : true } : {}) });
     send(s, lobby());
     send(s, scheduleMsg());
     log(`+ ${id} connected (${sessions.size} online)`);
@@ -432,7 +447,19 @@ export function startServer({
       if (!isBinary) {
         let msg;
         try { msg = JSON.parse(data.toString()); } catch { return; }
-        if (msg.type === 'label') {
+        if (msg.type === 'rec') {
+          // The Record button: one clip per Record → Stop.
+          if (!recordDir || !recordButton) return;
+          if (msg.on && !s.rec) {
+            s.rec = new SessionRecorder(recordDir, { id });
+            if (s.room) s.rec.label({ room: s.room });
+            log(`● ${id} recording`);
+            send(s, { type: 'rec', on: true });
+          } else if (!msg.on && s.rec) {
+            const r = endRecording(s);
+            send(s, { type: 'rec', on: false, kept: r.kept, frames: r.frames });
+          }
+        } else if (msg.type === 'label') {
           // Metronome BPM from ?click=…, kept with the frames as ground truth.
           if (msg.clickBpm > 0) s.rec?.label({ clickBpm: msg.clickBpm });
         } else if (msg.type === 'join') {
@@ -618,11 +645,7 @@ export function startServer({
       if (isHost(s)) roomMusic.delete(s.room);
       const left = rooms.leave(s);
       sessions.delete(id);
-      const r = s.rec?.close({ musicBpm: +s.beat.state.bpm.toFixed(1) });
-      if (r?.kept) {
-        log(`● ${id} session kept for the library (${r.frames} frames)`);
-        lib?.add(r.path);
-      }
+      if (s.rec) endRecording(s);
       log(`- ${id} disconnected${left ? ` (was in room ${left})` : ''} (${sessions.size} online)`);
       if (left) { broadcastRoom(left); broadcastLobby(); } else broadcastFloor();
     });
