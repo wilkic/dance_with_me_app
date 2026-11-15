@@ -319,8 +319,8 @@ function onServerMessage(msg) {
         : SHARE_HINT;
   } else if (msg.type === 'rec') {
     if (msg.on) return;
-    const secs = Math.round(msg.frames / 30);
-    recNote = msg.kept ? `Clip saved · about ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'Too short, not kept';
+    const secs = msg.seconds ?? 0; // what was kept: the last few seconds (walking to the phone) are cut
+    recNote = msg.kept ? `Clip saved · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'Too short, not kept';
     setTimeout(() => { recNote = ''; renderRec(); }, 4000);
     renderRec();
   } else if (msg.type === 'tempo') {

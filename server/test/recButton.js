@@ -37,10 +37,11 @@ assert.equal(clips().length, 0, 'nothing is recorded before Record');
 
 ws.send(JSON.stringify({ type: 'rec', on: true }));
 await next((m) => m.type === 'rec' && m.on);
-dance(350);
+dance(450);
 ws.send(JSON.stringify({ type: 'rec', on: false }));
 let r = await next((m) => m.type === 'rec' && !m.on);
-assert.deepEqual([r.kept, r.frames], [true, 350]);
+// 450 frames, 33 ms apart; the last 4 s (122 frames) are cut off: the walk to the Stop button.
+assert.deepEqual([r.kept, r.frames, r.seconds], [true, 328, 11]);
 assert.equal(clips().length, 1, 'one clip');
 
 await sleep(1100); // clip names carry the second they started in
@@ -49,12 +50,12 @@ await next((m) => m.type === 'rec' && m.on);
 dance(20);
 ws.send(JSON.stringify({ type: 'rec', on: false }));
 r = await next((m) => m.type === 'rec' && !m.on);
-assert.deepEqual([r.kept, r.frames], [false, 20]);
+assert.deepEqual([r.kept, r.frames], [false, 0]);
 assert.equal(clips().length, 1, 'a short clip is dropped');
 
 ws.send(JSON.stringify({ type: 'rec', on: true }));
 await next((m) => m.type === 'rec' && m.on);
-dance(320); await sleep(100);
+dance(450); await sleep(100);
 ws.close(); await sleep(200);
 assert.equal(clips().length, 2, 'leaving while recording keeps the clip');
 

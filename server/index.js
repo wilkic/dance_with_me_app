@@ -98,6 +98,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const MAX_GUESTS = 3;
 const ACTIVE_MS = 6000;         // "dancing" = a frame arrived this recently
 const ENDED_ROOM_MS = 60 * 60_000; // an ended room's name stays closed this long
+const CLIP_TRIM_END_MS = 4000;  // Record button: cut off the end of each clip
 const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often
 const MAX_BOOKINGS_PER_SESSION = 10;
@@ -408,7 +409,8 @@ export function startServer({
 
   /** Close a dancer's recording; one long enough to be a dance joins the library. */
   const endRecording = (s) => {
-    const r = s.rec.close({ musicBpm: +s.beat.state.bpm.toFixed(1) });
+    // A clip ends with the walk up to the phone to press Stop: cut it off.
+    const r = s.rec.close({ musicBpm: +s.beat.state.bpm.toFixed(1) }, { trimEndMs: recordButton ? CLIP_TRIM_END_MS : 0 });
     s.rec = null;
     if (r.kept) {
       log(`● ${s.id} ${recordButton ? 'clip' : 'session'} kept for the library (${r.frames} frames)`);
@@ -457,7 +459,7 @@ export function startServer({
             send(s, { type: 'rec', on: true });
           } else if (!msg.on && s.rec) {
             const r = endRecording(s);
-            send(s, { type: 'rec', on: false, kept: r.kept, frames: r.frames });
+            send(s, { type: 'rec', on: false, kept: r.kept, frames: r.frames, seconds: r.seconds });
           }
         } else if (msg.type === 'label') {
           // Metronome BPM from ?click=…, kept with the frames as ground truth.

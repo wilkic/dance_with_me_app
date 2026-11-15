@@ -14,10 +14,30 @@
  * Sessions shorter than minFrames are deleted on close — the library
  * only keeps dances. Kept sessions are appended to sessions.jsonl.
  */
-import { mkdirSync, openSync, writeSync, closeSync, unlinkSync, appendFileSync, existsSync } from 'node:fs';
+import { mkdirSync, openSync, writeSync, closeSync, unlinkSync, appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const EXT = { 'audio/webm': 'webm', 'video/webm': 'webm', 'audio/mp4': 'm4a', 'video/mp4': 'mp4', 'audio/ogg': 'ogg' };
+
+/**
+ * Cut the last `ms` off a recording file (the walk up to the phone to press
+ * Stop): frames, tempo and music lines after the cut go; labels stay.
+ * Returns { frames, seconds } of what is left.
+ */
+export function trimEnd(path, ms) {
+  const rows = [];
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
+    if (!line) continue;
+    try { rows.push([line, JSON.parse(line)]); } catch { /* a torn line */ }
+  }
+  const frameTs = rows.filter(([, o]) => o.k).map(([, o]) => o.t);
+  const cut = (frameTs.at(-1) ?? 0) - ms;
+  const when = (o) => (o.k || o.type === 'tempo' ? o.t : o.type === 'music' ? o.t0 + 1000 * (o.e?.length ?? 0) / (o.hz || 30) : -Infinity);
+  const kept = rows.filter(([, o]) => when(o) <= cut);
+  writeFileSync(path, kept.map(([line]) => line + '\n').join(''));
+  const left = frameTs.filter((t) => t <= cut);
+  return { frames: left.length, seconds: left.length ? (left.at(-1) - left[0]) / 1000 : 0 };
+}
 
 export class SessionRecorder {
   constructor(dir, { id, minFrames = 300 } = {}) {
@@ -35,6 +55,7 @@ export class SessionRecorder {
     this.bufBytes = 0;
     this.media = new Map(); // kind -> { fd, path, bytes, mime }
     this.frames = 0;
+    this.firstT = this.lastT = 0; // frame clock (ms), for the length
     this.meta = { type: 'label', session: true, id, at: new Date().toISOString() };
     this.#line(this.meta);
   }
@@ -60,6 +81,8 @@ export class SessionRecorder {
   }
 
   frame(frame) {
+    if (!this.frames) this.firstT = frame.t;
+    this.lastT = frame.t;
     this.frames++;
     this.#line({ t: Math.round(frame.t), k: Array.from(frame.keypoints, (v) => +v.toFixed(4)) });
   }
@@ -89,20 +112,24 @@ export class SessionRecorder {
   }
 
   /**
-   * Finish. Returns { path, kept, frames }. Short sessions (someone opened
-   * the app and left) are removed; kept ones are listed in sessions.jsonl.
+   * Finish. Returns { path, kept, frames, seconds }. Short sessions (someone
+   * opened the app and left) are removed; kept ones are listed in
+   * sessions.jsonl. trimEndMs cuts that much off the end first.
    */
-  close(extra = {}) {
-    const kept = this.frames >= this.minFrames;
+  close(extra = {}, { trimEndMs = 0 } = {}) {
     this.#flush();
     closeSync(this.fd);
     this.fd = null;
+    let seconds = (this.lastT - this.firstT) / 1000;
+    if (trimEndMs > 0) ({ frames: this.frames, seconds } = trimEnd(this.path, trimEndMs));
+    seconds = Math.round(seconds);
+    const kept = this.frames >= this.minFrames;
     for (const m of this.media.values()) closeSync(m.fd);
     if (!kept) {
       for (const p of [this.path, ...[...this.media.values()].map((m) => m.path)]) {
         try { if (existsSync(p)) unlinkSync(p); } catch { /* best effort */ }
       }
-      return { path: this.path, kept: false, frames: this.frames };
+      return { path: this.path, kept: false, frames: this.frames, seconds };
     }
     const summary = {
       name: this.name, path: this.path, frames: this.frames, ...this.meta, ...extra,
@@ -111,6 +138,6 @@ export class SessionRecorder {
     };
     delete summary.type;
     appendFileSync(join(this.dir, 'sessions.jsonl'), JSON.stringify(summary) + '\n');
-    return { path: this.path, kept: true, frames: this.frames };
+    return { path: this.path, kept: true, frames: this.frames, seconds };
   }
 }
