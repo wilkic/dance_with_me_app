@@ -31,7 +31,11 @@ export class OnsetEnvelope {
       prev.set(cur);
       batch.push(+(flux / bins / 255).toFixed(3));
       if (batch.length >= HZ) {
-        onBatch({ t0: Math.round(t0), hz: HZ, e: batch });
+        // A busy phone runs this timer slower than asked (about 19 a second
+        // seen while dancing): say the rate these samples really came at,
+        // or the server reads the music as faster than it is.
+        const hz = +(batch.length * 1000 / Math.max(1, performance.now() - t0)).toFixed(2);
+        onBatch({ t0: Math.round(t0), hz, e: batch });
         batch = [];
         t0 = performance.now();
       }
