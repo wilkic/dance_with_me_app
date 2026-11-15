@@ -42,6 +42,33 @@ function localIpv4() {
   return null;
 }
 
+/**
+ * Send to wherever the listener's real traffic comes from. werift (ICE lite)
+ * keeps the first address a nominating check arrived from, for good. A phone
+ * on wifi and mobile data at once sends one over wifi stamped with its
+ * mobile-data address; replies to that address go nowhere, and the phone,
+ * which settled on its wifi address, never gets an answer. Its handshake and
+ * media packets only come from the address that works, so follow those.
+ * (Reaches into werift's ICE internals; a no-op if they move.)
+ */
+function followListener(pc) {
+  for (const t of pc.iceTransports ?? []) {
+    const ice = t.connection;
+    for (const protocol of ice?.protocols ?? []) {
+      const received = protocol.datagramReceived;
+      if (typeof received !== 'function') continue;
+      protocol.datagramReceived = function (data, addr) {
+        const cur = ice.nominated;
+        if (cur && data[0] >= 20 && (cur.remoteAddr[0] !== addr[0] || cur.remoteAddr[1] !== addr[1])) { // not STUN
+          const pair = ice.candidatePairs.find((p) => p.protocol === protocol && p.remoteAddr[0] === addr[0] && p.remoteAddr[1] === addr[1]);
+          if (pair) ice.nominated = pair;
+        }
+        return received.call(this, data, addr);
+      };
+    }
+  }
+}
+
 export class WhipIngest {
   /**
    * resolveKey(key) → room name or null     who may stream to which room
@@ -172,6 +199,7 @@ export class WhipIngest {
     });
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    followListener(pc);
     if (s.listeners.get(sid) !== l) return;
     this.send(sid, { type: 'rtc', from: `live:${s.room}`, data: { sdp: { type: 'offer', sdp: pc.localDescription.sdp } } });
   }
@@ -181,14 +209,8 @@ export class WhipIngest {
     const l = this.streams.get(room)?.listeners.get(sid);
     if (!l || !data) return;
     try {
-      // The phone's own candidates are ignored: it reaches us (we are ICE
-      // lite, on a fixed address) and we answer wherever its checks come
-      // from. Given a list, werift may send to an address it cannot reach
-      // (a phone's VPN or mobile-data address) and the music never arrives.
-      if (data.sdp?.type === 'answer') {
-        const sdp = data.sdp.sdp.split(/\r?\n/).filter((line) => !line.startsWith('a=candidate:')).join('\r\n');
-        await l.pc.setRemoteDescription({ type: 'answer', sdp });
-      }
+      if (data.sdp?.type === 'answer') await l.pc.setRemoteDescription(data.sdp);
+      else if (data.candidate?.candidate) await l.pc.addIceCandidate(data.candidate);
     } catch (err) {
       this.log(`whip: signal from ${sid}: ${err.message}`);
     }
