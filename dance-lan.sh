@@ -77,6 +77,11 @@ if [ "$HOME_MODE" = 1 ]; then
   [ -s server/data/home-key ] || (umask 077; tr -d '-' < /proc/sys/kernel/random/uuid > server/data/home-key)
   export HOME_ROOM="$HOME_ROOM_NAME" HOME_KEY="$(cat server/data/home-key)" RECORD_DIR="${RECORD_DIR:-library/sessions}"
 fi
+# This laptop's address on the network (the phone link). OBS music goes to
+# the phones over the same one.
+IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
+[ -n "$IP" ] || IP=$(hostname -I | awk '{print $1}')
+export WHIP_LOCAL_IP="$IP"
 (cd server && exec node index.js) > "$LOGDIR/server.log" 2>&1 &
 SERVER_PID=$!
 node_modules/.bin/vite --host --strictPort --port "$PORT" > "$LOGDIR/vite.log" 2>&1 &
@@ -153,8 +158,6 @@ if [ "$HOME_MODE" = 1 ] && [ "$START_OBS" = 1 ]; then
 fi
 
 # --- URL + QR code ---------------------------------------------------------
-IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
-[ -n "$IP" ] || IP=$(hostname -I | awk '{print $1}')
 URL="https://$IP:$PORT/"
 PHONE_URL="$URL"
 [ "$HOME_MODE" = 1 ] && PHONE_URL="$URL?room=$HOME_ROOM_NAME"

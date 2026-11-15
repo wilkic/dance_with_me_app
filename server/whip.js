@@ -29,8 +29,13 @@ const SILENT_MS = 20_000; // no audio for this long: the stream is over
 const opus = new RTCRtpCodecParameters({ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 111 });
 const h264 = new RTCRtpCodecParameters({ mimeType: 'video/H264', clockRate: 90000, payloadType: 96 });
 
-/** The machine's first non-loopback IPv4 (what the UDP sockets bind to). */
+/**
+ * The IPv4 the UDP sockets bind to: WHIP_LOCAL_IP (dance-lan.sh passes the
+ * address of the phone link; a laptop on cable and wifi has two, and phones
+ * may only reach one), else the machine's first non-loopback one.
+ */
 function localIpv4() {
+  if (process.env.WHIP_LOCAL_IP) return process.env.WHIP_LOCAL_IP;
   for (const list of Object.values(networkInterfaces())) {
     for (const a of list) if (a.family === 'IPv4' && !a.internal) return a.address;
   }
@@ -160,6 +165,8 @@ export class WhipIngest {
     s.listeners.set(sid, l);
     pc.addTrack(s.track);
     pc.connectionStateChange.subscribe((state) => {
+      if (state === 'connected') this.log(`♫ ${sid} hears the OBS stream in room ${s.room}`);
+      if (state === 'failed') this.log(`♫ ${sid} could not connect to the OBS stream in room ${s.room}`);
       // Dropped: forget it; the next sync (every scan) offers again.
       if (['failed', 'closed'].includes(state) && s.listeners.get(sid) === l) { s.listeners.delete(sid); pc.close(); }
     });
