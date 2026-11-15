@@ -296,6 +296,15 @@ export class RoomMusic {
     }
   }
 
+  /**
+   * Listening, but the sound or its beat measurement is waiting for a tap.
+   * Happens when the room was joined without one (the /?room= link).
+   */
+  get stalled() {
+    const l = this.listen;
+    return !!l && (l.needsTap || l.audio.paused || (!!this.beat && this.beat.ctx.state !== 'running'));
+  }
+
   /** Autoplay was blocked: call from a tap to start hearing. */
   tapToHear() {
     const l = this.listen;

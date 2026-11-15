@@ -1012,6 +1012,11 @@ $('menu-music').addEventListener('click', () => {
   $('btn-music').click();
 });
 $('btn-hear').addEventListener('click', () => music.tapToHear());
+// A room entered by link (/?room=home) starts with no tap, so the phone holds
+// the music back: the first tap anywhere (e.g. Capture Room) lets it play.
+for (const ev of ['click', 'touchend']) {
+  document.addEventListener(ev, () => { if (music.stalled) music.tapToHear(); }, true);
+}
 $('src-file').addEventListener('click', () => $('music-file').click());
 $('music-file').addEventListener('change', (e) => {
   if (e.target.files.length) startMusic('file', e.target.files);
