@@ -2,7 +2,7 @@ import { Camera } from './camera.js';
 import { PoseDetector } from './pose/poseDetector.js';
 import { PoseSmoother } from './pose/smoothing.js';
 import { RoomModel } from './room/roomModel.js';
-import { StickFigureAvatar } from './avatar/stickFigure.js';
+import { StickFigureAvatar, FIGURE_STYLES, FIGURE_NAMES } from './avatar/stickFigure.js';
 import { placeAtBooth } from './avatar/booth.js';
 import {
   PoseChannel,
@@ -505,6 +505,12 @@ function onRemoteFrame(dancerId, frame) {
 // Local dancer avatar. Swappable: any Avatar implementation works here,
 // and remote dancers (via channel.subscribe) get their own instances.
 const avatar = new StickFigureAvatar();
+// How everyone is drawn (stick, hands + feet, curved): one choice for you
+// and your guests, remembered on this device.
+const FIGURE_KEY = 'dwm.figure';
+let figureStyle = 'stick';
+try { const saved = localStorage.getItem(FIGURE_KEY); if (FIGURE_STYLES.includes(saved)) figureStyle = saved; } catch { /* storage unavailable */ }
+avatar.style = figureStyle;
 
 let mode = 'start';        // start | capture | dance
 let ghostMode = true;      // true: show clean plate (user removed); false: live feed
@@ -625,6 +631,8 @@ function loop() {
       if (!g.pose) continue;
       const fade = Math.min(1, (now - g.bornAt) / GUEST_FADE_MS[g.kind]);
       g.avatar.alpha = fade * guestCfg.opacity;
+      g.avatar.style = figureStyle;
+      g.avatar.torso = avatar.torso;
       g.avatar.render(ctx, g.pose, { width: W, height: H });
       if (g.booth) {
         drawLabel(g.pose, 'DJ', g.avatar.color, g.avatar.alpha, W, H, 0.025);
@@ -1129,6 +1137,14 @@ $('btn-ghost').addEventListener('click', (e) => {
 $('btn-torso').addEventListener('click', (e) => {
   avatar.torso = avatar.torso === '1d' ? '2d' : '1d';
   e.target.textContent = `Torso: ${avatar.torso.toUpperCase()}`;
+});
+
+$('btn-figure').textContent = `Figure: ${FIGURE_NAMES[figureStyle]}`;
+$('btn-figure').addEventListener('click', (e) => {
+  figureStyle = FIGURE_STYLES[(FIGURE_STYLES.indexOf(figureStyle) + 1) % FIGURE_STYLES.length];
+  avatar.style = figureStyle;
+  try { localStorage.setItem(FIGURE_KEY, figureStyle); } catch { /* storage unavailable */ }
+  e.target.textContent = `Figure: ${FIGURE_NAMES[figureStyle]}`;
 });
 
 $('perf-load').addEventListener('click', (e) => e.target.classList.add('hidden'));

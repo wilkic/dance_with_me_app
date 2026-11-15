@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta charset="utf-8">
+<title>Dancer Figure Styles</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one dark page like the app itself; three stages in a row that stack on a phone. */
+:root {
+  color-scheme: dark;
+  --bg: #0E0C18;
+  --surface: #181528;
+  --ink: #ECEAF7;
+  --ink-2: #A9A5C4;
+  --line: #2E2A47;
+  --you: #8F7DFF;
+  --display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 400 15.5px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 36px 64px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.eyebrow { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+h1, h2 { font-family: var(--display); font-weight: 700; text-wrap: balance; line-height: 1.12; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -0.02em; margin-top: 10px; }
+h2 { font-size: 1.3rem; }
+p { margin: 0; max-width: 68ch; color: var(--ink-2); }
+p b, li b { color: var(--ink); font-weight: 600; }
+#stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+figure { margin: 0; min-width: 0; }
+canvas { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
+figcaption { font: 600 1.05rem/1 var(--display); padding: 12px 2px 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: 500 0.82rem/1 var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 10px 14px; cursor: pointer;
+}
+button:hover { border-color: var(--you); }
+button:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+ul { margin: 0; padding-left: 20px; max-width: 70ch; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--surface); padding: 1px 6px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 10px; }
+footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--ink-2); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Dance With Me · issue #28 · 11 Nov 2026</div>
+    <h1>Four ways to draw a dancer</h1>
+  </header>
+  <p>The same dancer, drawn by the app's own code, in each style. In every picture the big purple one is <b>you</b>, the green one is a <b>guest</b> behind you, and the small yellow one is the size of the <b>DJ at the booth</b>.</p>
+  <div class="controls">
+    <button id="t-play" type="button"></button>
+    <button id="t-room" type="button"></button>
+    <button id="t-glow" type="button"></button>
+    <button id="t-torso" type="button"></button>
+    <button id="t-spine" type="button"></button>
+  </div>
+  <div id="stages"></div>
+  <section>
+    <h2>What each one is</h2>
+    <ul>
+      <li><b>Stick</b> is what's live today.</li>
+      <li><b>Hands + feet</b> is the same figure with slim hands and feet, barely thicker than the limbs. A hand points where the fingers are; a foot runs from heel to toe.</li>
+      <li><b>Hands + shoulders</b> adds real shoulders: the arms hang off the shoulder points, rounding over from the neck, instead of off the neck itself.</li>
+      <li><b>Curved</b> is a filled silhouette: a thick torso, arms that bend in a curve and taper to the wrist, tapered legs with a straight thigh and shin, small feet, and a head floating clear of the shoulders.</li>
+    </ul>
+  </section>
+  <section>
+    <h2>A spine that bends</h2>
+    <p>The camera's pose engine gives no points between the shoulders and the hips, so a "core" or "chest" point can't be measured. It can be worked out: the spine leaves the neck square to the shoulder line and reaches the pelvis square to the hip line, and when the two tilt differently the curve between them is the bend. <b>Spine: bends</b> draws that curve. Its middle is the core point and a quarter of the way down is the chest. It shows side bends and hip sways; bending toward or away from the camera stays invisible.</p>
+  </section>
+  <section>
+    <h2>Try them on yourself</h2>
+    <p>On branch <code>figure-styles</code>, the dance screen has a fourth button at the bottom, <b>Figure</b>, that steps through the four. The bending spine is on this page only for now. It applies to you and to everyone in your space, and is remembered on the phone.</p>
+    <p>The dancer on this page is a made-up puppet, so its hands and feet are always exactly where they should be. On a real camera the finger and toe points are the least steady ones, so the phone test is what counts for hands and feet.</p>
+  </section>
+  <footer>The drawing code on this page is the app's (<code>src/avatar/stickFigure.js</code>), bundled in. Rebuild with <code>doc/figure-styles.build.sh</code>.</footer>
+</div>
+<script>(()=>{var k=class{render(n,e,i,s){throw new Error("Avatar.render must be implemented")}};var t={NOSE:0,LEFT_EAR:7,RIGHT_EAR:8,LEFT_SHOULDER:11,RIGHT_SHOULDER:12,LEFT_ELBOW:13,RIGHT_ELBOW:14,LEFT_WRIST:15,RIGHT_WRIST:16,LEFT_PINKY:17,RIGHT_PINKY:18,LEFT_INDEX:19,RIGHT_INDEX:20,LEFT_HIP:23,RIGHT_HIP:24,LEFT_KNEE:25,RIGHT_KNEE:26,LEFT_ANKLE:27,RIGHT_ANKLE:28,LEFT_HEEL:29,RIGHT_HEEL:30,LEFT_FOOT:31,RIGHT_FOOT:32},et=[[t.LEFT_SHOULDER,t.RIGHT_SHOULDER],[t.LEFT_SHOULDER,t.LEFT_ELBOW],[t.LEFT_ELBOW,t.LEFT_WRIST],[t.RIGHT_SHOULDER,t.RIGHT_ELBOW],[t.RIGHT_ELBOW,t.RIGHT_WRIST],[t.LEFT_SHOULDER,t.LEFT_HIP],[t.RIGHT_SHOULDER,t.RIGHT_HIP],[t.LEFT_HIP,t.RIGHT_HIP],[t.LEFT_HIP,t.LEFT_KNEE],[t.LEFT_KNEE,t.LEFT_ANKLE],[t.RIGHT_HIP,t.RIGHT_KNEE],[t.RIGHT_KNEE,t.RIGHT_ANKLE],[t.LEFT_ANKLE,t.LEFT_FOOT],[t.RIGHT_ANKLE,t.RIGHT_FOOT]];function st(){return{t:0,keypoints:new Float32Array(33*4),mirrored:!1}}function M(o,n){let e=n*4;return{x:o.keypoints[e],y:o.keypoints[e+1],z:o.keypoints[e+2],v:o.keypoints[e+3]}}var v=.4;function rt(o,n,e){let i=M(o,t.LEFT_SHOULDER),s=M(o,t.RIGHT_SHOULDER);if(i.v<=v||s.v<=v)return null;let T=M(o,t.LEFT_HIP),c=M(o,t.RIGHT_HIP),r={x:(i.x+s.x)/2*n,y:(i.y+s.y)/2*e};if(T.v>v&&c.v>v){let h={x:(T.x+c.x)/2*n,y:(T.y+c.y)/2*e};return{neck:r,pelvis:h,torsoLen:Math.hypot(r.x-h.x,r.y-h.y),hipsVisible:!0}}let E=(s.x-i.x)*n,l=(s.y-i.y)*e,L=Math.hypot(E,l),_=M(o,t.NOSE),x=_.v>v?Math.hypot(_.x*n-r.x,_.y*e-r.y):0,f=Math.max(L*1.3,x*2,1),d=-l/(L||1),I=E/(L||1);return L===0&&(d=0,I=1),I<0&&(d=-d,I=-I),{neck:r,pelvis:{x:r.x+d*f,y:r.y+I*f},torsoLen:f,hipsVisible:!1}}var at=[[t.LEFT_ELBOW,t.LEFT_WRIST],[t.RIGHT_ELBOW,t.RIGHT_WRIST],[t.LEFT_KNEE,t.LEFT_ANKLE],[t.RIGHT_KNEE,t.RIGHT_ANKLE],[t.LEFT_ANKLE,t.LEFT_FOOT],[t.RIGHT_ANKLE,t.RIGHT_FOOT]];function Tt(o,n,e,i=rt(o,n,e),s=8){let{neck:T,pelvis:c,torsoLen:r}=i,E=h=>{let a=M(o,h);return{x:a.x*n,y:a.y*e}},l=b(T,c),L=(h,a)=>{let y=b(h,a),H={x:-y.y,y:y.x};H.x*l.x+H.y*l.y<0&&(H={x:-H.x,y:-H.y});let R=Math.max(0,Math.min(1,(y.d/r-.25)/.25)),p={x:l.x+(H.x-l.x)*R,y:l.y+(H.y-l.y)*R},S=Math.hypot(p.x,p.y)||1;return{x:p.x/S,y:p.y/S}},_=L(E(t.LEFT_SHOULDER),E(t.RIGHT_SHOULDER)),x=L(E(t.LEFT_HIP),E(t.RIGHT_HIP)),f={x:T.x+_.x*r*.4,y:T.y+_.y*r*.4},d={x:c.x-x.x*r*.4,y:c.y-x.y*r*.4},I=[];for(let h=0;h<=s;h++){let a=h/s,y=1-a;I.push({x:y*y*y*T.x+3*y*y*a*f.x+3*y*a*a*d.x+a*a*a*c.x,y:y*y*y*T.y+3*y*y*a*f.y+3*y*a*a*d.y+a*a*a*c.y})}return I}var it=["stick","hands","shoulders","curved"],ct={stick:"Stick",hands:"Hands + feet",shoulders:"Hands + shoulders",curved:"Curved"},b=(o,n)=>{let e=n.x-o.x,i=n.y-o.y,s=Math.hypot(e,i)||1;return{x:e/s,y:i/s,d:s}},D=(o,n,e)=>({x:o.x+(n.x-o.x)*e,y:o.y+(n.y-o.y)*e});function K(o,n,e,i){let s=n.length;if(s<2)return;let T=c=>(e+(i-e)*(c/(s-1)))/2;for(let c=0;c<s;c++)o.moveTo(n[c].x+T(c),n[c].y),o.arc(n[c].x,n[c].y,T(c),0,Math.PI*2);for(let c=0;c<s-1;c++){let r=n[c],E=n[c+1],l=b(r,E),L=-l.y,_=l.x,x=T(c),f=T(c+1);o.moveTo(r.x-L*x,r.y-_*x),o.lineTo(E.x-L*f,E.y-_*f),o.lineTo(E.x+L*f,E.y+_*f),o.lineTo(r.x+L*x,r.y+_*x),o.closePath()}}function yt(o,n,e,i=10){let s=D(o,e,.5),T={x:n.x+(n.x-s.x)*.8,y:n.y+(n.y-s.y)*.8},c=[];for(let r=0;r<=i;r++){let E=r/i,l=1-E;c.push({x:l*l*o.x+2*l*E*T.x+E*E*e.x,y:l*l*o.y+2*l*E*T.y+E*E*e.y})}return c}var P=class extends k{constructor({color:n="#8f7dff",glow:e="#c9b8ff",torso:i="1d",alpha:s=1,glowStyle:T="blur",style:c="stick",spine:r="straight"}={}){super(),this.color=n,this.glow=e,this.torso=i,this.alpha=s,this.glowStyle=T,this.style=c,this.spine=r}render(n,e,i,s=null){let{width:T,height:c}=i,r=rt(e,T,c);if(!r)return;let{neck:E,pelvis:l,torsoLen:L,hipsVisible:_}=r,x=Math.max(3,Math.min(L*.14,_?1/0:c*.03)),f=Math.max(20,Math.min(L,_?1/0:c*.2)),d=0;if(s&&s.confidence>.3&&s.lastBeatAt){let m=(e.t-s.lastBeatAt)/1e3;d=Math.max(0,1-m*4)}let I=new Path2D,h=new Path2D,a=m=>{let w=M(e,m);return w.v<v?null:{x:w.x*T,y:w.y*c}},y=(m,w)=>{!m||!w||(I.moveTo(m.x,m.y),I.lineTo(w.x,w.y))},H=a(t.LEFT_EAR),R=a(t.RIGHT_EAR),p=H&&R?D(H,R,.5):a(t.NOSE),S=this.spine==="bent"&&_?Tt(e,T,c,r):[E,l];if(this.style==="curved")this.#o(h,{neck:E,pelvis:l,spine:S,hipsVisible:_,headAt:p,u:f,kpPx:a});else{let m=this.style!=="stick",w=a(t.LEFT_SHOULDER),z=a(t.RIGHT_SHOULDER);if(this.torso==="2d")for(let[F,u]of et)(!m||u!==t.LEFT_FOOT&&u!==t.RIGHT_FOOT)&&y(a(F),a(u));else{for(let[F,u]of at)(!m||u!==t.LEFT_FOOT&&u!==t.RIGHT_FOOT)&&y(a(F),a(u));for(let[F,u]of[[w,a(t.LEFT_ELBOW)],[z,a(t.RIGHT_ELBOW)]])this.style==="shoulders"&&F&&u?(I.moveTo(E.x,E.y),I.arcTo(F.x,F.y,u.x,u.y,f*.14),I.lineTo(u.x,u.y)):y(E,u);_&&(y(l,a(t.LEFT_KNEE)),y(l,a(t.RIGHT_KNEE)))}I.moveTo(S[0].x,S[0].y);for(let F of S.slice(1))I.lineTo(F.x,F.y);if(p){let F=Math.max(6,L*.28);y(E,{x:p.x,y:p.y+F*.7}),h.moveTo(p.x+F,p.y),h.arc(p.x,p.y,F,0,Math.PI*2)}m&&this.#t(h,f,a,x*1.15)}n.save(),n.globalAlpha=this.alpha,n.lineCap="round",n.lineJoin="round",this.glowStyle==="halo"?(n.globalAlpha=this.alpha*(.35+d*.3),n.strokeStyle=this.glow,n.lineWidth=x*2.6,n.stroke(I),n.lineWidth=x*1.6,n.stroke(h),n.globalAlpha=this.alpha):this.glowStyle==="blur"&&(n.shadowColor=this.glow,n.shadowBlur=x*(1.5+d*3)),n.strokeStyle=this.color,n.lineWidth=x,n.stroke(I),n.fillStyle=this.color,n.fill(h),n.restore()}#t(n,e,i,s){for(let[T,c,r,E]of[[t.LEFT_ELBOW,t.LEFT_WRIST,t.LEFT_INDEX,t.LEFT_PINKY],[t.RIGHT_ELBOW,t.RIGHT_WRIST,t.RIGHT_INDEX,t.RIGHT_PINKY]]){let l=i(c);if(!l)continue;let L=i(r),_=i(E),x=i(T),f=L&&_?D(L,_,.5):L??_,d=f&&Math.hypot(f.x-l.x,f.y-l.y)>e*.03?b(l,f):x?b(x,l):null;if(!d)continue;let I=e*.24;K(n,[l,{x:l.x+d.x*I,y:l.y+d.y*I}],s,s*1.15)}for(let[T,c,r]of[[t.LEFT_ANKLE,t.LEFT_HEEL,t.LEFT_FOOT],[t.RIGHT_ANKLE,t.RIGHT_HEEL,t.RIGHT_FOOT]]){let E=i(T),l=i(r);if(!E||!l)continue;let L=i(c)??E,_=b(L,l),x=Math.max(_.d,e*.22);K(n,[L,{x:L.x+_.x*x,y:L.y+_.y*x}],s*1.15,s)}}#o(n,{neck:e,pelvis:i,spine:s,hipsVisible:T,headAt:c,u:r,kpPx:E}){let l=r*.5;K(n,s,l,r*.4);for(let[L,_,x]of[[t.LEFT_SHOULDER,t.LEFT_ELBOW,t.LEFT_WRIST],[t.RIGHT_SHOULDER,t.RIGHT_ELBOW,t.RIGHT_WRIST]]){let f=E(L),d=E(_),I=E(x);if(!f||!d)continue;let h=D(e,f,.7);I?K(n,yt(h,d,I),r*.25,r*.14):K(n,[h,d],r*.25,r*.19)}if(T)for(let[L,_,x,f,d]of[[t.LEFT_HIP,t.LEFT_KNEE,t.LEFT_ANKLE,t.LEFT_HEEL,t.LEFT_FOOT],[t.RIGHT_HIP,t.RIGHT_KNEE,t.RIGHT_ANKLE,t.RIGHT_HEEL,t.RIGHT_FOOT]]){let I=E(L),h=E(_),a=E(x);if(!I||!h)continue;let y=D(i,I,.6);if(!a){K(n,[y,h],r*.29,r*.22);continue}K(n,[y,D(y,h,.5),h,D(h,a,.5),a],r*.29,r*.15);let H=E(d);if(H){let R=E(f)??a,p=b(R,H),S=Math.max(p.d,r*.2);K(n,[R,{x:R.x+p.x*S,y:R.y+p.y*S}],r*.16,r*.12)}}if(c){let L=r*.3,_=b(e,c),x={x:e.x+_.x*(l/2+L+r*.07),y:e.y+_.y*(l/2+L+r*.07)};n.moveTo(x.x+L,x.y),n.arc(x.x,x.y,L,0,Math.PI*2)}}};var A=Math.PI/180,U=[(o,n)=>({L:[150+12*o,185+25*o,185+45*o,6,-2,75],R:[150-12*o,185-25*o,185-45*o,6,-2,75],lean:5*o,tilt:8*o,bounce:Math.abs(n),sway:.25*o}),(o,n)=>({L:[95+60*o,110+75*o,110+90*o,10+6*o,-4,80],R:[95-60*o,110-75*o,110-90*o,10-6*o,-4,80],lean:-7*o,tilt:-10*o,bounce:Math.abs(o),sway:-.3*o}),(o,n)=>({L:[40+25*o,150-40*o,160-40*o,14+32*Math.max(0,o),-6-40*Math.max(0,o),70-30*Math.max(0,o)],R:[40-25*o,150+40*o,160+40*o,14+32*Math.max(0,-o),-6-40*Math.max(0,-o),70-30*Math.max(0,-o)],lean:3*o,tilt:4*n,bounce:Math.abs(n),sway:.1*o}),(o,n)=>({L:[92+22*o,95+40*n,95+70*n,16,-6,80],R:[92-22*o,95-40*n,95-70*n,16,-6,80],lean:9*o,tilt:12*o,bounce:.5*Math.abs(o),sway:.45*o})],q=(o,n,e)=>typeof o=="number"?o+(n-o)*e:Array.isArray(o)?o.map((i,s)=>q(i,n[s],e)):Object.fromEntries(Object.keys(o).map(i=>[i,q(o[i],n[i],e)]));function C(o,{bpm:n=112,aspect:e=.75,cx:i=.5,cy:s=.56,size:T=.19}={}){let c=o/6e4*n,r=c*Math.PI,E=Math.sin(r),l=Math.cos(r),_=c/8,x=Math.floor(_)%U.length,f=_-Math.floor(_),d=f>.85?(f-.85)/.15:0,I=d*d*(3-2*d),h=q(U[x](E,l),U[(x+1)%U.length](E,l),I),a=st();a.t=o;let y=(O,G)=>a.keypoints.set([i+G.x*T/e,s+G.y*T,0,1],O*4),H=(O,G)=>({x:G*Math.sin(O*A),y:Math.cos(O*A)}),R=(O,G,g)=>({x:O.x+G.x*g,y:O.y+G.y*g}),p={x:h.sway,y:-.1*h.bounce},S={x:Math.sin(h.lean*A),y:-Math.cos(h.lean*A)},m={x:-S.y,y:S.x},w=R(p,S,1),z={x:Math.cos(-h.lean*1.6*A),y:Math.sin(-h.lean*1.6*A)},F={x:Math.sin((h.lean+h.tilt)*A),y:-Math.cos((h.lean+h.tilt)*A)},u=R(w,F,.42);y(t.NOSE,u),y(t.LEFT_EAR,R(u,{x:-F.y,y:F.x},-.13)),y(t.RIGHT_EAR,R(u,{x:-F.y,y:F.x},.13));for(let[O,G,g]of[[-1,h.L,{sh:t.LEFT_SHOULDER,el:t.LEFT_ELBOW,wr:t.LEFT_WRIST,ix:t.LEFT_INDEX,pk:t.LEFT_PINKY,hip:t.LEFT_HIP,kn:t.LEFT_KNEE,an:t.LEFT_ANKLE,he:t.LEFT_HEEL,toe:t.LEFT_FOOT}],[1,h.R,{sh:t.RIGHT_SHOULDER,el:t.RIGHT_ELBOW,wr:t.RIGHT_WRIST,ix:t.RIGHT_INDEX,pk:t.RIGHT_PINKY,hip:t.RIGHT_HIP,kn:t.RIGHT_KNEE,an:t.RIGHT_ANKLE,he:t.RIGHT_HEEL,toe:t.RIGHT_FOOT}]]){let Q=R(w,m,O*.36),Z=R(Q,H(G[0],O),.58),$=R(Z,H(G[1],O),.52),W=H(G[2],O),j=R($,W,.2);y(g.sh,Q),y(g.el,Z),y(g.wr,$),y(g.ix,R(j,{x:-W.y,y:W.x},.05)),y(g.pk,R(j,{x:-W.y,y:W.x},-.05));let tt=R(p,z,O*.2),ot=R(tt,H(G[3],O),.85),X=R(ot,H(G[4],O),.8),nt=H(G[5],O);y(g.hip,tt),y(g.kn,ot),y(g.an,X),y(g.he,R(X,{x:-nt.x*.08,y:.1},1)),y(g.toe,R(R(X,{x:0,y:.1},1),nt,.3))}return a}var J=360,V=480,N={glow:!0,light:!1,torso:"1d",spine:"straight",playing:!0},_t=it.map(o=>{let n=document.createElement("figure"),e=document.createElement("canvas"),i=Math.min(2,window.devicePixelRatio||1);e.width=J*i,e.height=V*i;let s=document.createElement("figcaption");s.textContent=ct[o],n.append(e,s),document.getElementById("stages").append(n);let T=e.getContext("2d");return T.scale(i,i),{ctx:T,you:new P({style:o}),guest:new P({style:o,color:"#7dffb0",glow:"#c2ffdc",glowStyle:"none",alpha:.9}),far:new P({style:o,color:"#fff37d",glow:"#fffac2",glowStyle:"none",alpha:.9})}}),Y=0,Et=performance.now();function lt(o){requestAnimationFrame(lt),N.playing&&(Y+=Math.min(100,o-Et)),Et=o;let n={width:J,height:V};for(let e of _t){let{ctx:i}=e,s=i.createLinearGradient(0,0,0,V);N.light?(s.addColorStop(0,"#cfc8bd"),s.addColorStop(.62,"#b9b1a4"),s.addColorStop(.63,"#8d7f6c"),s.addColorStop(1,"#75695a")):(s.addColorStop(0,"#15131f"),s.addColorStop(.62,"#1b1828"),s.addColorStop(.63,"#221d2e"),s.addColorStop(1,"#17141f")),i.fillStyle=s,i.fillRect(0,0,J,V);for(let T of[e.you,e.guest,e.far])T.torso=N.torso,T.spine=N.spine;e.you.glowStyle=N.glow?"blur":"none",e.far.render(i,C(Y+900,{cx:.5,cy:.3,size:.08}),n),e.guest.render(i,C(Y+2100,{cx:.27,cy:.5,size:.15}),n),e.you.render(i,C(Y,{cx:.64,cy:.58,size:.2}),n)}}requestAnimationFrame(lt);var B=(o,n,e,i,s)=>{let T=document.getElementById(o),c=()=>{T.textContent=s[N[n]===e?0:1],T.setAttribute("aria-pressed",String(N[n]===e))};T.addEventListener("click",()=>{N[n]=N[n]===e?i:e,c()}),c()};B("t-glow","glow",!0,!1,["Your glow: on","Your glow: off"]);B("t-room","light",!0,!1,["Room: bright","Room: dark"]);B("t-torso","torso","2d","1d",["Torso: 2D","Torso: 1D"]);B("t-spine","spine","bent","straight",["Spine: bends","Spine: straight"]);B("t-play","playing",!0,!1,["Pause","Play"]);})();</script>
+</body>
+</html>

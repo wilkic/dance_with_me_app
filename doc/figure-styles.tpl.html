@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta charset="utf-8">
+<title>Dancer Figure Styles</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one dark page like the app itself; three stages in a row that stack on a phone. */
+:root {
+  color-scheme: dark;
+  --bg: #0E0C18;
+  --surface: #181528;
+  --ink: #ECEAF7;
+  --ink-2: #A9A5C4;
+  --line: #2E2A47;
+  --you: #8F7DFF;
+  --display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 400 15.5px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 36px 64px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.eyebrow { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+h1, h2 { font-family: var(--display); font-weight: 700; text-wrap: balance; line-height: 1.12; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -0.02em; margin-top: 10px; }
+h2 { font-size: 1.3rem; }
+p { margin: 0; max-width: 68ch; color: var(--ink-2); }
+p b, li b { color: var(--ink); font-weight: 600; }
+#stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+figure { margin: 0; min-width: 0; }
+canvas { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
+figcaption { font: 600 1.05rem/1 var(--display); padding: 12px 2px 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: 500 0.82rem/1 var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 10px 14px; cursor: pointer;
+}
+button:hover { border-color: var(--you); }
+button:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+ul { margin: 0; padding-left: 20px; max-width: 70ch; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--surface); padding: 1px 6px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 10px; }
+footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--ink-2); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Dance With Me · issue #28 · 11 Nov 2026</div>
+    <h1>Four ways to draw a dancer</h1>
+  </header>
+  <p>The same dancer, drawn by the app's own code, in each style. In every picture the big purple one is <b>you</b>, the green one is a <b>guest</b> behind you, and the small yellow one is the size of the <b>DJ at the booth</b>.</p>
+  <div class="controls">
+    <button id="t-play" type="button"></button>
+    <button id="t-room" type="button"></button>
+    <button id="t-glow" type="button"></button>
+    <button id="t-torso" type="button"></button>
+    <button id="t-spine" type="button"></button>
+  </div>
+  <div id="stages"></div>
+  <section>
+    <h2>What each one is</h2>
+    <ul>
+      <li><b>Stick</b> is what's live today.</li>
+      <li><b>Hands + feet</b> is the same figure with slim hands and feet, barely thicker than the limbs. A hand points where the fingers are; a foot runs from heel to toe.</li>
+      <li><b>Hands + shoulders</b> adds real shoulders: the arms hang off the shoulder points, rounding over from the neck, instead of off the neck itself.</li>
+      <li><b>Curved</b> is a filled silhouette: a thick torso, arms that bend in a curve and taper to the wrist, tapered legs with a straight thigh and shin, small feet, and a head floating clear of the shoulders.</li>
+    </ul>
+  </section>
+  <section>
+    <h2>A spine that bends</h2>
+    <p>The camera's pose engine gives no points between the shoulders and the hips, so a "core" or "chest" point can't be measured. It can be worked out: the spine leaves the neck square to the shoulder line and reaches the pelvis square to the hip line, and when the two tilt differently the curve between them is the bend. <b>Spine: bends</b> draws that curve. Its middle is the core point and a quarter of the way down is the chest. It shows side bends and hip sways; bending toward or away from the camera stays invisible.</p>
+  </section>
+  <section>
+    <h2>Try them on yourself</h2>
+    <p>On branch <code>figure-styles</code>, the dance screen has a fourth button at the bottom, <b>Figure</b>, that steps through the four. The bending spine is on this page only for now. It applies to you and to everyone in your space, and is remembered on the phone.</p>
+    <p>The dancer on this page is a made-up puppet, so its hands and feet are always exactly where they should be. On a real camera the finger and toe points are the least steady ones, so the phone test is what counts for hands and feet.</p>
+  </section>
+  <footer>The drawing code on this page is the app's (<code>src/avatar/stickFigure.js</code>), bundled in. Rebuild with <code>doc/figure-styles.build.sh</code>.</footer>
+</div>
+<script>/*PREVIEW_JS*/</script>
+</body>
+</html>
