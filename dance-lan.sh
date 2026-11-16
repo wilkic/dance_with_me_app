@@ -2,7 +2,7 @@
 # Dance With Me — LAN test stack for phones on the same wifi.
 #
 #   ./dance-lan.sh            (--no-browser to skip opening the dance floor)
-#   ./dance-lan.sh --home     home studio, see dance-home.sh
+#   ./dance-lan.sh --home     home studio, see dance-home.sh (--no-music, --no-obs)
 #
 # Starts the dance server (rooms, tempo) and the Vite dev server (HTTPS,
 # proxies /ws to the dance server), prints the phone URL as a QR code and
@@ -17,11 +17,15 @@ LOGDIR=/tmp/dance-lan
 OPEN_BROWSER=1
 HOME_MODE=0
 START_OBS=1
+OPEN_MUSIC=1
+# Home studio: the music page opened in the browser (OBS streams its sound).
+MUSIC_URL=${DANCE_HOME_MUSIC:-https://music.youtube.com/playlist?list=LM}
 for arg in "$@"; do
   case "$arg" in
     --no-browser) OPEN_BROWSER=0 ;;
     --home) HOME_MODE=1; OPEN_BROWSER=0 ;;
     --no-obs) START_OBS=0 ;;
+    --no-music) OPEN_MUSIC=0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -167,6 +171,12 @@ if [ "$OPEN_BROWSER" = 1 ] && command -v xdg-open >/dev/null; then
   (xdg-open "$FLOOR" >/dev/null 2>&1 &)
 fi
 
+MUSIC_NOTE="play it in a browser here."
+if [ "$HOME_MODE" = 1 ] && [ "$OPEN_MUSIC" = 1 ] && command -v xdg-open >/dev/null; then
+  (xdg-open "$MUSIC_URL" >/dev/null 2>&1 &)
+  MUSIC_NOTE="opened $MUSIC_URL in your browser; press play there if it didn't start."
+fi
+
 clear
 echo
 if command -v qrencode >/dev/null; then
@@ -186,7 +196,8 @@ if [ "$HOME_MODE" = 1 ]; then
   echo "  Save that link on the phone (Add to Home screen). It opens the camera in the"
   echo "  room; tap Capture Room. Press ● Record when ready (5 s countdown), ■ Stop to save the clip."
   echo
-  echo "  Music:  play it in a browser here. ${OBS_NOTE:-OBS not started (--no-obs).}"
+  echo "  Music:  $MUSIC_NOTE"
+  echo "          ${OBS_NOTE:-OBS not started (--no-obs).}"
 else
   echo "  Phones on this wifi:  $URL"
   echo "  Accept the certificate warning once per phone, then Dance in room."

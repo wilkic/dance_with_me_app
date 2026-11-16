@@ -56,6 +56,8 @@ sound into that room. The phone opens the printed link (`…/?room=home`,
 worth saving to the home screen), which goes straight to the camera in the
 room. Nothing is recorded until you press ● Record on the dance screen
 (5 s countdown); each Record → Stop is one clip in `server/library/sessions/`.
+It also opens YouTube Music (your liked songs) in the laptop's browser;
+`--no-music` skips that, `DANCE_HOME_MUSIC=<url>` opens another page.
 
 The library itself (`server/library.js`) indexes `recordings_web/` (the
 harvested web clips, tagged by genre), `recordings/` (metronome sessions)
