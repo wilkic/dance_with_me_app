@@ -293,7 +293,7 @@ footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line);
       <tr><td>Halo guests, room photo on its own layer</td><td class="num">4.2 ms</td><td class="num">6.5 ms</td><td class="num">0.5 ms</td></tr>
     </tbody>
   </table></div>
-  <p class="sub">About 4 ms in every row is the benchmark's own per-frame readback. The room photo now sits on a canvas under the stage, drawn once at capture. Since 16 Oct 2026 guests have no glow at all (cheaper still than the halo); you keep the real blurred glow, drawn in a single pass. Add <code>?perf=1</code> to the app URL and the HUD shows pose-detection, guest-drawing and loop times live. It also shows a box with where the loading time went: camera, engine and model download, model start, first frame, and the GPU's name. <code>?cpu=1</code> runs pose detection on the CPU, to compare (issue #1). The model loads once per page, and a warm-up detection runs behind the loading screen so dancing starts without a hitch.</p>
+  <p class="sub">About 4 ms in every row is the benchmark's own per-frame readback. The room photo now sits on a canvas under the stage, drawn once at capture. Since 16 Oct 2026 guests have no glow at all (cheaper still than the halo). Since 17 Nov 2026 nobody has one, you included, in the app and on the dance floor screen: the glow smeared the hands in the home-studio clips. Add <code>?perf=1</code> to the app URL and the HUD shows pose-detection, guest-drawing and loop times live. It also shows a box with where the loading time went: camera, engine and model download, model start, first frame, and the GPU's name. <code>?cpu=1</code> runs pose detection on the CPU, to compare (issue #1). The model loads once per page, and a warm-up detection runs behind the loading screen so dancing starts without a hitch.</p>
   <div class="legend"><span><i class="dot d-you"></i>you</span><span><i class="dot d-delay"></i>delayed-you</span><span><i class="dot d-people"></i>room-mates</span><span><i class="dot d-ai"></i>AI dancers</span><span>(colors on this page only, not the app's palette)</span></div>
   <div class="tbl wrapfirst"><table>
     <thead><tr><th>Kind</th><th>Where the frames come from</th><th>In the app</th></tr></thead>
@@ -551,7 +551,7 @@ cd server &amp;&amp; npm run lab     # scenario suite → lab/out/report.html</c
   </table></div>
 </section>
 
-<footer>Last updated 11 November 2026 on branch figure-styles (figure styles, issue #28). Line counts in the code map are from the day each row was last touched.</footer>
+<footer>Last updated 17 November 2026 on branch home-studio (glow off for every figure, issue #29). Line counts in the code map are from the day each row was last touched.</footer>
 </div>
 </body>
 </html>

@@ -143,7 +143,7 @@ function bend(a, joint, b, steps = 10) {
  * camera. Pulses subtly on detected beats.
  *
  * Figure styles (FIGURE_STYLES):
- *  - 'stick' (default): the glowing stick figure.
+ *  - 'stick' (default): the plain stick figure.
  *  - 'hands': the stick figure with mitten hands and shoe feet — which
  *    way a hand or foot points makes a pose much easier to read.
  *  - 'shoulders': 'hands', with the arms hanging off real shoulders that
@@ -162,13 +162,14 @@ function bend(a, joint, b, steps = 10) {
  *
  * Glow styles (canvas shadowBlur is the expensive part of drawing a figure —
  * see bench.html):
- *  - 'blur' (default): true shadowBlur glow, one blur pass per figure.
+ *  - 'none' (default): no glow at all. Everyone is drawn this way since
+ *    17 Nov 2026: the glow blurred the hands in the home-studio clips.
+ *  - 'blur': true shadowBlur glow, one blur pass per figure.
  *  - 'halo': a wide translucent stroke under the bones, no blur at all —
- *    several times cheaper.
- *  - 'none': no glow at all; used for guests.
+ *    several times cheaper than 'blur'.
  */
 export class StickFigureAvatar extends Avatar {
-  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'blur', style = 'stick', spine = 'straight' } = {}) {
+  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'none', style = 'stick', spine = 'straight' } = {}) {
     super();
     this.color = color;
     this.glow = glow;
