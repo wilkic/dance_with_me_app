@@ -248,6 +248,10 @@ button.danger {
   stroke-linejoin: round;
   pointer-events: none;
 }
+.icon-btn svg .thin { stroke-width: 1.4; }
+/* The camera with an arrow going round it is finer: drawn larger, thinner. */
+.icon-btn.big-icon svg { width: 1.9rem; height: 1.9rem; stroke-width: 1.5; }
+.icon-btn.big-icon svg .thin { stroke-width: 1.2; }
 .icon-btn svg .dot { fill: currentColor; stroke: none; }
 /* Ghost off: the ghost dims and gets a red no-entry sign over it. */
 .icon-btn svg .slash { display: none; stroke: #ff6b6b; }
@@ -487,7 +491,21 @@ button.danger {
 }
 .music-btn.playing { border-color: #b84ce7; color: #fff; }
 #btn-hear { border-color: #b84ce7; color: #fff; }
-#btn-rec { border-color: #ff6b6b; color: #ff6b6b; }
+#btn-rec {
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+  /* Top middle of the dance screen, between the room name and the menu. */
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 0.6rem);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: fit-content;
+  max-width: 36vw;
+  padding: 0.6rem 0.9rem;
+}
+/* The room name leaves the middle to it. */
+#screen-dance:has(#btn-rec:not(.hidden)) .room-btn { max-width: 29vw; padding-inline: 0.9rem; }
 #btn-rec.on { background: #ff6b6b; color: #fff; }
 .music-box { display: flex; flex-direction: column; gap: 0.8rem; }
 .rooms-box #rooms-title { font-weight: 600; }

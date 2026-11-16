@@ -275,7 +275,7 @@ function renderRec() {
   btn.classList.toggle('hidden', !recButton);
   btn.classList.toggle('on', recState === 'on');
   const secs = Math.max(0, Math.round(Math.abs(Date.now() - recAt) / 1000));
-  btn.textContent = recState === 'countdown' ? `Recording in ${Math.max(1, Math.ceil((recAt - Date.now()) / 1000))}… tap to cancel`
+  btn.textContent = recState === 'countdown' ? `● in ${Math.max(1, Math.ceil((recAt - Date.now()) / 1000))}… ✕`
     : recState === 'on' ? `■ Stop · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
       : recNote || '● Record';
   $('hud-rec').classList.toggle('hidden', !(recAlways || recState === 'on'));
@@ -320,7 +320,7 @@ function onServerMessage(msg) {
   } else if (msg.type === 'rec') {
     if (msg.on) return;
     const secs = msg.seconds ?? 0; // what was kept: the last few seconds (walking to the phone) are cut
-    recNote = msg.kept ? `Clip saved · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'Too short, not kept';
+    recNote = msg.kept ? `Saved · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'Too short';
     setTimeout(() => { recNote = ''; renderRec(); }, 4000);
     renderRec();
   } else if (msg.type === 'tempo') {
@@ -524,6 +524,7 @@ let lastFrameT = 0;
 // the guests, whole loop) so guest cost can be read off a real phone.
 const perfHud = urlParams.has('perf');
 $('hud-fps').classList.toggle('hidden', !perfHud);
+$('hud').classList.toggle('hidden', !perfHud); // the status banner is gone; only the timings remain
 const perf = { detect: 0, guests: 0, loop: 0, lastLoopAt: 0 };
 const ema = (prev, v) => (prev ? prev * 0.9 + v * 0.1 : v);
 
