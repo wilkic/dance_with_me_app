@@ -11,7 +11,7 @@ import { StickFigureAvatar, FIGURE_STYLES, FIGURE_NAMES } from './stickFigure.js
 import { demoPose } from './demoDancer.js';
 
 const W = 360, H = 480;
-const state = { glow: false, light: false, torso: '1d', spine: 'straight', playing: true };
+const state = { glow: true, light: false, torso: '1d', spine: 'straight', playing: true };
 const stages = FIGURE_STYLES.map((style) => {
   const fig = document.createElement('figure');
   const canvas = document.createElement('canvas');

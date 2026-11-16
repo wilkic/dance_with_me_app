@@ -143,8 +143,8 @@ function bend(a, joint, b, steps = 10) {
  * camera. Pulses subtly on detected beats.
  *
  * Figure styles (FIGURE_STYLES):
- *  - 'stick' (default): the plain stick figure.
- *  - 'hands': the stick figure with mitten hands and shoe feet — which
+ *  - 'stick' (default): the glowing stick figure.
+ *  - 'hands': the stick figure with a hand and a foot bone — which
  *    way a hand or foot points makes a pose much easier to read.
  *  - 'shoulders': 'hands', with the arms hanging off real shoulders that
  *    round over from the neck, instead of off the neck itself.
@@ -162,14 +162,13 @@ function bend(a, joint, b, steps = 10) {
  *
  * Glow styles (canvas shadowBlur is the expensive part of drawing a figure —
  * see bench.html):
- *  - 'none' (default): no glow at all. Everyone is drawn this way since
- *    17 Nov 2026: the glow blurred the hands in the home-studio clips.
- *  - 'blur': true shadowBlur glow, one blur pass per figure.
+ *  - 'blur' (default): true shadowBlur glow, one blur pass per figure.
  *  - 'halo': a wide translucent stroke under the bones, no blur at all —
- *    several times cheaper than 'blur'.
+ *    several times cheaper.
+ *  - 'none': no glow at all; used for guests.
  */
 export class StickFigureAvatar extends Avatar {
-  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'none', style = 'stick', spine = 'straight' } = {}) {
+  constructor({ color = '#8f7dff', glow = '#c9b8ff', torso = '1d', alpha = 1, glowStyle = 'blur', style = 'stick', spine = 'straight' } = {}) {
     super();
     this.color = color;
     this.glow = glow;
@@ -198,8 +197,9 @@ export class StickFigureAvatar extends Avatar {
       pulse = Math.max(0, 1 - since * 4); // fades over 250ms
     }
 
-    // The whole figure is one stroked path (bones) and one filled path
-    // (head, hands, feet — or everything, for the curved figure), so the
+    // The whole figure is one stroked path (bones, hands and feet among
+    // them) and one filled path (the head — or everything, for the curved
+    // figure), so the
     // glow is computed once per figure rather than once per bone.
     const bones = new Path2D();
     const solid = new Path2D();
@@ -256,8 +256,10 @@ export class StickFigureAvatar extends Avatar {
         solid.moveTo(headAt.x + r, headAt.y);
         solid.arc(headAt.x, headAt.y, r, 0, Math.PI * 2);
       }
-      // Barely thicker than the limbs they end: it's the direction that reads.
-      if (hands) this.#handsAndFeet(solid, u, kpPx, lineWidth * 1.15);
+      // Bones like any other, as thick as the limbs they end: it's the
+      // direction that reads. (As filled shapes they got a glow of their
+      // own, which ringed the wrist instead of running on from the arm.)
+      if (hands) this.#handsAndFeet(push, u, kpPx);
     }
 
     ctx.save();
@@ -287,11 +289,11 @@ export class StickFigureAvatar extends Avatar {
   }
 
   /**
-   * Mitten hands and shoe feet. A hand points where the fingers are (or
+   * Hands and feet, each one more bone. A hand points where the fingers are (or
    * on along the forearm when they aren't seen); a foot runs from the
    * heel to the toes, never shorter than a shoe seen from the front.
    */
-  #handsAndFeet(solid, u, kpPx, thick) {
+  #handsAndFeet(push, u, kpPx) {
     for (const [elbow, wrist, index, pinky] of [
       [KP.LEFT_ELBOW, KP.LEFT_WRIST, KP.LEFT_INDEX, KP.LEFT_PINKY],
       [KP.RIGHT_ELBOW, KP.RIGHT_WRIST, KP.RIGHT_INDEX, KP.RIGHT_PINKY],
@@ -303,7 +305,7 @@ export class StickFigureAvatar extends Avatar {
       const dir = fingers && Math.hypot(fingers.x - w.x, fingers.y - w.y) > u * 0.03 ? unit(w, fingers) : e ? unit(e, w) : null;
       if (!dir) continue;
       const len = u * 0.24;
-      addTaper(solid, [w, { x: w.x + dir.x * len, y: w.y + dir.y * len }], thick, thick * 1.15);
+      push(w, { x: w.x + dir.x * len, y: w.y + dir.y * len });
     }
     for (const [ankle, heel, toe] of [
       [KP.LEFT_ANKLE, KP.LEFT_HEEL, KP.LEFT_FOOT],
@@ -315,7 +317,7 @@ export class StickFigureAvatar extends Avatar {
       const from = kpPx(heel) ?? a;
       const dir = unit(from, t);
       const len = Math.max(dir.d, u * 0.22);
-      addTaper(solid, [from, { x: from.x + dir.x * len, y: from.y + dir.y * len }], thick * 1.15, thick);
+      push(from, { x: from.x + dir.x * len, y: from.y + dir.y * len });
     }
   }
 
