@@ -523,6 +523,7 @@ let lastFrameT = 0;
 // ?perf=1: HUD shows where each frame's time goes (pose detection, drawing
 // the guests, whole loop) so guest cost can be read off a real phone.
 const perfHud = urlParams.has('perf');
+$('hud-fps').classList.toggle('hidden', !perfHud);
 const perf = { detect: 0, guests: 0, loop: 0, lastLoopAt: 0 };
 const ema = (prev, v) => (prev ? prev * 0.9 + v * 0.1 : v);
 
@@ -652,9 +653,7 @@ function loop() {
   }
 
   // HUD (bpm/room/match come from server opinions via onServerMessage)
-  $('hud-fps').textContent = perfHud
-    ? `${fpsEma.toFixed(0)} fps · pose ${perf.detect.toFixed(1)} · guests ${perf.guests.toFixed(1)} · loop ${perf.loop.toFixed(0)} ms`
-    : `${fpsEma.toFixed(0)} fps`;
+  if (perfHud) $('hud-fps').textContent = `${fpsEma.toFixed(0)} fps · pose ${perf.detect.toFixed(1)} · guests ${perf.guests.toFixed(1)} · loop ${perf.loop.toFixed(0)} ms`;
 }
 
 /**
@@ -1130,21 +1129,26 @@ $('btn-rescan').addEventListener('click', () => {
   showScreen('capture');
   planGuests(); // off the dance screen → no server guests until the next capture
 });
+// Icon buttons: the picture stays, the state goes in the tooltip (and, for
+// the ghost, a no-entry sign over it when off).
 $('btn-ghost').addEventListener('click', (e) => {
   ghostMode = !ghostMode;
-  e.target.textContent = `Ghost: ${ghostMode ? 'ON' : 'OFF'}`;
+  const btn = e.currentTarget;
+  btn.classList.toggle('off', !ghostMode);
+  btn.setAttribute('aria-pressed', String(ghostMode));
+  btn.title = ghostMode ? "Ghost: on (you're removed from the room; off shows the live camera)" : 'Ghost: off (live camera)';
 });
 $('btn-torso').addEventListener('click', (e) => {
   avatar.torso = avatar.torso === '1d' ? '2d' : '1d';
-  e.target.textContent = `Torso: ${avatar.torso.toUpperCase()}`;
+  e.currentTarget.textContent = avatar.torso.toUpperCase();
 });
 
-$('btn-figure').textContent = `Figure: ${FIGURE_NAMES[figureStyle]}`;
+$('btn-figure').title = `Figure: ${FIGURE_NAMES[figureStyle]}`;
 $('btn-figure').addEventListener('click', (e) => {
   figureStyle = FIGURE_STYLES[(FIGURE_STYLES.indexOf(figureStyle) + 1) % FIGURE_STYLES.length];
   avatar.style = figureStyle;
   try { localStorage.setItem(FIGURE_KEY, figureStyle); } catch { /* storage unavailable */ }
-  e.target.textContent = `Figure: ${FIGURE_NAMES[figureStyle]}`;
+  e.currentTarget.title = `Figure: ${FIGURE_NAMES[figureStyle]}`;
 });
 
 $('perf-load').addEventListener('click', (e) => e.target.classList.add('hidden'));

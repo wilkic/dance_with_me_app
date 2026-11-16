@@ -144,6 +144,7 @@ button:active { transform: scale(0.97); }
   padding: 1rem;
   backdrop-filter: blur(8px);
   text-align: left;
+  z-index: 5; /* over the controls, which now sit under it at the top */
 }
 
 .menu-row {
@@ -207,14 +208,51 @@ button.danger {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---- Guests (dance screen slider + menu) ---- */
-.dance-bottom {
+/* ---- Dance screen controls: at the top, under the room button and the
+   burger. On a phone the feet are near the bottom edge of the picture and
+   the space above the head is free. ---- */
+#screen-dance { justify-content: flex-start; }
+.dance-controls {
+  margin-top: calc(env(safe-area-inset-top, 0px) + 3.4rem);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   width: min(26rem, 100%);
 }
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+/* Small round buttons with a drawn icon (or two letters). */
+.icon-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.icon-btn svg {
+  width: 1.4rem;
+  height: 1.4rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.icon-btn svg .dot { fill: currentColor; stroke: none; }
+/* Ghost off: the ghost dims and gets a red no-entry sign over it. */
+.icon-btn svg .slash { display: none; stroke: #ff6b6b; }
+.icon-btn.off { color: #889; }
+.icon-btn.off svg .slash { display: inline; }
 .guest-slider {
   display: grid;
   grid-template-columns: auto 1fr 8.5rem;
@@ -331,10 +369,12 @@ button.danger {
   font-weight: 600;
   margin-bottom: 0.4rem;
 }
+/* Nothing to say: no empty pill. */
+.hud:not(:has(span:not(.hidden):not(:empty))) { display: none; }
 #hud-room { color: #fff; font-weight: 600; }
-/* The HUD sits under the room button and the burger, so it never runs beneath them. */
+/* The HUD comes last in the controls, so what it says never moves a button. */
 #screen-dance .hud {
-  margin-top: calc(env(safe-area-inset-top, 0px) + 3.4rem);
+  margin-top: 0;
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.3rem 1rem;

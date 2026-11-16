@@ -60,15 +60,6 @@
 
     <!-- ===== Screen: dance ===== -->
     <section id="screen-dance" class="screen hidden">
-      <div class="hud">
-        <span id="hud-room" class="hidden"></span>
-        <span id="hud-fps">-- fps</span>
-        <span id="hud-bpm" class="hidden"></span>
-        <span id="hud-guests" class="hidden"></span>
-        <span id="hud-music" class="hidden"></span>
-        <span id="hud-rec" class="hidden" title="This server is recording your session">&#9679; rec</span>
-        <span id="hud-status"></span>
-      </div>
       <!-- "Share your room" until shared; then the room name (tap to leave). -->
       <button id="btn-room" class="room-btn">Share your room</button>
       <button id="btn-menu" class="burger" aria-label="Menu">&#9776;</button>
@@ -106,23 +97,41 @@
         </div>
         <button id="btn-exit" class="danger">Exit to start</button>
       </div>
-      <div class="dance-bottom">
-        <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
-        <!-- Only on a server with a record button (dance-home.sh): one clip per Record → Stop. -->
-        <button id="btn-rec" class="music-btn hidden">&#9679; Record</button>
-        <button id="btn-music" class="music-btn hidden">&#9835; Play music</button>
-        <button id="btn-hear" class="music-btn hidden">&#128264; Tap to hear the music</button>
+      <!-- Controls sit at the top: on a phone the feet are near the bottom
+           edge of the picture and the space above the head is free. -->
+      <div class="dance-controls">
+        <div class="control-row">
+          <button id="btn-rescan" class="icon-btn" title="Rescan the room" aria-label="Rescan the room">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/></svg>
+          </button>
+          <button id="btn-ghost" class="icon-btn" title="Ghost: on (you're removed from the room; off shows the live camera)" aria-label="Ghost" aria-pressed="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V11a7 7 0 0 1 14 0v10l-2.33-2-2.34 2L12 19l-2.33 2-2.34-2z"/><circle class="dot" cx="9.6" cy="11" r="1.1"/><circle class="dot" cx="14.4" cy="11" r="1.1"/><g class="slash"><circle cx="12" cy="12" r="10.6"/><path d="M4.5 4.5l15 15"/></g></svg>
+          </button>
+          <button id="btn-figure" class="icon-btn" title="How dancers are drawn" aria-label="Figure style">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dot" cx="12" cy="4.8" r="2.3"/><path d="M12 7.5V15M4 10h16M12 15l-4.5 6.5M12 15l4.5 6.5"/></svg>
+          </button>
+          <button id="btn-torso" class="icon-btn" title="Torso: a single line (1D) or shoulders and hips (2D)">1D</button>
+          <!-- Only on a server with a record button (dance-home.sh): one clip per Record → Stop. -->
+          <button id="btn-rec" class="music-btn hidden">&#9679; Record</button>
+          <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
+          <button id="btn-music" class="music-btn hidden">&#9835; Play music</button>
+          <button id="btn-hear" class="music-btn hidden">&#128264; Tap to hear the music</button>
+        </div>
         <div class="guest-slider">
           <label for="sl-guests">Guests</label>
           <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" />
           <span id="val-guests">1 guest</span>
         </div>
-      <div class="bottom-bar">
-        <button id="btn-rescan">&#8617; Rescan</button>
-        <button id="btn-ghost" title="Toggle between clean room and live feed">Ghost: ON</button>
-        <button id="btn-torso" title="Toggle stick (1D) vs anatomical (2D) torso">Torso: 1D</button>
-        <button id="btn-figure" title="How dancers are drawn: stick, with hands and feet, or curved">Figure: Stick</button>
-      </div>
+        <div class="hud">
+          <span id="hud-room" class="hidden"></span>
+          <!-- Frame timings, only with ?perf=1 -->
+          <span id="hud-fps" class="hidden"></span>
+          <span id="hud-bpm" class="hidden"></span>
+          <span id="hud-guests" class="hidden"></span>
+          <span id="hud-music" class="hidden"></span>
+          <span id="hud-rec" class="hidden" title="This server is recording your session">&#9679; rec</span>
+          <span id="hud-status"></span>
+        </div>
       </div>
     </section>
 
