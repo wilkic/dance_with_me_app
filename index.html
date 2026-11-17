@@ -77,8 +77,9 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dot" cx="12" cy="4.8" r="2.3"/><path d="M12 7.5V15M4 10h16M12 15l-4.5 6.5M12 15l4.5 6.5"/></svg>
           </button>
           <button id="btn-torso" class="icon-btn" title="Torso: a single line (1D) or shoulders and hips (2D)">1D</button>
-          <!-- Only on a server with a record button (dance-home.sh): one clip per ● → ■. -->
-          <button id="btn-rec" class="icon-btn hidden" title="Record a clip" aria-label="Record">&#9679;</button>
+          <!-- Works on a server with a record button (dance-home.sh): one clip per ● → ■.
+               Anywhere else it is greyed out and says "coming soon". -->
+          <button id="btn-rec" class="icon-btn soon" title="Record: coming soon" aria-label="Record">&#9679;</button>
           <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
           <button id="btn-music" class="icon-btn hidden" title="Play music" aria-label="Play music">&#9835;</button>
           <button id="btn-hear" class="icon-btn hidden" title="Tap to hear the music" aria-label="Tap to hear the music">&#128264;</button>

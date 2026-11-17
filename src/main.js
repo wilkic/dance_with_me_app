@@ -272,13 +272,15 @@ let recTick = null;
 
 function renderRec() {
   const btn = $('btn-rec');
-  btn.classList.toggle('hidden', !recButton);
+  // No record button on this server (the public one): greyed out, and a
+  // tap says recording is coming.
+  btn.classList.toggle('soon', !recButton);
   btn.classList.toggle('on', recState === 'on');
   const secs = Math.max(0, Math.round(Math.abs(Date.now() - recAt) / 1000));
   // The button is only a sign: ●, the countdown, ■. Words go under the row.
   btn.textContent = recState === 'countdown' ? String(Math.max(1, Math.ceil((recAt - Date.now()) / 1000)))
     : recState === 'on' ? '■' : '●';
-  btn.title = recState === 'countdown' ? 'Recording soon: tap to cancel' : recState === 'on' ? 'Stop and save the clip' : 'Record a clip';
+  btn.title = !recButton ? 'Record: coming soon' : recState === 'countdown' ? 'Recording soon: tap to cancel' : recState === 'on' ? 'Stop and save the clip' : 'Record a clip';
   // A server that records the whole session: the phone always says so.
   $('rec-note').textContent = !recButton ? (recAlways ? '● this server records your session' : '') : recState === 'on' ? `● ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
     : recState === 'countdown' ? 'step back…' : recNote;
@@ -302,7 +304,9 @@ function recStop() {
   if (recState === 'on') serverLink?.sendJSON({ type: 'rec', on: false });
   recSet('idle');
 }
+const REC_SOON = 'Coming soon. Nothing you do is kept. One day you\'ll be able to choose to share your dances to teach the AI dancers.';
 function recPress() {
+  if (!recButton) return notice(recAlways ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.' : REC_SOON);
   if (recState === 'idle') { recNote = ''; recSet('countdown', Date.now() + REC_COUNTDOWN_S * 1000); } else recStop();
 }
 

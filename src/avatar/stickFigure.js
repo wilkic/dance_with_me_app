@@ -88,7 +88,7 @@ export function spineOf(frame, W, H, body = bodyAnchors(frame, W, H), steps = 8)
 
 /** The ways a figure can be drawn (see StickFigureAvatar). */
 export const FIGURE_STYLES = ['stick', 'hands', 'shoulders', 'curved'];
-export const FIGURE_NAMES = { stick: 'Stick', hands: 'Hands + feet', shoulders: 'Hands + shoulders', curved: 'Curved' };
+export const FIGURE_NAMES = { stick: 'Stick', hands: 'Hands + feet', shoulders: '+ shoulders', curved: 'Curved' };
 
 const unit = (a, b) => {
   const dx = b.x - a.x, dy = b.y - a.y;
