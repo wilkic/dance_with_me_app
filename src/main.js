@@ -263,6 +263,13 @@ function renderRoomButton() {
 // clips, each from ● Record (after a countdown, time to step back from the
 // phone) to ■ Stop.
 const REC_COUNTDOWN_S = 5;
+// Dance keys (server/keys.js): on a server without a record button (the
+// public one), recording needs a key. It rides in the address as ?ai=KEY
+// and nowhere else: it is not saved on the phone.
+let keysHere = false;                    // this server makes and takes keys
+let aiKey = urlParams.get('ai') || '';   // the key in the address, as typed
+let keyOk = false;                       // the server knows it
+const canRecord = () => recButton || keyOk;
 let recAlways = false;
 let recButton = false;
 let recState = 'idle'; // 'idle' | 'countdown' | 'on'
@@ -274,15 +281,15 @@ function renderRec() {
   const btn = $('btn-rec');
   // No record button on this server (the public one): greyed out, and a
   // tap says recording is coming.
-  btn.classList.toggle('soon', !recButton);
+  btn.classList.toggle('soon', !(recButton || keysHere));
   btn.classList.toggle('on', recState === 'on');
   const secs = Math.max(0, Math.round(Math.abs(Date.now() - recAt) / 1000));
   // The button is only a sign: ●, the countdown, ■. Words go under the row.
   btn.textContent = recState === 'countdown' ? String(Math.max(1, Math.ceil((recAt - Date.now()) / 1000)))
     : recState === 'on' ? '■' : '●';
-  btn.title = !recButton ? 'Record: coming soon' : recState === 'countdown' ? 'Recording soon: tap to cancel' : recState === 'on' ? 'Stop and save the clip' : 'Record a clip';
+  btn.title = !canRecord() ? (keysHere ? 'Record (needs a dance key: tap to get one)' : 'Record: not available here') : recState === 'countdown' ? 'Recording soon: tap to cancel' : recState === 'on' ? 'Stop and save the clip' : 'Record a clip';
   // A server that records the whole session: the phone always says so.
-  $('rec-note').textContent = !recButton ? (recAlways ? '● this server records your session' : '') : recState === 'on' ? `● ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+  $('rec-note').textContent = !canRecord() ? (recAlways ? '● this server records your session' : '') : recState === 'on' ? `● ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
     : recState === 'countdown' ? 'step back…' : recNote;
   $('hud-rec').classList.toggle('hidden', !(recAlways || recState === 'on'));
 }
@@ -304,10 +311,42 @@ function recStop() {
   if (recState === 'on') serverLink?.sendJSON({ type: 'rec', on: false });
   recSet('idle');
 }
-const REC_SOON = 'Coming soon. Nothing you do is kept. One day you\'ll be able to choose to share your dances to teach the AI dancers.';
 function recPress() {
-  if (!recButton) return notice(recAlways ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.' : REC_SOON);
+  if (!canRecord()) {
+    if (recAlways) return notice('This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.');
+    if (!keysHere) return notice('Recording isn\'t available here: there is no dance server, or it doesn\'t record.');
+    // No key yet: say what a key means first; one is made only on "I agree".
+    return void $('key-consent').classList.remove('hidden');
+  }
   if (recState === 'idle') { recNote = ''; recSet('countdown', Date.now() + REC_COUNTDOWN_S * 1000); } else recStop();
+}
+
+/** Put the key in the address (or take it out), without reloading. */
+function setKeyInAddress(key) {
+  const u = new URL(location.href);
+  if (key) u.searchParams.set('ai', key); else u.searchParams.delete('ai');
+  history.replaceState(null, '', u);
+  return u.href;
+}
+function onKeyMessage(msg) {
+  if (msg.ok && msg.created) {
+    // A new key: shown once, and put in the address so Record works now.
+    aiKey = msg.key;
+    keyOk = true;
+    $('key-value').textContent = msg.key;
+    $('key-link').textContent = setKeyInAddress(msg.key);
+    $('key-sheet').classList.remove('hidden');
+  } else if (msg.ok) {
+    keyOk = true;
+  } else if (msg.reason === 'unknown') {
+    keyOk = false;
+    aiKey = '';
+    setKeyInAddress('');
+    notice('This dance key isn\'t known. Keys are deleted after 30 days without use, or when their owner deletes them. Press ● to get a new one.');
+  } else if (!msg.forgotten) {
+    notice('No more keys can be made right now. Try again tomorrow.');
+  }
+  renderRec();
 }
 
 function onServerMessage(msg) {
@@ -317,9 +356,15 @@ function onServerMessage(msg) {
     // 'button': nothing is recorded until Record is pressed (the home studio).
     recAlways = msg.recording === true;
     recButton = msg.recording === 'button';
+    keysHere = msg.keys === true;
+    keyOk = false; // a new connection: say the key again
+    if (keysHere && aiKey) serverLink.sendJSON({ type: 'ai-key', key: aiKey });
     recReset(); // a new connection: the server isn't recording me
+  } else if (msg.type === 'ai-key') {
+    onKeyMessage(msg);
   } else if (msg.type === 'rec') {
     if (msg.on) return;
+    if (msg.full) { recReset(); return notice('This dance key is full (an hour of dancing). Delete it on the key page to start again with a new one.'); }
     const secs = msg.seconds ?? 0; // what was kept: the last few seconds (walking to the phone) are cut
     recNote = msg.kept ? `Saved · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'Too short';
     setTimeout(() => { recNote = ''; renderRec(); }, 4000);
@@ -1177,6 +1222,15 @@ $('btn-exit').addEventListener('click', async () => {
   if (await confirmPopup('Exit and return to the start screen?')) exitToStart();
 });
 $('btn-rec').addEventListener('click', recPress);
+$('key-no').addEventListener('click', () => $('key-consent').classList.add('hidden'));
+$('key-yes').addEventListener('click', () => {
+  $('key-consent').classList.add('hidden');
+  serverLink?.sendJSON({ type: 'ai-key', create: true });
+});
+$('key-done').addEventListener('click', () => $('key-sheet').classList.add('hidden'));
+for (const [btn, src] of [['key-copy', 'key-value'], ['key-copy-link', 'key-link']]) {
+  $(btn).addEventListener('click', (e) => navigator.clipboard?.writeText($(src).textContent).then(() => { e.target.textContent = 'Copied ✓'; }, () => {}));
+}
 
 function bindSlider(id, valId, format, apply) {
   const el = $(id);

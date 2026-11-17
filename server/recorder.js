@@ -132,7 +132,7 @@ export class SessionRecorder {
       return { path: this.path, kept: false, frames: this.frames, seconds };
     }
     const summary = {
-      name: this.name, path: this.path, frames: this.frames, ...this.meta, ...extra,
+      name: this.name, path: this.path, frames: this.frames, seconds, ...this.meta, ...extra,
       media: Object.fromEntries([...this.media].map(([k, m]) => [k, { file: m.path, bytes: m.bytes, mime: m.mime }])),
       closedAt: new Date().toISOString(),
     };
