@@ -19,7 +19,7 @@ HOME_MODE=0
 START_OBS=1
 OPEN_MUSIC=1
 # Home studio: the music page opened in the browser (OBS streams its sound).
-MUSIC_URL=${DANCE_HOME_MUSIC:-https://music.youtube.com/playlist?list=LM}
+MUSIC_URL=${DANCE_HOME_MUSIC:-https://music.youtube.com/watch?list=LM}
 for arg in "$@"; do
   case "$arg" in
     --no-browser) OPEN_BROWSER=0 ;;
