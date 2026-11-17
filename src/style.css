@@ -267,10 +267,6 @@ button.danger {
 }
 .icon-btn svg .thin { stroke-width: 1.4; }
 .icon-btn svg .dot { fill: currentColor; stroke: none; }
-/* Ghost off: the ghost dims and gets a red no-entry sign over it. */
-.icon-btn svg .slash { display: none; stroke: #ff6b6b; }
-.icon-btn.off { color: #889; }
-.icon-btn.off svg .slash { display: inline; }
 .guest-slider {
   display: grid;
   grid-template-columns: auto 1fr 8.5rem;
@@ -310,6 +306,9 @@ button.danger {
   pointer-events: auto;
 }
 .drop button { padding: 0.45rem 0.9rem; font-size: 0.85rem; white-space: nowrap; text-align: left; backdrop-filter: none; }
+.drop .bg-colour { display: flex; align-items: center; gap: 0.5rem; padding: 0 0.3rem 0 0.9rem; font-size: 0.85rem; color: #aab; }
+.drop .bg-colour input { width: 2.4rem; height: 1.8rem; padding: 0; border: 1px solid #445; border-radius: 6px; background: none; }
+.drop hr { width: 100%; margin: 0.1rem 0; border: 0; border-top: 1px solid #334; }
 .drop button.on { border-color: #b84ce7; color: #fff; background: rgba(108, 92, 231, 0.35); }
 .guest-slider span { text-align: left; color: #9fa8ff; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .menu-title {
