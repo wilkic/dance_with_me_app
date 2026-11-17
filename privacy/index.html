@@ -23,14 +23,15 @@
 <main>
 <a class="back" href="../">&larr; Dance With Me</a>
 <h1>Privacy</h1>
-<p class="muted">Dance With Me · dance.wilkinscoffee.be · Last updated 22 October 2026</p>
+<p class="muted">Dance With Me · dance.wilkinscoffee.be · Last updated 17 November 2026</p>
 
 <div class="tldr">
-<strong>We store nothing about you.</strong>
+<strong>We store nothing about you, unless you choose to record.</strong>
 <ul>
-  <li>No accounts, no recordings.</li>
+  <li>No accounts. Nothing is recorded unless you press Record and agree to get a dance key.</li>
   <li>Your camera image never leaves your phone. It's only used there to draw your stick figure.</li>
   <li>While you're in a room, your stick figure and any music you share are passed live to the others in that room. Nothing is saved.</li>
+  <li>Clips you record under a dance key are deleted after 30 days without use, or at once when you ask.</li>
   <li>No tracking or advertising cookies.</li>
 </ul>
 </div>
@@ -39,6 +40,13 @@
 <p>To let people dance together, our server relays your stick-figure movement to everyone in your room, in real time. When you leave, it's gone. Only dance on camera with people in your space who are happy to be there.</p>
 <p>A DJ streaming from OBS sends their mix to our server, which passes it on live to the phones in the room and keeps none of it.</p>
 <p>Music played to a room from a phone goes straight from the host's phone to each dancer's phone. Music you play just for yourself (without sharing a room) stays on your phone. So the server can tell the music's tempo, for the AI dancers, each phone playing music sends our server how loud the beats are, 30 numbers a second. That's not the sound, and it isn't kept. Because those phones connect directly, they can see each other's IP address. To set up that connection, phones also ask Google's public STUN server (stun.l.google.com) for their own public address.</p>
+
+<h2 id="dance-keys">Recording, with a dance key</h2>
+<p>The app has a Record button. The first time you press it, it tells you what follows here and asks if you agree. If you don't, nothing changes and nothing is kept.</p>
+<p>If you agree, you get a <b>dance key</b>: a random code that only you have. It isn't an account. We don't ask for a name, an e-mail address or a password, and we can't look your key up if you lose it. The key sits in the app's address (<code>?ai=…</code>), so keep that link to yourself.</p>
+<p>Each clip you record, from Record to Stop, is sent to our server and stored under your key: your stick figure's movement as points, and how loud the beats of the music were. Never the camera picture, and never the sound. We also keep the dates your key was made and last used. Clips stay with your key; they are not shown to other dancers.</p>
+<p>We keep this because you asked us to (your consent), and you can take that back at any time: on the <a href="../key/">key page</a> you can see what is kept under your key and delete the key and everything under it, at once. A key that isn't used for 30 days is deleted by itself, clips included. A key holds at most an hour of dancing.</p>
+<p>Only record yourself.</p>
 
 <h2>What our servers see</h2>
 <p>Like any website, our servers see your IP address to connect you. The dance server doesn't log it. Its system logs (start-ups, errors) are wiped after 3 days.</p>
