@@ -98,6 +98,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const MAX_GUESTS = 3;
 const ACTIVE_MS = 6000;         // "dancing" = a frame arrived this recently
 const ENDED_ROOM_MS = 60 * 60_000; // an ended room's name stays closed this long
+const CLIP_TRIM_END_MS = 4000;  // Record button: cut off the end of each clip
 const AI_TICK_MS = 33;          // AI dancers stream at ~30 fps
 const AI_REFRESH_MS = 120_000;  // an AI dancer moves on to a fresh base clip this often
 const MAX_BOOKINGS_PER_SESSION = 10;
@@ -135,6 +136,10 @@ export function startServer({
   // records sessions (frames + tempo + what they chose to share) as library
   // material — for your own test sessions; the public server leaves it unset.
   recordDir = process.env.RECORD_DIR && process.env.RECORD_DIR !== '0' ? process.env.RECORD_DIR : null,
+  // With recording on: false = a whole session is one recording, from
+  // connecting to leaving (lab, harvest). true = nothing is recorded until
+  // the dancer presses Record; each Record → Stop is one clip (dance-home.sh).
+  recordButton = process.env.RECORD_BUTTON === '1',
   // The dance library behind AI dancers: a Library, null = load the
   // default one (recordings, recordings_web, library/sessions), false = none.
   library = null,
@@ -145,6 +150,10 @@ export function startServer({
   // OBS streaming (whip.js): UDP port range, and the public IP behind 1:1 NAT.
   whipPorts = process.env.WHIP_PORTS || '50000-50999',
   whipPublicIp = process.env.WHIP_PUBLIC_IP || null,
+  // Home studio (dance-home.sh): a standing room with its own OBS stream
+  // key. OBS streams into it whether or not anyone is there yet, and it has
+  // no host, so every phone that joins hears the stream. { room, key } or null.
+  home = process.env.HOME_ROOM && process.env.HOME_KEY ? { room: process.env.HOME_ROOM, key: process.env.HOME_KEY } : null,
   // Approves DJ bookings; null = read or create server/data/admin-key.
   adminKey = null,
   log = console.log,
@@ -167,6 +176,7 @@ export function startServer({
   };
   const lib = library === false ? null : (library ?? new Library({ log }).load());
   const now = () => performance.now();
+  const homeRoom = home?.key ? normalizeRoomName(home.room) : null;
 
   const send = (s, msg) => {
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(msg));
@@ -208,6 +218,7 @@ export function startServer({
   // the room's creator (see Rooms.createdBy).
   const isHost = (s, name = s.room) => {
     if (!name || s.room !== name) return false;
+    if (name === homeRoom) return false; // the home studio's music comes from OBS only
     const dj = schedule.djToken(name);
     return dj ? s.bookingToken === dj : rooms.createdBy(s, name);
   };
@@ -232,10 +243,11 @@ export function startServer({
     ports: whipPorts,
     publicIp: whipPublicIp,
     resolveKey: (key) => {
+      if (homeRoom && key === home.key) return homeRoom;
       const booked = schedule.roomForToken(key);
       if (booked) return silenced.has(booked) ? null : booked;
       // A room's creator — unless a booked DJ has the room right now.
-      for (const name of rooms.names) if (rooms.hostKeys.get(name) === key) return silenced.has(name) || schedule.djToken(name) ? null : name;
+      for (const name of rooms.names) if (name !== homeRoom && rooms.hostKeys.get(name) === key) return silenced.has(name) || schedule.djToken(name) ? null : name;
       return null;
     },
     send: (sid, msg) => { const s = sessions.get(sid); if (s) send(s, msg); },
@@ -395,6 +407,18 @@ export function startServer({
     }
   };
 
+  /** Close a dancer's recording; one long enough to be a dance joins the library. */
+  const endRecording = (s) => {
+    // A clip ends with the walk up to the phone to press Stop: cut it off.
+    const r = s.rec.close({ musicBpm: +s.beat.state.bpm.toFixed(1) }, { trimEndMs: recordButton ? CLIP_TRIM_END_MS : 0 });
+    s.rec = null;
+    if (r.kept) {
+      log(`● ${s.id} ${recordButton ? 'clip' : 'session'} kept for the library (${r.frames} frames)`);
+      lib?.add(r.path);
+    } else if (recordButton) log(`● ${s.id} clip too short, not kept (${r.frames} frames)`);
+    return r;
+  };
+
   wss.on('connection', (ws) => {
     const id = randomUUID().slice(0, 8);
     const s = {
@@ -405,13 +429,13 @@ export function startServer({
       lastFrameAt: 0, lastFrameT: 0, aspect: 9 / 16,
       wants: { ai: 0, variation: 0.5 },
       ai: [],              // AiDancer[]
-      rec: recordDir ? new SessionRecorder(recordDir, { id }) : null,
+      rec: recordDir && !recordButton ? new SessionRecorder(recordDir, { id }) : null,
       booked: 0,           // bookings made on this connection (rate limit)
       myBookings: null,    // { id: token } — this DJ's requests, followed for status
       admin: false, adminTries: 0,
     };
     sessions.set(id, s);
-    send(s, { type: 'welcome', id });
+    send(s, { type: 'welcome', id, ...(recordDir ? { recording: recordButton ? 'button' : true } : {}) });
     send(s, lobby());
     send(s, scheduleMsg());
     log(`+ ${id} connected (${sessions.size} online)`);
@@ -425,7 +449,19 @@ export function startServer({
       if (!isBinary) {
         let msg;
         try { msg = JSON.parse(data.toString()); } catch { return; }
-        if (msg.type === 'label') {
+        if (msg.type === 'rec') {
+          // The Record button: one clip per Record → Stop.
+          if (!recordDir || !recordButton) return;
+          if (msg.on && !s.rec) {
+            s.rec = new SessionRecorder(recordDir, { id });
+            if (s.room) s.rec.label({ room: s.room });
+            log(`● ${id} recording`);
+            send(s, { type: 'rec', on: true });
+          } else if (!msg.on && s.rec) {
+            const r = endRecording(s);
+            send(s, { type: 'rec', on: false, kept: r.kept, frames: r.frames, seconds: r.seconds });
+          }
+        } else if (msg.type === 'label') {
           // Metronome BPM from ?click=…, kept with the frames as ground truth.
           if (msg.clickBpm > 0) s.rec?.label({ clickBpm: msg.clickBpm });
         } else if (msg.type === 'join') {
@@ -611,11 +647,7 @@ export function startServer({
       if (isHost(s)) roomMusic.delete(s.room);
       const left = rooms.leave(s);
       sessions.delete(id);
-      const r = s.rec?.close({ musicBpm: +s.beat.state.bpm.toFixed(1) });
-      if (r?.kept) {
-        log(`● ${id} session kept for the library (${r.frames} frames)`);
-        lib?.add(r.path);
-      }
+      if (s.rec) endRecording(s);
       log(`- ${id} disconnected${left ? ` (was in room ${left})` : ''} (${sessions.size} online)`);
       if (left) { broadcastRoom(left); broadcastLobby(); } else broadcastFloor();
     });

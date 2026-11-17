@@ -29,12 +29,44 @@ const SILENT_MS = 20_000; // no audio for this long: the stream is over
 const opus = new RTCRtpCodecParameters({ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 111 });
 const h264 = new RTCRtpCodecParameters({ mimeType: 'video/H264', clockRate: 90000, payloadType: 96 });
 
-/** The machine's first non-loopback IPv4 (what the UDP sockets bind to). */
+/**
+ * The IPv4 the UDP sockets bind to: WHIP_LOCAL_IP (dance-lan.sh passes the
+ * address of the phone link; a laptop on cable and wifi has two, and phones
+ * may only reach one), else the machine's first non-loopback one.
+ */
 function localIpv4() {
+  if (process.env.WHIP_LOCAL_IP) return process.env.WHIP_LOCAL_IP;
   for (const list of Object.values(networkInterfaces())) {
     for (const a of list) if (a.family === 'IPv4' && !a.internal) return a.address;
   }
   return null;
+}
+
+/**
+ * Send to wherever the listener's real traffic comes from. werift (ICE lite)
+ * keeps the first address a nominating check arrived from, for good. A phone
+ * on wifi and mobile data at once sends one over wifi stamped with its
+ * mobile-data address; replies to that address go nowhere, and the phone,
+ * which settled on its wifi address, never gets an answer. Its handshake and
+ * media packets only come from the address that works, so follow those.
+ * (Reaches into werift's ICE internals; a no-op if they move.)
+ */
+function followListener(pc) {
+  for (const t of pc.iceTransports ?? []) {
+    const ice = t.connection;
+    for (const protocol of ice?.protocols ?? []) {
+      const received = protocol.datagramReceived;
+      if (typeof received !== 'function') continue;
+      protocol.datagramReceived = function (data, addr) {
+        const cur = ice.nominated;
+        if (cur && data[0] >= 20 && (cur.remoteAddr[0] !== addr[0] || cur.remoteAddr[1] !== addr[1])) { // not STUN
+          const pair = ice.candidatePairs.find((p) => p.protocol === protocol && p.remoteAddr[0] === addr[0] && p.remoteAddr[1] === addr[1]);
+          if (pair) ice.nominated = pair;
+        }
+        return received.call(this, data, addr);
+      };
+    }
+  }
 }
 
 export class WhipIngest {
@@ -160,11 +192,14 @@ export class WhipIngest {
     s.listeners.set(sid, l);
     pc.addTrack(s.track);
     pc.connectionStateChange.subscribe((state) => {
+      if (state === 'connected') this.log(`♫ ${sid} hears the OBS stream in room ${s.room}`);
+      if (state === 'failed') this.log(`♫ ${sid} could not connect to the OBS stream in room ${s.room}`);
       // Dropped: forget it; the next sync (every scan) offers again.
       if (['failed', 'closed'].includes(state) && s.listeners.get(sid) === l) { s.listeners.delete(sid); pc.close(); }
     });
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    followListener(pc);
     if (s.listeners.get(sid) !== l) return;
     this.send(sid, { type: 'rtc', from: `live:${s.room}`, data: { sdp: { type: 'offer', sdp: pc.localDescription.sdp } } });
   }

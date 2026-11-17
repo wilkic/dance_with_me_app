@@ -2,7 +2,7 @@ import { Camera } from './camera.js';
 import { PoseDetector } from './pose/poseDetector.js';
 import { PoseSmoother } from './pose/smoothing.js';
 import { RoomModel } from './room/roomModel.js';
-import { StickFigureAvatar } from './avatar/stickFigure.js';
+import { StickFigureAvatar, FIGURE_STYLES, FIGURE_NAMES } from './avatar/stickFigure.js';
 import { placeAtBooth } from './avatar/booth.js';
 import {
   PoseChannel,
@@ -10,7 +10,7 @@ import {
   CompositeTransport,
   DelayedLoopbackTransport,
 } from './net/poseChannel.js';
-import { randomRoomName } from './net/roomNames.js';
+import { randomRoomName, normalizeRoomName } from './net/roomNames.js';
 import { resolveServerUrl, whipUrl } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
@@ -48,7 +48,7 @@ const room = new RoomModel();
 const GUEST_FADE_MS = { replay: 12_000, peer: 2_000, ai: 4_000 };
 const PEER_STALE_MS = 6_000;
 const MAX_GUESTS = 3;
-const guestCfg = { count: 1, spacingSec: 15, opacity: 0.9, variation: 0.5, styleLabels: false };
+const guestCfg = { count: 1, spacingSec: 15, opacity: 0.9, variation: 0.5 };
 const guestTransport = new DelayedLoopbackTransport();
 const guestPlan = { open: 0, ai: 0, replays: 0, nextAt: 0 }; // what planGuests() last decided
 let danceStartedAt = 0; // performance.now() when the dance screen opened
@@ -258,8 +258,73 @@ function renderRoomButton() {
   btn.disabled = !name && !(serverLink && serverOnline);
 }
 
+// --- Recording ---------------------------------------------------------------
+// recAlways: the server records the whole session. recButton: it records
+// clips, each from ● Record (after a countdown, time to step back from the
+// phone) to ■ Stop.
+const REC_COUNTDOWN_S = 5;
+let recAlways = false;
+let recButton = false;
+let recState = 'idle'; // 'idle' | 'countdown' | 'on'
+let recAt = 0;         // countdown: when recording starts; on: when it started
+let recNote = '';      // what happened to the last clip, shown for a moment
+let recTick = null;
+
+function renderRec() {
+  const btn = $('btn-rec');
+  // No record button on this server (the public one): greyed out, and a
+  // tap says recording is coming.
+  btn.classList.toggle('soon', !recButton);
+  btn.classList.toggle('on', recState === 'on');
+  const secs = Math.max(0, Math.round(Math.abs(Date.now() - recAt) / 1000));
+  // The button is only a sign: ●, the countdown, ■. Words go under the row.
+  btn.textContent = recState === 'countdown' ? String(Math.max(1, Math.ceil((recAt - Date.now()) / 1000)))
+    : recState === 'on' ? '■' : '●';
+  btn.title = !recButton ? 'Record: coming soon' : recState === 'countdown' ? 'Recording soon: tap to cancel' : recState === 'on' ? 'Stop and save the clip' : 'Record a clip';
+  // A server that records the whole session: the phone always says so.
+  $('rec-note').textContent = !recButton ? (recAlways ? '● this server records your session' : '') : recState === 'on' ? `● ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+    : recState === 'countdown' ? 'step back…' : recNote;
+  $('hud-rec').classList.toggle('hidden', !(recAlways || recState === 'on'));
+}
+function recSet(state, at = 0) {
+  recState = state;
+  recAt = at;
+  clearInterval(recTick);
+  recTick = state === 'idle' ? null : setInterval(() => {
+    if (recState === 'countdown' && Date.now() >= recAt) {
+      serverLink?.sendJSON({ type: 'rec', on: true });
+      recSet('on', Date.now());
+    } else renderRec();
+  }, 250);
+  renderRec();
+}
+function recReset() { recNote = ''; recSet('idle'); }
+/** Stop a running clip (the server keeps it if it is long enough to be a dance). */
+function recStop() {
+  if (recState === 'on') serverLink?.sendJSON({ type: 'rec', on: false });
+  recSet('idle');
+}
+const REC_SOON = 'Coming soon. Nothing you do is kept. One day you\'ll be able to choose to share your dances to teach the AI dancers.';
+function recPress() {
+  if (!recButton) return notice(recAlways ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.' : REC_SOON);
+  if (recState === 'idle') { recNote = ''; recSet('countdown', Date.now() + REC_COUNTDOWN_S * 1000); } else recStop();
+}
+
 function onServerMessage(msg) {
-  if (msg.type === 'tempo') {
+  if (msg.type === 'welcome') {
+    // A server started to record sessions (RECORD_DIR, e.g. dance-home.sh)
+    // says so; the public one never does.
+    // 'button': nothing is recorded until Record is pressed (the home studio).
+    recAlways = msg.recording === true;
+    recButton = msg.recording === 'button';
+    recReset(); // a new connection: the server isn't recording me
+  } else if (msg.type === 'rec') {
+    if (msg.on) return;
+    const secs = msg.seconds ?? 0; // what was kept: the last few seconds (walking to the phone) are cut
+    recNote = msg.kept ? `Saved · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : 'Too short';
+    setTimeout(() => { recNote = ''; renderRec(); }, 4000);
+    renderRec();
+  } else if (msg.type === 'tempo') {
     musicBpm = msg.bpm > 0 && msg.confidence > 0.25 ? msg.bpm : 0;
     renderBpm();
   } else if (msg.type === 'rooms') {
@@ -441,6 +506,12 @@ function onRemoteFrame(dancerId, frame) {
 // Local dancer avatar. Swappable: any Avatar implementation works here,
 // and remote dancers (via channel.subscribe) get their own instances.
 const avatar = new StickFigureAvatar();
+// How everyone is drawn (stick, hands + feet, curved): one choice for you
+// and your guests, remembered on this device.
+const FIGURE_KEY = 'dwm.figure';
+let figureStyle = 'stick';
+try { const saved = localStorage.getItem(FIGURE_KEY); if (FIGURE_STYLES.includes(saved)) figureStyle = saved; } catch { /* storage unavailable */ }
+avatar.style = figureStyle;
 
 let mode = 'start';        // start | capture | dance
 let ghostMode = true;      // true: show clean plate (user removed); false: live feed
@@ -453,6 +524,8 @@ let lastFrameT = 0;
 // ?perf=1: HUD shows where each frame's time goes (pose detection, drawing
 // the guests, whole loop) so guest cost can be read off a real phone.
 const perfHud = urlParams.has('perf');
+$('hud-fps').classList.toggle('hidden', !perfHud);
+$('hud').classList.toggle('hidden', !perfHud); // the status banner is gone; only the timings remain
 const perf = { detect: 0, guests: 0, loop: 0, lastLoopAt: 0 };
 const ema = (prev, v) => (prev ? prev * 0.9 + v * 0.1 : v);
 
@@ -561,12 +634,11 @@ function loop() {
       if (!g.pose) continue;
       const fade = Math.min(1, (now - g.bornAt) / GUEST_FADE_MS[g.kind]);
       g.avatar.alpha = fade * guestCfg.opacity;
+      g.avatar.style = figureStyle;
+      g.avatar.torso = avatar.torso;
       g.avatar.render(ctx, g.pose, { width: W, height: H });
       if (g.booth) {
         drawLabel(g.pose, 'DJ', g.avatar.color, g.avatar.alpha, W, H, 0.025);
-      } else if (g.kind === 'ai') {
-        const a = aiInfo.get(id);
-        if (guestCfg.styleLabels && a?.tag) drawLabel(g.pose, a.tag, g.avatar.color, g.avatar.alpha, W, H);
       }
     }
   }
@@ -580,9 +652,7 @@ function loop() {
   }
 
   // HUD (bpm/room/match come from server opinions via onServerMessage)
-  $('hud-fps').textContent = perfHud
-    ? `${fpsEma.toFixed(0)} fps · pose ${perf.detect.toFixed(1)} · guests ${perf.guests.toFixed(1)} · loop ${perf.loop.toFixed(0)} ms`
-    : `${fpsEma.toFixed(0)} fps`;
+  if (perfHud) $('hud-fps').textContent = `${fpsEma.toFixed(0)} fps · pose ${perf.detect.toFixed(1)} · guests ${perf.guests.toFixed(1)} · loop ${perf.loop.toFixed(0)} ms`;
 }
 
 /**
@@ -734,7 +804,7 @@ function leaveRoom() {
   renderBooth();
 }
 
-/** ☰ menu, host only: "Share your booth" (see atBooth). */
+/** Guest settings, host only: "Share your booth" (see atBooth). */
 function renderBooth() {
   $('booth-row').classList.toggle('hidden', !(roomState.name && roomState.host));
   $('cb-booth').checked = roomState.booth;
@@ -754,12 +824,10 @@ function renderMusic() {
   const live = !!roomState.music?.live;
   btn.classList.toggle('hidden', !canPlayMusic());
   btn.classList.toggle('playing', st.hosting || live);
-  btn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music';
-  // The ☰ menu has the same button (where the old "record audio" chip was).
-  const menuBtn = $('menu-music');
-  menuBtn.classList.toggle('hidden', !canPlayMusic());
-  menuBtn.classList.toggle('playing', st.hosting || live);
-  menuBtn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : roomState.name ? '♫ Play music to the room' : '♫ Play music';
+  // A sign only (♫ / ■); the words are in the tooltip.
+  btn.textContent = st.hosting || live ? '■' : '♫';
+  btn.title = live ? 'Stop the OBS stream' : st.hosting ? `Stop music · ${st.label}` : 'Play music';
+  btn.setAttribute('aria-label', btn.title);
   $('btn-hear').classList.toggle('hidden', !st.needsTap);
   const hud = $('hud-music');
   const label = roomState.music && (!roomState.host || roomState.music.live) ? roomState.music.label : '';
@@ -841,7 +909,9 @@ function notice(message) {
 }
 
 function exitToStart() {
-  $('menu-panel').classList.add('hidden');
+  recStop();
+  showGuestSettings(false);
+  $('figure-menu').classList.add('hidden');
   metronome?.stop();
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
@@ -997,11 +1067,12 @@ $('src-obs').addEventListener('click', () => {
 for (const [btn, src] of [['obs-copy-server', 'obs-server'], ['obs-copy-key', 'obs-key']]) {
   $(btn).addEventListener('click', (e) => navigator.clipboard?.writeText($(src).textContent).then(() => { e.target.textContent = 'Copied ✓'; }, () => {}));
 }
-$('menu-music').addEventListener('click', () => {
-  $('menu-panel').classList.add('hidden');
-  $('btn-music').click();
-});
 $('btn-hear').addEventListener('click', () => music.tapToHear());
+// A room entered by link (/?room=home) starts with no tap, so the phone holds
+// the music back: the first tap anywhere (e.g. Capture Room) lets it play.
+for (const ev of ['click', 'touchend']) {
+  document.addEventListener(ev, () => { if (music.stalled) music.tapToHear(); }, true);
+}
 $('src-file').addEventListener('click', () => $('music-file').click());
 $('music-file').addEventListener('change', (e) => {
   if (e.target.files.length) startMusic('file', e.target.files);
@@ -1030,7 +1101,6 @@ if (!serverLink) {
   $('upcoming').classList.add('hidden');
   $('sel-join').disabled = true;
   $('btn-room').classList.add('hidden');
-  $('share-box').classList.add('hidden');
   $('server-status').textContent = 'No dance server configured — no rooms or guests.';
 }
 
@@ -1051,27 +1121,62 @@ $('btn-rescan').addEventListener('click', () => {
   showScreen('capture');
   planGuests(); // off the dance screen → no server guests until the next capture
 });
+// Icon buttons: the picture stays, the state goes in the tooltip (and, for
+// the ghost, a no-entry sign over it when off).
 $('btn-ghost').addEventListener('click', (e) => {
   ghostMode = !ghostMode;
-  e.target.textContent = `Ghost: ${ghostMode ? 'ON' : 'OFF'}`;
+  const btn = e.currentTarget;
+  btn.classList.toggle('off', !ghostMode);
+  btn.setAttribute('aria-pressed', String(ghostMode));
+  btn.title = ghostMode ? "Ghost: on (you're removed from the room; off shows the live camera)" : 'Ghost: off (live camera)';
 });
 $('btn-torso').addEventListener('click', (e) => {
   avatar.torso = avatar.torso === '1d' ? '2d' : '1d';
-  e.target.textContent = `Torso: ${avatar.torso.toUpperCase()}`;
+  e.currentTarget.textContent = avatar.torso.toUpperCase();
+});
+
+// The figure button drops a list of the styles; the current one is lit.
+function setFigure(style) {
+  figureStyle = style;
+  avatar.style = style;
+  try { localStorage.setItem(FIGURE_KEY, style); } catch { /* storage unavailable */ }
+  $('btn-figure').title = `Figure: ${FIGURE_NAMES[style]}`;
+  for (const b of $('figure-menu').children) b.classList.toggle('on', b.dataset.style === style);
+}
+for (const style of FIGURE_STYLES) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.style = style;
+  b.textContent = FIGURE_NAMES[style];
+  b.addEventListener('click', () => { setFigure(style); $('figure-menu').classList.add('hidden'); });
+  $('figure-menu').append(b);
+}
+setFigure(figureStyle);
+$('btn-figure').addEventListener('click', () => {
+  showGuestSettings(false);
+  $('figure-menu').classList.toggle('hidden');
 });
 
 $('perf-load').addEventListener('click', (e) => e.target.classList.add('hidden'));
 
-// ---- Burger menu ----
-$('btn-menu').addEventListener('click', () => {
-  $('menu-panel').classList.toggle('hidden');
+// ---- Guest settings (tap "Guests" on the guest bar) ----
+function showGuestSettings(show) {
+  $('menu-panel').classList.toggle('hidden', !show);
+  $('btn-guests').setAttribute('aria-expanded', String(show));
+}
+$('btn-guests').addEventListener('click', () => {
+  $('figure-menu').classList.add('hidden');
+  showGuestSettings($('menu-panel').classList.contains('hidden'));
 });
-// A tap anywhere on the dance floor opens (or closes) the menu too. The
-// controls catch their own taps; everything else falls through to the stage.
+// A tap on the dance floor only closes what's open; it opens nothing.
 stage.addEventListener('click', () => {
-  if (mode === 'dance') $('menu-panel').classList.toggle('hidden');
+  showGuestSettings(false);
+  $('figure-menu').classList.add('hidden');
 });
-$('btn-exit').addEventListener('click', exitToStart);
+$('btn-exit').addEventListener('click', async () => {
+  if (await confirmPopup('Exit and return to the start screen?')) exitToStart();
+});
+$('btn-rec').addEventListener('click', recPress);
 
 function bindSlider(id, valId, format, apply) {
   const el = $(id);
@@ -1094,9 +1199,6 @@ bindSlider('sl-variation', 'val-variation', (v) => `${v}%`, (v) => {
   guestCfg.variation = v / 100;
   planGuests();
 });
-$('cb-style-labels').addEventListener('change', (e) => {
-  guestCfg.styleLabels = e.target.checked;
-});
 $('cb-booth').addEventListener('change', (e) => {
   roomState.booth = e.target.checked;
   serverLink?.sendJSON({ type: 'booth', on: e.target.checked });
@@ -1110,3 +1212,8 @@ bindSlider('sl-guests', 'val-guests', () => '', (v) => {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && camera.stream && video.paused) video.play();
 });
+
+// A link straight into a room: /?room=home skips the start screen (the
+// home studio's phone link, see dance-home.sh).
+const linkRoom = normalizeRoomName(urlParams.get('room'));
+if (linkRoom && serverLink) enter(linkRoom);

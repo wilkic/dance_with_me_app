@@ -6,6 +6,9 @@
  */
 import assert from 'node:assert/strict';
 import { WebSocket } from 'ws';
+import { createHmac } from 'node:crypto';
+import { createSocket } from 'node:dgram';
+import { crc32 } from 'node:zlib';
 import { startServer } from '../index.js';
 
 let failed = 0;
@@ -13,7 +16,7 @@ const test = async (label, fn) => {
   try { await fn(); console.log(`PASS  ${label}`); } catch (e) { failed++; console.log(`FAIL  ${label}\n      ${e.stack}`); }
 };
 
-const server = startServer({ whipPorts: '51000-51050',  port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, adminKey: 'k', statsFile: null, log: () => {} });
+const server = startServer({ whipPorts: '51000-51050',  port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, home: { room: 'Home', key: 'home-key' }, adminKey: 'k', statsFile: null, log: () => {} });
 await new Promise((r) => server.wss.on('listening', r));
 
 const connect = () => new Promise((resolve) => {
@@ -149,6 +152,67 @@ await test('booking token: the booked DJ streams without a phone; a late joiner 
   await next(dancer, (m) => m.type === 'room' && !m.music, 3000);
   obs.stop(); l.pc.close();
   admin.ws.close(); dj.ws.close(); dancer.ws.close();
+});
+
+await test('home studio: OBS streams into the standing room before anyone is there; whoever opens it hears it', async () => {
+  const obs = await obsOffer();
+  const res = await post('home-key', obs.sdp);
+  assert.equal(res.status, 201);
+  await obs.pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+  await sleep(500);
+  // The first one in would be the host of an ordinary room, and hosts don't listen.
+  const phone = await connect();
+  sendTo(phone, { type: 'join', room: 'home', hostKey: 'phone-key' });
+  assert.equal((await next(phone, (m) => m.type === 'joined')).host, false);
+  await next(phone, (m) => m.type === 'room' && m.music?.live, 5000);
+  const l = await listen(phone, 'home');
+  await sleep(2000);
+  assert.ok(l.got.rtp > 40, `rtp ${l.got.rtp}`);
+  // The phone's own key doesn't stream here, and the phone can't stop the stream.
+  assert.equal((await post('phone-key', obs.sdp)).status, 401);
+  sendTo(phone, { type: 'room-music', on: false });
+  await quiet(phone, (m) => m.type === 'rtc' && m.data?.bye);
+  obs.stop(); l.pc.close(); phone.ws.close();
+});
+
+/** A STUN binding request that nominates (USE-CANDIDATE), signed with the server's ICE password. */
+function nominatingCheck(serverUfrag, serverPwd) {
+  const attr = (type, value) => { const b = Buffer.alloc(4 + value.length + ((4 - (value.length % 4)) % 4)); b.writeUInt16BE(type, 0); b.writeUInt16BE(value.length, 2); value.copy(b, 4); return b; };
+  const header = (len) => { const h = Buffer.alloc(20); h.writeUInt16BE(0x0001, 0); h.writeUInt16BE(len, 2); h.writeUInt32BE(0x2112a442, 4); Buffer.from('forged-check', 'utf8').copy(h, 8); return h; };
+  const prio = Buffer.alloc(4); prio.writeUInt32BE(1845501695);
+  let body = Buffer.concat([attr(0x0006, Buffer.from(`${serverUfrag}:fake`)), attr(0x0024, prio), attr(0x802a, Buffer.alloc(8, 7)), attr(0x0025, Buffer.alloc(0))]);
+  const mac = createHmac('sha1', serverPwd).update(Buffer.concat([header(body.length + 24), body])).digest();
+  body = Buffer.concat([body, attr(0x0008, mac)]);
+  const crc = Buffer.alloc(4); crc.writeUInt32BE((crc32(Buffer.concat([header(body.length + 8), body])) ^ 0x5354554e) >>> 0);
+  body = Buffer.concat([body, attr(0x8028, crc)]);
+  return Buffer.concat([header(body.length), body]);
+}
+
+await test('a first check from an address that cannot be answered (phone on wifi + mobile data) does not silence the stream', async () => {
+  const obs = await obsOffer();
+  const res = await post('home-key', obs.sdp);
+  await obs.pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+  await sleep(500);
+  const phone = await connect();
+  sendTo(phone, { type: 'join', room: 'home' });
+  await next(phone, (m) => m.type === 'joined');
+  const until = Date.now() + 5000;
+  let offer;
+  while (!(offer = phone.inbox.find((m) => m.type === 'rtc' && m.data?.sdp?.type === 'offer'))) { assert.ok(Date.now() < until, 'no offer'); await sleep(50); }
+  const sdp = offer.data.sdp.sdp;
+  const [, ip, port] = sdp.match(/a=candidate:\S+ 1 udp \d+ (\S+) (\d+) typ host/i);
+  // The stray check: from a socket nobody reads, before the phone's real ones.
+  const stray = createSocket('udp4');
+  let strayGot = 0;
+  stray.on('message', () => strayGot++);
+  await new Promise((r) => stray.bind(0, ip, r));
+  stray.send(nominatingCheck(sdp.match(/a=ice-ufrag:(\S+)/)[1], sdp.match(/a=ice-pwd:(\S+)/)[1]), +port, ip);
+  await sleep(300);
+  assert.ok(strayGot > 0, 'the server did not take the stray check');
+  const l = await listen(phone, 'home');
+  await sleep(3000);
+  assert.ok(l.got.rtp > 40, `rtp ${l.got.rtp}`);
+  stray.close(); obs.stop(); l.pc.close(); phone.ws.close();
 });
 
 server.close();

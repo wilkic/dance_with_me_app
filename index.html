@@ -60,65 +60,77 @@
 
     <!-- ===== Screen: dance ===== -->
     <section id="screen-dance" class="screen hidden">
-      <div class="hud">
-        <span id="hud-room" class="hidden"></span>
-        <span id="hud-fps">-- fps</span>
-        <span id="hud-bpm" class="hidden"></span>
-        <span id="hud-guests" class="hidden"></span>
-        <span id="hud-music" class="hidden"></span>
-        <span id="hud-status"></span>
+      <!-- One row at the top: the room (tap to leave), the buttons, the menu.
+           On a phone the feet are near the bottom edge of the picture and
+           the space above the head is free. -->
+      <div class="top-bar">
+        <!-- "Share your room" until shared; then the room name. -->
+        <button id="btn-room" class="room-btn">Share your room</button>
+        <div class="top-icons">
+          <button id="btn-rescan" class="icon-btn" title="Rescan the room (a new background)" aria-label="Rescan the room">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><circle class="dot" cx="8.3" cy="9.6" r="1.6"/><path d="M3.5 17l5-5 3.5 3.5 3-3 5.5 5.5"/></svg>
+          </button>
+          <button id="btn-ghost" class="icon-btn" title="Ghost: on (you're removed from the room; off shows the live camera)" aria-label="Ghost" aria-pressed="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V11a7 7 0 0 1 14 0v10l-2.33-2-2.34 2L12 19l-2.33 2-2.34-2z"/><circle class="dot" cx="9.6" cy="11" r="1.1"/><circle class="dot" cx="14.4" cy="11" r="1.1"/><g class="slash"><circle cx="12" cy="12" r="10.6"/><path d="M4.5 4.5l15 15"/></g></svg>
+          </button>
+          <button id="btn-figure" class="icon-btn" title="How dancers are drawn" aria-label="Figure style">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dot" cx="12" cy="4.8" r="2.3"/><path d="M12 7.5V15M4 10h16M12 15l-4.5 6.5M12 15l4.5 6.5"/></svg>
+          </button>
+          <button id="btn-torso" class="icon-btn" title="Torso: a single line (1D) or shoulders and hips (2D)">1D</button>
+          <!-- Works on a server with a record button (dance-home.sh): one clip per ● → ■.
+               Anywhere else it is greyed out and says "coming soon". -->
+          <button id="btn-rec" class="icon-btn soon" title="Record: coming soon" aria-label="Record">&#9679;</button>
+          <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
+          <button id="btn-music" class="icon-btn hidden" title="Play music" aria-label="Play music">&#9835;</button>
+          <button id="btn-hear" class="icon-btn hidden" title="Tap to hear the music" aria-label="Tap to hear the music">&#128264;</button>
+          <!-- Tap the figure button: pick how dancers are drawn (filled in by main.js). -->
+          <div id="figure-menu" class="drop hidden" role="menu"></div>
+          <!-- Under the buttons: the clip's running time, then what became of it. -->
+          <span id="rec-note"></span>
+        </div>
+        <!-- Back to the start screen (asks first). -->
+        <button id="btn-exit" class="icon-btn exit-btn" title="Exit to start" aria-label="Exit to start">&#10005;</button>
       </div>
-      <!-- "Share your room" until shared; then the room name (tap to leave). -->
-      <button id="btn-room" class="room-btn">Share your room</button>
-      <button id="btn-menu" class="burger" aria-label="Menu">&#9776;</button>
-      <div id="menu-panel" class="menu hidden">
-        <p class="menu-title">Guests in your space</p>
-        <div class="menu-row">
-          <label for="sl-spacing" title="A new guest phases in this often">Time between guests</label>
-          <input type="range" id="sl-spacing" min="5" max="120" step="5" value="15" />
-          <span id="val-spacing">15s</span>
-        </div>
-        <div class="menu-row">
-          <label for="sl-opacity">Guest opacity</label>
-          <input type="range" id="sl-opacity" min="10" max="100" step="5" value="90" />
-          <span id="val-opacity">90%</span>
-        </div>
-        <div class="menu-row">
-          <label for="sl-variation" title="How much the AI dancers stray from the person they replay">AI variation</label>
-          <input type="range" id="sl-variation" min="0" max="100" step="10" value="50" />
-          <span id="val-variation">50%</span>
-        </div>
-        <label class="menu-check">
-          <input type="checkbox" id="cb-style-labels" />
-          AI dance-style labels
-        </label>
-        <!-- Host only: same as the ♫ button above the guest slider. -->
-        <button id="menu-music" class="music-btn hidden">&#9835; Play music to the room</button>
-        <!-- Host only: while your music plays, the others see you small at the back (avatar/booth.js). -->
-        <label id="booth-row" class="menu-check hidden" title="While your music plays, the others see you small at the back of their room. Off: you're among the dancers.">
-          <input type="checkbox" id="cb-booth" checked />
-          Share your booth (you're the DJ at the back)
-        </label>
-        <div id="share-box">
-          <p class="menu-title">Teach AI <span class="soon">coming soon</span></p>
-          <p class="hint">Nothing you do is kept. One day you'll be able to choose to share your dances to teach the AI dancers.</p>
-        </div>
-        <button id="btn-exit" class="danger">Exit to start</button>
-      </div>
-      <div class="dance-bottom">
-        <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
-        <button id="btn-music" class="music-btn hidden">&#9835; Play music</button>
-        <button id="btn-hear" class="music-btn hidden">&#128264; Tap to hear the music</button>
+      <div class="dance-controls">
         <div class="guest-slider">
-          <label for="sl-guests">Guests</label>
-          <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" />
+          <!-- Opens the guest settings under the bar. -->
+          <button id="btn-guests" class="guests-btn" aria-expanded="false" aria-controls="menu-panel">Guests &#9662;</button>
+          <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" aria-label="Guests" />
           <span id="val-guests">1 guest</span>
         </div>
-      <div class="bottom-bar">
-        <button id="btn-rescan">&#8617; Rescan</button>
-        <button id="btn-ghost" title="Toggle between clean room and live feed">Ghost: ON</button>
-        <button id="btn-torso" title="Toggle stick (1D) vs anatomical (2D) torso">Torso: 1D</button>
-      </div>
+        <div id="menu-panel" class="menu hidden">
+          <div class="menu-row">
+            <label for="sl-spacing" title="A new guest phases in this often">Time between guests</label>
+            <input type="range" id="sl-spacing" min="5" max="120" step="5" value="15" />
+            <span id="val-spacing">15s</span>
+          </div>
+          <div class="menu-row">
+            <label for="sl-opacity">Guest opacity</label>
+            <input type="range" id="sl-opacity" min="10" max="100" step="5" value="90" />
+            <span id="val-opacity">90%</span>
+          </div>
+          <div class="menu-row">
+            <label for="sl-variation" title="How much the AI dancers stray from the person they replay">AI variation</label>
+            <input type="range" id="sl-variation" min="0" max="100" step="10" value="50" />
+            <span id="val-variation">50%</span>
+          </div>
+          <!-- Host only: while your music plays, the others see you small at the back (avatar/booth.js). -->
+          <label id="booth-row" class="menu-check hidden" title="While your music plays, the others see you small at the back of their room. Off: you're among the dancers.">
+            <input type="checkbox" id="cb-booth" checked />
+            Share your booth (you're the DJ at the back)
+          </label>
+        </div>
+        <!-- Only with ?perf=1 (frame timings). -->
+        <div id="hud" class="hud hidden">
+          <span id="hud-room" class="hidden"></span>
+          <!-- Frame timings, only with ?perf=1 -->
+          <span id="hud-fps" class="hidden"></span>
+          <span id="hud-bpm" class="hidden"></span>
+          <span id="hud-guests" class="hidden"></span>
+          <span id="hud-music" class="hidden"></span>
+          <span id="hud-rec" class="hidden" title="This server is recording your session">&#9679; rec</span>
+          <span id="hud-status"></span>
+        </div>
       </div>
     </section>
 
