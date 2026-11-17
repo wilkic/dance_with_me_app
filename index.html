@@ -77,8 +77,9 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dot" cx="12" cy="4.8" r="2.3"/><path d="M12 7.5V15M4 10h16M12 15l-4.5 6.5M12 15l4.5 6.5"/></svg>
           </button>
           <button id="btn-torso" class="icon-btn" title="Torso: a single line (1D) or shoulders and hips (2D)">1D</button>
-          <!-- Works on a server with a record button (dance-home.sh): one clip per ● → ■.
-               Anywhere else it is greyed out and says "coming soon". -->
+          <!-- One clip per ● → ■. Works with a dance key (?ai=KEY; a tap without one
+               offers a key), and on a server with a record button (dance-home.sh).
+               Greyed out only where the server can't record at all. -->
           <button id="btn-rec" class="icon-btn soon" title="Record: coming soon" aria-label="Record">&#9679;</button>
           <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
           <button id="btn-music" class="icon-btn hidden" title="Play music" aria-label="Play music">&#9835;</button>
@@ -172,6 +173,38 @@
         <div class="modal-buttons">
           <button id="rooms-cancel">Stay</button>
           <button id="rooms-exit" class="danger">Exit to main menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Record without a dance key: what a key means, before one is made. -->
+    <div id="key-consent" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="key-consent-title">
+      <div class="modal-box key-box">
+        <p id="key-consent-title" class="key-title">Record your dancing?</p>
+        <p>Until now nothing you do here is kept. Recording changes that:</p>
+        <ul>
+          <li>Each clip you record is sent to our server and stored there: your stick figure's movement (points, never the camera picture) and the beat of the music.</li>
+          <li>There is no account. You get a <b>dance key</b>, a code that only you have. Write it down: it's the only way back to your clips.</li>
+          <li>Everything under a key is deleted after <b>30 days</b> without the key being used, or at once when you ask, on the <a href="key/" target="_blank">key page</a>.</li>
+        </ul>
+        <p class="hint">Only record yourself. Under 13? A parent or guardian has to agree for you. More in the <a href="privacy/" target="_blank">privacy page</a>.</p>
+        <div class="modal-buttons">
+          <button id="key-no">No thanks</button>
+          <button id="key-yes" class="primary">I agree, give me a key</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- The new key, once: copy it or the link that carries it. -->
+    <div id="key-sheet" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="key-sheet-title">
+      <div class="modal-box key-box">
+        <p id="key-sheet-title" class="key-title">Your dance key</p>
+        <p>Write this down or copy it. We can't show it again, and without it your clips can't be reached (they're deleted after 30 days unused).</p>
+        <div class="obs-row"><span>Key</span><code id="key-value"></code><button id="key-copy" type="button">Copy</button></div>
+        <div class="obs-row"><span>Your link</span><code id="key-link"></code><button id="key-copy-link" type="button">Copy</button></div>
+        <p class="hint">Open the app with your link (save it to your home screen) and the ● Record button works. Keep the link to yourself: anyone who has it can record under your key or delete it.</p>
+        <div class="modal-buttons">
+          <button id="key-done" class="primary">I've saved it</button>
         </div>
       </div>
     </div>

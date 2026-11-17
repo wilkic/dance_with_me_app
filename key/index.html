@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0b12">
+<meta name="referrer" content="no-referrer">
+<title>Dance With Me – Your dance key</title>
+<style>
+  :root { --bg:#0b0b12; --fg:#e9e9f1; --muted:#9a9ab0; --accent:#b48cff; --card:#15151f; --line:#26263a; --bad:#ff8a8a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:1.8rem; margin:0 0 4px; }
+  h2 { font-size:1.1rem; margin:28px 0 6px; color:var(--accent); }
+  .muted { color:var(--muted); font-size:.9rem; }
+  .back { font-size:.85rem; text-decoration:none; }
+  a { color:var(--accent); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:20px 0; }
+  label { display:block; font-size:.9rem; color:var(--muted); margin-bottom:6px; }
+  input { width:100%; font:inherit; letter-spacing:.04em; padding:.6rem .8rem; border-radius:10px; border:1px solid var(--line); background:#0f0f18; color:var(--fg); }
+  .row { display:flex; flex-wrap:wrap; gap:.6rem; margin-top:12px; }
+  button { font:inherit; padding:.55rem 1.1rem; border-radius:999px; border:1px solid #445; background:#1b1b2b; color:var(--fg); cursor:pointer; }
+  button.danger { border-color:#844; color:var(--bad); }
+  button:disabled { opacity:.45; cursor:default; }
+  #result { margin-top:14px; min-height:1.6em; }
+  #result.bad { color:var(--bad); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="../">&larr; Dance With Me</a>
+<h1>Your dance key</h1>
+<p class="muted">See what is kept under a dance key, or delete it all.</p>
+
+<div class="card">
+  <label for="key">Dance key</label>
+  <input id="key" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX">
+  <div class="row">
+    <button id="btn-show" type="button">Show what's kept</button>
+    <button id="btn-delete" type="button" class="danger">Delete this key and everything under it</button>
+  </div>
+  <div id="confirm" class="row hidden">
+    <span>Delete for good? This can't be undone.</span>
+    <button id="btn-yes" type="button" class="danger">Yes, delete</button>
+    <button id="btn-no" type="button">Keep it</button>
+  </div>
+  <p id="result" role="status"></p>
+</div>
+
+<h2>How keys work</h2>
+<p>A dance key lets you record clips of your dancing in the app. There is no account: the key is the only link between you and your clips, so we can't look it up for you if you lose it.</p>
+<p>Under a key we keep the clips you recorded (your stick figure's movement as points, and the beat of the music, never the camera picture or the sound) and the dates the key was made and last used.</p>
+<p>A key that isn't used for 30 days is deleted by itself, with everything under it. Deleting here is immediate.</p>
+<p>More in the <a href="../privacy/">privacy page</a>.</p>
+</main>
+<script type="module" src="/src/key.js"></script>
+</body>
+</html>

@@ -532,6 +532,15 @@ button.danger {
 /* Not available here yet: greyed out (a tap explains). */
 #btn-rec.soon { border-color: #445; color: #667; }
 .music-box { display: flex; flex-direction: column; gap: 0.8rem; }
+/* Dance key pop-ups: more to read than a yes/no. */
+.key-box { width: min(24rem, 100%); max-height: 100%; overflow-y: auto; text-align: left; display: flex; flex-direction: column; gap: 0.7rem; font-size: 0.9rem; }
+.key-box p { margin: 0; }
+.key-box .key-title { font-weight: 600; font-size: 1.05rem; text-align: center; }
+.key-box ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.key-box a { color: #b9a6ff; }
+.key-box .obs-row { grid-template-columns: 4.5rem 1fr auto; }
+.key-box #key-value { font-size: 0.85rem; letter-spacing: 0.04em; user-select: all; }
+.key-box #key-link { user-select: all; }
 .rooms-box #rooms-title { font-weight: 600; }
 .rooms-list {
   display: flex;

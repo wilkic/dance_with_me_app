@@ -9,7 +9,7 @@
  * set, records sessions into the dance library), and periodically forms
  * opinions:
  *
- *   → { type: 'welcome', id }                     on connect
+ *   → { type: 'welcome', id }                     on connect (+ keys: true where dance keys work, see keys.js and 'ai-key')
  *   → { type: 'rooms', rooms }                    lobby: open rooms to pick from
  *   → { type: 'joined', room, created, host }     after a join (host: you can play music)
  *   → { type: 'room', name, bpm, members, host, music, booth }   who's in your room; bpm: its music's
@@ -87,6 +87,7 @@ import { Rooms } from './rooms.js';
 import { Library } from './library.js';
 import { AiDancer, CALM_ENERGY } from './aiDancer.js';
 import { SessionRecorder } from './recorder.js';
+import { Keys, EXPIRY_DAYS } from './keys.js';
 import { StyleWindow, energyOf } from './style.js';
 import { EnvelopeTempo } from './tempo.js';
 import { Schedule } from './schedule.js';
@@ -140,6 +141,11 @@ export function startServer({
   // connecting to leaving (lab, harvest). true = nothing is recorded until
   // the dancer presses Record; each Record → Stop is one clip (dance-home.sh).
   recordButton = process.env.RECORD_BUTTON === '1',
+  // Dance keys (keys.js): a dancer who agrees gets a key, and with it a
+  // Record button; their clips are kept under the key, apart from the dance
+  // library, until they delete them or 30 days pass without the key being
+  // used. KEYS_DIR=0 turns it off (then nobody can record here).
+  keysDir = process.env.KEYS_DIR === '0' ? null : (process.env.KEYS_DIR || join(HERE, 'data', 'keys')),
   // The dance library behind AI dancers: a Library, null = load the
   // default one (recordings, recordings_web, library/sessions), false = none.
   library = null,
@@ -174,6 +180,11 @@ export function startServer({
     const b = Buffer.from(theAdminKey);
     return a.length === b.length && timingSafeEqual(a, b);
   };
+  const keys = keysDir ? new Keys(keysDir, { log }) : null;
+  const purgeKeys = () => keys?.purge(new Set([...sessions.values()].map((x) => x.key).filter(Boolean)));
+  purgeKeys();
+  const keysTimer = setInterval(purgeKeys, 6 * 60 * 60 * 1000);
+  keysTimer.unref?.();
   const lib = library === false ? null : (library ?? new Library({ log }).load());
   const now = () => performance.now();
   const homeRoom = home?.key ? normalizeRoomName(home.room) : null;
@@ -410,8 +421,16 @@ export function startServer({
   /** Close a dancer's recording; one long enough to be a dance joins the library. */
   const endRecording = (s) => {
     // A clip ends with the walk up to the phone to press Stop: cut it off.
-    const r = s.rec.close({ musicBpm: +s.beat.state.bpm.toFixed(1) }, { trimEndMs: recordButton ? CLIP_TRIM_END_MS : 0 });
+    const clip = recordButton || s.recKeyed;
+    const r = s.rec.close({ musicBpm: +s.beat.state.bpm.toFixed(1) }, { trimEndMs: clip ? CLIP_TRIM_END_MS : 0 });
     s.rec = null;
+    if (s.recKeyed) {
+      // A clip under a dance key stays with the key: it is not library
+      // material for other people's AI dancers.
+      s.recKeyed = false;
+      log(`● ${s.id} keyed clip ${r.kept ? 'kept' : 'too short, not kept'} (${r.frames} frames)`);
+      return r;
+    }
     if (r.kept) {
       log(`● ${s.id} ${recordButton ? 'clip' : 'session'} kept for the library (${r.frames} frames)`);
       lib?.add(r.path);
@@ -433,9 +452,10 @@ export function startServer({
       booked: 0,           // bookings made on this connection (rate limit)
       myBookings: null,    // { id: token } — this DJ's requests, followed for status
       admin: false, adminTries: 0,
+      key: null, keyTries: 0, keysMade: 0, recKeyed: false, // dance key (keys.js)
     };
     sessions.set(id, s);
-    send(s, { type: 'welcome', id, ...(recordDir ? { recording: recordButton ? 'button' : true } : {}) });
+    send(s, { type: 'welcome', id, ...(recordDir ? { recording: recordButton ? 'button' : true } : {}), ...(keys ? { keys: true } : {}) });
     send(s, lobby());
     send(s, scheduleMsg());
     log(`+ ${id} connected (${sessions.size} online)`);
@@ -450,10 +470,18 @@ export function startServer({
         let msg;
         try { msg = JSON.parse(data.toString()); } catch { return; }
         if (msg.type === 'rec') {
-          // The Record button: one clip per Record → Stop.
-          if (!recordDir || !recordButton) return;
+          // The Record button: one clip per Record → Stop. On a server
+          // started with one (the home studio) clips go to the library; with
+          // a dance key they go under the key.
+          const home = recordDir && recordButton;
+          if (!home && !s.key) return;
           if (msg.on && !s.rec) {
-            s.rec = new SessionRecorder(recordDir, { id });
+            if (!home) {
+              if (keys.info(s.key)?.full) return void send(s, { type: 'rec', on: false, kept: false, full: true });
+              keys.touch(s.key);
+            }
+            s.rec = new SessionRecorder(home ? recordDir : keys.clipDir(s.key), { id });
+            s.recKeyed = !home;
             if (s.room) s.rec.label({ room: s.room });
             log(`● ${id} recording`);
             send(s, { type: 'rec', on: true });
@@ -461,6 +489,37 @@ export function startServer({
             const r = endRecording(s);
             send(s, { type: 'rec', on: false, kept: r.kept, frames: r.frames, seconds: r.seconds });
           }
+        } else if (msg.type === 'ai-key') {
+          // Dance keys: { create } → a new key; { key } → use it; { key,
+          // forget } → delete it and all its clips. Answers: { type:
+          // 'ai-key', ok, key?, clips, seconds, expiresAt } or { forgotten }.
+          if (!keys) return;
+          const about = (kid) => { const i = keys.info(kid); return { clips: i.clips, seconds: i.seconds, expiresAt: i.expiresAt, days: EXPIRY_DAYS }; };
+          if (msg.create) {
+            if (s.keysMade >= 2) return void send(s, { type: 'ai-key', ok: false, reason: 'limit' });
+            const made = keys.create();
+            if (!made) return void send(s, { type: 'ai-key', ok: false, reason: 'limit' });
+            s.keysMade++;
+            s.key = made.id;
+            return void send(s, { type: 'ai-key', ok: true, created: true, key: made.key, ...about(made.id) });
+          }
+          if (++s.keyTries > 20) return void send(s, { type: 'ai-key', ok: false, reason: 'limit' });
+          const kid = keys.find(msg.key);
+          if (!kid) return void send(s, { type: 'ai-key', ok: false, reason: 'unknown' });
+          if (msg.forget) {
+            // Anyone connected with this key stops recording and loses it.
+            for (const o of sessions.values()) {
+              if (o.key !== kid) continue;
+              if (o.rec && o.recKeyed) { endRecording(o); send(o, { type: 'rec', on: false, kept: false }); }
+              o.key = null;
+            }
+            keys.remove(kid);
+            log('🔑 a dance key was deleted by its owner');
+            return void send(s, { type: 'ai-key', forgotten: true });
+          }
+          keys.touch(kid);
+          s.key = kid;
+          send(s, { type: 'ai-key', ok: true, ...about(kid) });
         } else if (msg.type === 'label') {
           // Metronome BPM from ?click=…, kept with the frames as ground truth.
           if (msg.clickBpm > 0) s.rec?.label({ clickBpm: msg.clickBpm });
@@ -708,6 +767,7 @@ export function startServer({
     clearInterval(timer);
     clearInterval(heartbeat);
     clearInterval(aiTimer);
+    clearInterval(keysTimer);
     for (const s of sessions.values()) s.ws.terminate();
     wss.close();
   };
