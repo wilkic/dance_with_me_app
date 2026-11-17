@@ -60,12 +60,33 @@
 
     <!-- ===== Screen: dance ===== -->
     <section id="screen-dance" class="screen hidden">
-      <!-- "Share your room" until shared; then the room name (tap to leave). -->
-      <button id="btn-room" class="room-btn">Share your room</button>
-      <!-- Top middle, between the room name and the menu. Only on a server with
-           a record button (dance-home.sh): one clip per Record → Stop. -->
-      <button id="btn-rec" class="music-btn hidden">&#9679; Record</button>
-      <button id="btn-menu" class="burger" aria-label="Menu">&#9776;</button>
+      <!-- One row at the top: the room (tap to leave), the buttons, the menu.
+           On a phone the feet are near the bottom edge of the picture and
+           the space above the head is free. -->
+      <div class="top-bar">
+        <!-- "Share your room" until shared; then the room name. -->
+        <button id="btn-room" class="room-btn">Share your room</button>
+        <div class="top-icons">
+          <button id="btn-rescan" class="icon-btn" title="Rescan the room (a new background)" aria-label="Rescan the room">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><circle class="dot" cx="8.3" cy="9.6" r="1.6"/><path d="M3.5 17l5-5 3.5 3.5 3-3 5.5 5.5"/></svg>
+          </button>
+          <button id="btn-ghost" class="icon-btn" title="Ghost: on (you're removed from the room; off shows the live camera)" aria-label="Ghost" aria-pressed="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V11a7 7 0 0 1 14 0v10l-2.33-2-2.34 2L12 19l-2.33 2-2.34-2z"/><circle class="dot" cx="9.6" cy="11" r="1.1"/><circle class="dot" cx="14.4" cy="11" r="1.1"/><g class="slash"><circle cx="12" cy="12" r="10.6"/><path d="M4.5 4.5l15 15"/></g></svg>
+          </button>
+          <button id="btn-figure" class="icon-btn" title="How dancers are drawn" aria-label="Figure style">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dot" cx="12" cy="4.8" r="2.3"/><path d="M12 7.5V15M4 10h16M12 15l-4.5 6.5M12 15l4.5 6.5"/></svg>
+          </button>
+          <button id="btn-torso" class="icon-btn" title="Torso: a single line (1D) or shoulders and hips (2D)">1D</button>
+          <!-- Only on a server with a record button (dance-home.sh): one clip per ● → ■. -->
+          <button id="btn-rec" class="icon-btn hidden" title="Record a clip" aria-label="Record">&#9679;</button>
+          <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
+          <button id="btn-music" class="icon-btn hidden" title="Play music" aria-label="Play music">&#9835;</button>
+          <button id="btn-hear" class="icon-btn hidden" title="Tap to hear the music" aria-label="Tap to hear the music">&#128264;</button>
+          <!-- Under the buttons: the clip's running time, then what became of it. -->
+          <span id="rec-note"></span>
+        </div>
+        <button id="btn-menu" class="burger" aria-label="Menu">&#9776;</button>
+      </div>
       <div id="menu-panel" class="menu hidden">
         <p class="menu-title">Guests in your space</p>
         <div class="menu-row">
@@ -100,24 +121,7 @@
         </div>
         <button id="btn-exit" class="danger">Exit to start</button>
       </div>
-      <!-- Controls sit at the top: on a phone the feet are near the bottom
-           edge of the picture and the space above the head is free. -->
       <div class="dance-controls">
-        <div class="control-row">
-          <button id="btn-rescan" class="icon-btn big-icon" title="Rescan the room" aria-label="Rescan the room">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9.5h1.6l.8-1.4h3.2l.8 1.4H16V16H8z"/><circle cx="12" cy="12.6" r="1.5"/><path class="thin" d="M8 9.38A10.5 5 0 1 0 20 17.24M16 9.38A10.5 5 0 0 1 21.9 12.33M17.44 16.75L20 17.24l-.92 2.43"/></svg>
-          </button>
-          <button id="btn-ghost" class="icon-btn" title="Ghost: on (you're removed from the room; off shows the live camera)" aria-label="Ghost" aria-pressed="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V11a7 7 0 0 1 14 0v10l-2.33-2-2.34 2L12 19l-2.33 2-2.34-2z"/><circle class="dot" cx="9.6" cy="11" r="1.1"/><circle class="dot" cx="14.4" cy="11" r="1.1"/><g class="slash"><circle cx="12" cy="12" r="10.6"/><path d="M4.5 4.5l15 15"/></g></svg>
-          </button>
-          <button id="btn-figure" class="icon-btn" title="How dancers are drawn" aria-label="Figure style">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dot" cx="12" cy="4.8" r="2.3"/><path d="M12 7.5V15M4 10h16M12 15l-4.5 6.5M12 15l4.5 6.5"/></svg>
-          </button>
-          <button id="btn-torso" class="icon-btn" title="Torso: a single line (1D) or shoulders and hips (2D)">1D</button>
-          <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
-          <button id="btn-music" class="music-btn hidden">&#9835; Play music</button>
-          <button id="btn-hear" class="music-btn hidden">&#128264; Tap to hear the music</button>
-        </div>
         <div class="guest-slider">
           <label for="sl-guests">Guests</label>
           <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" />

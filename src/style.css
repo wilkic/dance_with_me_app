@@ -122,10 +122,8 @@ button:active { transform: scale(0.97); }
 }
 
 .burger {
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 0.6rem);
-  right: 0.8rem;
-  padding: 0.45rem 0.85rem;
+  flex: none;
+  padding: 0.45rem 0.7rem;
   font-size: 1.15rem;
   line-height: 1;
 }
@@ -212,25 +210,51 @@ button.danger {
    burger. On a phone the feet are near the bottom edge of the picture and
    the space above the head is free. ---- */
 #screen-dance { justify-content: flex-start; }
+/* One row: room name, the buttons, the menu. */
+.top-bar {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 0.6rem);
+  left: 0.6rem;
+  right: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.top-icons {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-inline: auto;
+}
+#rec-note {
+  position: absolute;
+  top: calc(100% + 0.15rem);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: #ff8a8a;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 4px #000;
+}
 .dance-controls {
-  margin-top: calc(env(safe-area-inset-top, 0px) + 3.4rem);
+  /* The screen has 1.5rem of padding already: this clears the row and the note under it. */
+  margin-top: calc(env(safe-area-inset-top, 0px) + 2.6rem);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
   width: min(26rem, 100%);
 }
-.control-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
 /* Small round buttons with a drawn icon (or two letters). */
 .icon-btn {
-  width: 2.5rem;
-  height: 2.5rem;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -239,8 +263,8 @@ button.danger {
   font-weight: 600;
 }
 .icon-btn svg {
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 1.3rem;
+  height: 1.3rem;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -249,9 +273,6 @@ button.danger {
   pointer-events: none;
 }
 .icon-btn svg .thin { stroke-width: 1.4; }
-/* The camera with an arrow going round it is finer: drawn larger, thinner. */
-.icon-btn.big-icon svg { width: 1.9rem; height: 1.9rem; stroke-width: 1.5; }
-.icon-btn.big-icon svg .thin { stroke-width: 1.2; }
 .icon-btn svg .dot { fill: currentColor; stroke: none; }
 /* Ghost off: the ghost dims and gets a red no-entry sign over it. */
 .icon-btn svg .slash { display: none; stroke: #ff6b6b; }
@@ -331,13 +352,12 @@ button.danger {
 #sel-join.empty { color: #aab; }
 
 /* ---- Dance screen: room button (top left) + confirm pop-up ---- */
+/* The room name gives way to the buttons: it shortens with "…". */
 .room-btn {
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 0.6rem);
-  left: 0.8rem;
-  padding: 0.6rem 1.15rem;
+  flex: 0 1 auto;
+  min-width: 2.6rem;
+  padding: 0.55rem 0.8rem;
   font-size: 0.95rem;
-  max-width: 45vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -489,23 +509,9 @@ button.danger {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.music-btn.playing { border-color: #b84ce7; color: #fff; }
+.music-btn.playing, #btn-music.playing { border-color: #b84ce7; color: #fff; }
 #btn-hear { border-color: #b84ce7; color: #fff; }
-#btn-rec {
-  border-color: #ff6b6b;
-  color: #ff6b6b;
-  /* Top middle of the dance screen, between the room name and the menu. */
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 0.6rem);
-  left: 0;
-  right: 0;
-  margin-inline: auto;
-  width: fit-content;
-  max-width: 36vw;
-  padding: 0.6rem 0.9rem;
-}
-/* The room name leaves the middle to it. */
-#screen-dance:has(#btn-rec:not(.hidden)) .room-btn { max-width: 29vw; padding-inline: 0.9rem; }
+#btn-rec { border-color: #ff6b6b; color: #ff6b6b; font-size: 1.1rem; }
 #btn-rec.on { background: #ff6b6b; color: #fff; }
 .music-box { display: flex; flex-direction: column; gap: 0.8rem; }
 .rooms-box #rooms-title { font-weight: 600; }

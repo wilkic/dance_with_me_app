@@ -275,9 +275,12 @@ function renderRec() {
   btn.classList.toggle('hidden', !recButton);
   btn.classList.toggle('on', recState === 'on');
   const secs = Math.max(0, Math.round(Math.abs(Date.now() - recAt) / 1000));
-  btn.textContent = recState === 'countdown' ? `● in ${Math.max(1, Math.ceil((recAt - Date.now()) / 1000))}… ✕`
-    : recState === 'on' ? `■ Stop · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
-      : recNote || '● Record';
+  // The button is only a sign: ●, the countdown, ■. Words go under the row.
+  btn.textContent = recState === 'countdown' ? String(Math.max(1, Math.ceil((recAt - Date.now()) / 1000)))
+    : recState === 'on' ? '■' : '●';
+  btn.title = recState === 'countdown' ? 'Recording soon: tap to cancel' : recState === 'on' ? 'Stop and save the clip' : 'Record a clip';
+  $('rec-note').textContent = !recButton ? '' : recState === 'on' ? `● ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+    : recState === 'countdown' ? 'step back…' : recNote;
   $('hud-rec').classList.toggle('hidden', !(recAlways || recState === 'on'));
 }
 function recSet(state, at = 0) {
@@ -826,7 +829,10 @@ function renderMusic() {
   const live = !!roomState.music?.live;
   btn.classList.toggle('hidden', !canPlayMusic());
   btn.classList.toggle('playing', st.hosting || live);
-  btn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : '♫ Play music';
+  // A sign only (♫ / ■); the words are in the tooltip and on the ☰ menu's button.
+  btn.textContent = st.hosting || live ? '■' : '♫';
+  btn.title = live ? 'Stop the OBS stream' : st.hosting ? `Stop music · ${st.label}` : 'Play music';
+  btn.setAttribute('aria-label', btn.title);
   // The ☰ menu has the same button (where the old "record audio" chip was).
   const menuBtn = $('menu-music');
   menuBtn.classList.toggle('hidden', !canPlayMusic());
