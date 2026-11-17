@@ -82,50 +82,42 @@
           <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
           <button id="btn-music" class="icon-btn hidden" title="Play music" aria-label="Play music">&#9835;</button>
           <button id="btn-hear" class="icon-btn hidden" title="Tap to hear the music" aria-label="Tap to hear the music">&#128264;</button>
+          <!-- Tap the figure button: pick how dancers are drawn (filled in by main.js). -->
+          <div id="figure-menu" class="drop hidden" role="menu"></div>
           <!-- Under the buttons: the clip's running time, then what became of it. -->
           <span id="rec-note"></span>
         </div>
-        <button id="btn-menu" class="burger" aria-label="Menu">&#9776;</button>
-      </div>
-      <div id="menu-panel" class="menu hidden">
-        <p class="menu-title">Guests in your space</p>
-        <div class="menu-row">
-          <label for="sl-spacing" title="A new guest phases in this often">Time between guests</label>
-          <input type="range" id="sl-spacing" min="5" max="120" step="5" value="15" />
-          <span id="val-spacing">15s</span>
-        </div>
-        <div class="menu-row">
-          <label for="sl-opacity">Guest opacity</label>
-          <input type="range" id="sl-opacity" min="10" max="100" step="5" value="90" />
-          <span id="val-opacity">90%</span>
-        </div>
-        <div class="menu-row">
-          <label for="sl-variation" title="How much the AI dancers stray from the person they replay">AI variation</label>
-          <input type="range" id="sl-variation" min="0" max="100" step="10" value="50" />
-          <span id="val-variation">50%</span>
-        </div>
-        <label class="menu-check">
-          <input type="checkbox" id="cb-style-labels" />
-          AI dance-style labels
-        </label>
-        <!-- Host only: same as the ♫ button above the guest slider. -->
-        <button id="menu-music" class="music-btn hidden">&#9835; Play music to the room</button>
-        <!-- Host only: while your music plays, the others see you small at the back (avatar/booth.js). -->
-        <label id="booth-row" class="menu-check hidden" title="While your music plays, the others see you small at the back of their room. Off: you're among the dancers.">
-          <input type="checkbox" id="cb-booth" checked />
-          Share your booth (you're the DJ at the back)
-        </label>
-        <div id="share-box">
-          <p class="menu-title">Teach AI <span class="soon">coming soon</span></p>
-          <p class="hint" id="share-hint">Nothing you do is kept. One day you'll be able to choose to share your dances to teach the AI dancers.</p>
-        </div>
-        <button id="btn-exit" class="danger">Exit to start</button>
+        <!-- Back to the start screen (asks first). -->
+        <button id="btn-exit" class="icon-btn exit-btn" title="Exit to start" aria-label="Exit to start">&#10005;</button>
       </div>
       <div class="dance-controls">
         <div class="guest-slider">
-          <label for="sl-guests">Guests</label>
-          <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" />
+          <!-- Opens the guest settings under the bar. -->
+          <button id="btn-guests" class="guests-btn" aria-expanded="false" aria-controls="menu-panel">Guests &#9662;</button>
+          <input type="range" id="sl-guests" min="0" max="3" step="1" value="1" aria-label="Guests" />
           <span id="val-guests">1 guest</span>
+        </div>
+        <div id="menu-panel" class="menu hidden">
+          <div class="menu-row">
+            <label for="sl-spacing" title="A new guest phases in this often">Time between guests</label>
+            <input type="range" id="sl-spacing" min="5" max="120" step="5" value="15" />
+            <span id="val-spacing">15s</span>
+          </div>
+          <div class="menu-row">
+            <label for="sl-opacity">Guest opacity</label>
+            <input type="range" id="sl-opacity" min="10" max="100" step="5" value="90" />
+            <span id="val-opacity">90%</span>
+          </div>
+          <div class="menu-row">
+            <label for="sl-variation" title="How much the AI dancers stray from the person they replay">AI variation</label>
+            <input type="range" id="sl-variation" min="0" max="100" step="10" value="50" />
+            <span id="val-variation">50%</span>
+          </div>
+          <!-- Host only: while your music plays, the others see you small at the back (avatar/booth.js). -->
+          <label id="booth-row" class="menu-check hidden" title="While your music plays, the others see you small at the back of their room. Off: you're among the dancers.">
+            <input type="checkbox" id="cb-booth" checked />
+            Share your booth (you're the DJ at the back)
+          </label>
         </div>
         <!-- Only with ?perf=1 (frame timings). -->
         <div id="hud" class="hud hidden">

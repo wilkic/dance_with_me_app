@@ -48,7 +48,7 @@ const room = new RoomModel();
 const GUEST_FADE_MS = { replay: 12_000, peer: 2_000, ai: 4_000 };
 const PEER_STALE_MS = 6_000;
 const MAX_GUESTS = 3;
-const guestCfg = { count: 1, spacingSec: 15, opacity: 0.9, variation: 0.5, styleLabels: false };
+const guestCfg = { count: 1, spacingSec: 15, opacity: 0.9, variation: 0.5 };
 const guestTransport = new DelayedLoopbackTransport();
 const guestPlan = { open: 0, ai: 0, replays: 0, nextAt: 0 }; // what planGuests() last decided
 let danceStartedAt = 0; // performance.now() when the dance screen opened
@@ -279,7 +279,8 @@ function renderRec() {
   btn.textContent = recState === 'countdown' ? String(Math.max(1, Math.ceil((recAt - Date.now()) / 1000)))
     : recState === 'on' ? '■' : '●';
   btn.title = recState === 'countdown' ? 'Recording soon: tap to cancel' : recState === 'on' ? 'Stop and save the clip' : 'Record a clip';
-  $('rec-note').textContent = !recButton ? '' : recState === 'on' ? `● ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+  // A server that records the whole session: the phone always says so.
+  $('rec-note').textContent = !recButton ? (recAlways ? '● this server records your session' : '') : recState === 'on' ? `● ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
     : recState === 'countdown' ? 'step back…' : recNote;
   $('hud-rec').classList.toggle('hidden', !(recAlways || recState === 'on'));
 }
@@ -313,13 +314,6 @@ function onServerMessage(msg) {
     recAlways = msg.recording === true;
     recButton = msg.recording === 'button';
     recReset(); // a new connection: the server isn't recording me
-    // "coming soon" is only true where nothing is kept.
-    $('share-box').querySelector('.soon').textContent = recButton ? 'record button' : recAlways ? 'recording' : 'coming soon';
-    $('share-hint').textContent = recButton
-      ? 'Press ● Record on the dance screen: your dance (as points) and the beat of the music are saved to this server\'s library when you press Stop. Nothing else is kept.'
-      : recAlways
-        ? 'This server is recording: your dance (as points) and the beat of the music are saved to its library when you leave.'
-        : SHARE_HINT;
   } else if (msg.type === 'rec') {
     if (msg.on) return;
     const secs = msg.seconds ?? 0; // what was kept: the last few seconds (walking to the phone) are cut
@@ -641,9 +635,6 @@ function loop() {
       g.avatar.render(ctx, g.pose, { width: W, height: H });
       if (g.booth) {
         drawLabel(g.pose, 'DJ', g.avatar.color, g.avatar.alpha, W, H, 0.025);
-      } else if (g.kind === 'ai') {
-        const a = aiInfo.get(id);
-        if (guestCfg.styleLabels && a?.tag) drawLabel(g.pose, a.tag, g.avatar.color, g.avatar.alpha, W, H);
       }
     }
   }
@@ -809,7 +800,7 @@ function leaveRoom() {
   renderBooth();
 }
 
-/** ☰ menu, host only: "Share your booth" (see atBooth). */
+/** Guest settings, host only: "Share your booth" (see atBooth). */
 function renderBooth() {
   $('booth-row').classList.toggle('hidden', !(roomState.name && roomState.host));
   $('cb-booth').checked = roomState.booth;
@@ -829,15 +820,10 @@ function renderMusic() {
   const live = !!roomState.music?.live;
   btn.classList.toggle('hidden', !canPlayMusic());
   btn.classList.toggle('playing', st.hosting || live);
-  // A sign only (♫ / ■); the words are in the tooltip and on the ☰ menu's button.
+  // A sign only (♫ / ■); the words are in the tooltip.
   btn.textContent = st.hosting || live ? '■' : '♫';
   btn.title = live ? 'Stop the OBS stream' : st.hosting ? `Stop music · ${st.label}` : 'Play music';
   btn.setAttribute('aria-label', btn.title);
-  // The ☰ menu has the same button (where the old "record audio" chip was).
-  const menuBtn = $('menu-music');
-  menuBtn.classList.toggle('hidden', !canPlayMusic());
-  menuBtn.classList.toggle('playing', st.hosting || live);
-  menuBtn.textContent = live ? '■ Stop the OBS stream' : st.hosting ? `■ Stop music · ${st.label}` : roomState.name ? '♫ Play music to the room' : '♫ Play music';
   $('btn-hear').classList.toggle('hidden', !st.needsTap);
   const hud = $('hud-music');
   const label = roomState.music && (!roomState.host || roomState.music.live) ? roomState.music.label : '';
@@ -920,7 +906,8 @@ function notice(message) {
 
 function exitToStart() {
   recStop();
-  $('menu-panel').classList.add('hidden');
+  showGuestSettings(false);
+  $('figure-menu').classList.add('hidden');
   metronome?.stop();
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
@@ -1055,7 +1042,6 @@ function renderGuestSlider() {
 PoseDetector.prefetch();
 
 // ---- Wire up UI ----
-const SHARE_HINT = $('share-hint').textContent;
 $('btn-start-room').addEventListener('click', () => enter(null));
 $('sel-join').addEventListener('change', (e) => {
   if (e.target.value) enter(e.target.value);
@@ -1077,10 +1063,6 @@ $('src-obs').addEventListener('click', () => {
 for (const [btn, src] of [['obs-copy-server', 'obs-server'], ['obs-copy-key', 'obs-key']]) {
   $(btn).addEventListener('click', (e) => navigator.clipboard?.writeText($(src).textContent).then(() => { e.target.textContent = 'Copied ✓'; }, () => {}));
 }
-$('menu-music').addEventListener('click', () => {
-  $('menu-panel').classList.add('hidden');
-  $('btn-music').click();
-});
 $('btn-hear').addEventListener('click', () => music.tapToHear());
 // A room entered by link (/?room=home) starts with no tap, so the phone holds
 // the music back: the first tap anywhere (e.g. Capture Room) lets it play.
@@ -1115,7 +1097,6 @@ if (!serverLink) {
   $('upcoming').classList.add('hidden');
   $('sel-join').disabled = true;
   $('btn-room').classList.add('hidden');
-  $('share-box').classList.add('hidden');
   $('server-status').textContent = 'No dance server configured — no rooms or guests.';
 }
 
@@ -1150,26 +1131,47 @@ $('btn-torso').addEventListener('click', (e) => {
   e.currentTarget.textContent = avatar.torso.toUpperCase();
 });
 
-$('btn-figure').title = `Figure: ${FIGURE_NAMES[figureStyle]}`;
-$('btn-figure').addEventListener('click', (e) => {
-  figureStyle = FIGURE_STYLES[(FIGURE_STYLES.indexOf(figureStyle) + 1) % FIGURE_STYLES.length];
-  avatar.style = figureStyle;
-  try { localStorage.setItem(FIGURE_KEY, figureStyle); } catch { /* storage unavailable */ }
-  e.currentTarget.title = `Figure: ${FIGURE_NAMES[figureStyle]}`;
+// The figure button drops a list of the styles; the current one is lit.
+function setFigure(style) {
+  figureStyle = style;
+  avatar.style = style;
+  try { localStorage.setItem(FIGURE_KEY, style); } catch { /* storage unavailable */ }
+  $('btn-figure').title = `Figure: ${FIGURE_NAMES[style]}`;
+  for (const b of $('figure-menu').children) b.classList.toggle('on', b.dataset.style === style);
+}
+for (const style of FIGURE_STYLES) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.style = style;
+  b.textContent = FIGURE_NAMES[style];
+  b.addEventListener('click', () => { setFigure(style); $('figure-menu').classList.add('hidden'); });
+  $('figure-menu').append(b);
+}
+setFigure(figureStyle);
+$('btn-figure').addEventListener('click', () => {
+  showGuestSettings(false);
+  $('figure-menu').classList.toggle('hidden');
 });
 
 $('perf-load').addEventListener('click', (e) => e.target.classList.add('hidden'));
 
-// ---- Burger menu ----
-$('btn-menu').addEventListener('click', () => {
-  $('menu-panel').classList.toggle('hidden');
+// ---- Guest settings (tap "Guests" on the guest bar) ----
+function showGuestSettings(show) {
+  $('menu-panel').classList.toggle('hidden', !show);
+  $('btn-guests').setAttribute('aria-expanded', String(show));
+}
+$('btn-guests').addEventListener('click', () => {
+  $('figure-menu').classList.add('hidden');
+  showGuestSettings($('menu-panel').classList.contains('hidden'));
 });
-// A tap anywhere on the dance floor opens (or closes) the menu too. The
-// controls catch their own taps; everything else falls through to the stage.
+// A tap on the dance floor only closes what's open; it opens nothing.
 stage.addEventListener('click', () => {
-  if (mode === 'dance') $('menu-panel').classList.toggle('hidden');
+  showGuestSettings(false);
+  $('figure-menu').classList.add('hidden');
 });
-$('btn-exit').addEventListener('click', exitToStart);
+$('btn-exit').addEventListener('click', async () => {
+  if (await confirmPopup('Exit and return to the start screen?')) exitToStart();
+});
 $('btn-rec').addEventListener('click', recPress);
 
 function bindSlider(id, valId, format, apply) {
@@ -1192,9 +1194,6 @@ bindSlider('sl-opacity', 'val-opacity', (v) => `${v}%`, (v) => {
 bindSlider('sl-variation', 'val-variation', (v) => `${v}%`, (v) => {
   guestCfg.variation = v / 100;
   planGuests();
-});
-$('cb-style-labels').addEventListener('change', (e) => {
-  guestCfg.styleLabels = e.target.checked;
 });
 $('cb-booth').addEventListener('change', (e) => {
   roomState.booth = e.target.checked;
