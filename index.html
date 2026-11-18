@@ -47,8 +47,8 @@
       <div class="top-banner">
         <p id="capture-room" class="room-line hidden"></p>
         <p id="capture-instructions">
-          Prop your phone up so it can see your dance space,
-          then step <b>out of frame</b> and tap Capture Room.
+          Prop your phone up so it can see your dance space.
+          When the space is <b>clear</b>, tap Capture Room.
         </p>
       </div>
       <div class="bottom-bar">
@@ -67,11 +67,8 @@
         <!-- "Share your room" until shared; then the room name. -->
         <button id="btn-room" class="room-btn">Share your room</button>
         <div class="top-icons">
-          <button id="btn-rescan" class="icon-btn" title="Rescan the room (a new background)" aria-label="Rescan the room">
+          <button id="btn-bg" class="icon-btn" title="Background" aria-label="Background">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><circle class="dot" cx="8.3" cy="9.6" r="1.6"/><path d="M3.5 17l5-5 3.5 3.5 3-3 5.5 5.5"/></svg>
-          </button>
-          <button id="btn-ghost" class="icon-btn" title="Ghost: on (you're removed from the room; off shows the live camera)" aria-label="Ghost" aria-pressed="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V11a7 7 0 0 1 14 0v10l-2.33-2-2.34 2L12 19l-2.33 2-2.34-2z"/><circle class="dot" cx="9.6" cy="11" r="1.1"/><circle class="dot" cx="14.4" cy="11" r="1.1"/><g class="slash"><circle cx="12" cy="12" r="10.6"/><path d="M4.5 4.5l15 15"/></g></svg>
           </button>
           <button id="btn-figure" class="icon-btn" title="How dancers are drawn" aria-label="Figure style">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dot" cx="12" cy="4.8" r="2.3"/><path d="M12 7.5V15M4 10h16M12 15l-4.5 6.5M12 15l4.5 6.5"/></svg>
@@ -84,6 +81,8 @@
           <!-- Room music: the host plays, everyone else hears (net/roomMusic.js). -->
           <button id="btn-music" class="icon-btn hidden" title="Play music" aria-label="Play music">&#9835;</button>
           <button id="btn-hear" class="icon-btn hidden" title="Tap to hear the music" aria-label="Tap to hear the music">&#128264;</button>
+          <!-- Tap the picture button: pick the background (filled in by main.js). -->
+          <div id="bg-menu" class="drop hidden" role="menu"></div>
           <!-- Tap the figure button: pick how dancers are drawn (filled in by main.js). -->
           <div id="figure-menu" class="drop hidden" role="menu"></div>
           <!-- Under the buttons: the clip's running time, then what became of it. -->

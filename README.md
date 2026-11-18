@@ -20,8 +20,8 @@ CDN on first load, so the phone needs internet the first time.
 1. **Start or join** — "Start a room" opens your own space; "Join a room"
    lists open rooms (`funky-otter · 2 dancing · 128 BPM` — the BPM of
    the room's music, nothing when no music plays).
-2. **Capture the room** — prop the phone up, step out of frame; a
-   3-second countdown averages a clean plate of the empty room.
+2. **Capture the room** — prop the phone up; when the space is clear,
+   tap Capture Room and it averages a clean plate of the empty room.
 3. **Dance** — step back in. You're gone from the screen; a stick figure
    dances in your room instead. Room-mates show up behind you, each in
    their own color. With music, the HUD shows its tempo (`♫ 128 bpm`).

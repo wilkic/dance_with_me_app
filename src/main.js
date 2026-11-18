@@ -3,6 +3,7 @@ import { PoseDetector } from './pose/poseDetector.js';
 import { PoseSmoother } from './pose/smoothing.js';
 import { RoomModel } from './room/roomModel.js';
 import { StickFigureAvatar, FIGURE_STYLES, FIGURE_NAMES } from './avatar/stickFigure.js';
+import { BACKGROUNDS, BACKGROUND_NAMES, SCENES, paintBackground } from './room/backgrounds.js';
 import { placeAtBooth } from './avatar/booth.js';
 import {
   PoseChannel,
@@ -559,7 +560,17 @@ try { const saved = localStorage.getItem(FIGURE_KEY); if (FIGURE_STYLES.includes
 avatar.style = figureStyle;
 
 let mode = 'start';        // start | capture | dance
-let ghostMode = true;      // true: show clean plate (user removed); false: live feed
+// Background behind the dancers (room/backgrounds.js); remembered per phone.
+const BG_KEY = 'dwm.background';
+const BG_COLOUR_KEY = 'dwm.bgColour';
+let background = 'photo';
+let bgColour = '#000000';
+try {
+  const saved = localStorage.getItem(BG_KEY);
+  if (BACKGROUNDS.includes(saved)) background = saved;
+  const c = localStorage.getItem(BG_COLOUR_KEY);
+  if (/^#[0-9a-f]{6}$/i.test(c ?? '')) bgColour = c;
+} catch { /* storage unavailable */ }
 let pendingRoom = null;    // room asked for (joined from the start screen, or shared) until the server confirms
 let lastPose = null;
 let rafId = null;
@@ -647,10 +658,10 @@ function loop() {
   if (perf.lastLoopAt) perf.loop = ema(perf.loop, loopStart - perf.lastLoopAt);
   perf.lastLoopAt = loopStart;
 
-  // Background: the room photo sits on its own canvas under the stage (drawn
-  // once at capture), so the stage only holds the dancers. Ghost off draws
-  // the live feed over it for debugging.
-  if (ghostMode && room.isCaptured) {
+  // Background: the room photo or the chosen one sits on its own canvas
+  // under the stage (painted once), so the stage only holds the dancers.
+  // 'Live camera' draws the live feed instead.
+  if (background !== 'camera' && room.isCaptured) {
     ctx.clearRect(0, 0, W, H);
   } else {
     drawVideo();
@@ -957,6 +968,7 @@ function exitToStart() {
   recStop();
   showGuestSettings(false);
   $('figure-menu').classList.add('hidden');
+  $('bg-menu').classList.add('hidden');
   metronome?.stop();
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
@@ -980,16 +992,16 @@ function exitToStart() {
 }
 
 async function captureRoom() {
-  // Countdown gives the user time to step out of frame.
+  // Snapped at once: the dancer taps when the space is clear (no countdown).
+  // The 📷 shows while a few frames are averaged (under a second).
+  if ($('btn-capture').disabled) return;
+  $('btn-capture').disabled = true;
   const cd = $('countdown');
   cd.classList.remove('hidden');
-  for (let n = 3; n > 0; n--) {
-    cd.textContent = n;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
   cd.textContent = '📷';
   await room.capture(video, { mirrored: camera.mirrored });
   cd.classList.add('hidden');
+  $('btn-capture').disabled = false;
   showPlate(true);
 
   smoother.reset();
@@ -1004,15 +1016,13 @@ async function captureRoom() {
   metronome?.start();
 }
 
-/** The room photo layer under the stage (see loop()). */
+/** The background layer under the stage (see loop()): the room photo or the chosen one. */
 function showPlate(on) {
   const el = $('plate');
   if (on && room.isCaptured) {
-    el.width = room.plate.width;
-    el.height = room.plate.height;
-    el.getContext('2d').drawImage(room.plate, 0, 0);
+    paintBackground(el, background, { w: room.plate.width, h: room.plate.height, color: bgColour, photo: room.plate });
   }
-  el.classList.toggle('hidden', !on);
+  el.classList.toggle('hidden', !on || background === 'camera');
 }
 
 // ---- Guests: who dances in our space ----
@@ -1159,21 +1169,62 @@ $('btn-flip').addEventListener('click', async () => {
   }
   setLoading(null);
 });
-$('btn-rescan').addEventListener('click', () => {
+function rescan() {
   room.clear();
   showPlate(false);
   resetGuests();
   showScreen('capture');
   planGuests(); // off the dance screen → no server guests until the next capture
-});
-// Icon buttons: the picture stays, the state goes in the tooltip (and, for
-// the ghost, a no-entry sign over it when off).
-$('btn-ghost').addEventListener('click', (e) => {
-  ghostMode = !ghostMode;
-  const btn = e.currentTarget;
-  btn.classList.toggle('off', !ghostMode);
-  btn.setAttribute('aria-pressed', String(ghostMode));
-  btn.title = ghostMode ? "Ghost: on (you're removed from the room; off shows the live camera)" : 'Ghost: off (live camera)';
+}
+
+// The picture button drops a list of backgrounds; the current one is lit.
+// 'Room photo' has a "Snap a new one" under it; 'Solid colour' a colour picker.
+function setBackground(kind) {
+  background = kind;
+  try { localStorage.setItem(BG_KEY, kind); } catch { /* storage unavailable */ }
+  $('btn-bg').title = `Background: ${BACKGROUND_NAMES[kind]}`;
+  for (const b of $('bg-menu').querySelectorAll('[data-bg]')) b.classList.toggle('on', b.dataset.bg === kind);
+  if (mode === 'dance') showPlate(true);
+}
+{
+  const menu = $('bg-menu');
+  const close = () => menu.classList.add('hidden');
+  const item = (label, onClick, kind) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (kind) b.dataset.bg = kind;
+    b.addEventListener('click', onClick);
+    menu.append(b);
+    return b;
+  };
+  const rule = () => menu.append(document.createElement('hr'));
+  item(BACKGROUND_NAMES.camera, () => { setBackground('camera'); close(); }, 'camera');
+  item(BACKGROUND_NAMES.photo, () => { setBackground('photo'); close(); }, 'photo');
+  item('↻ Snap a new one', () => { close(); setBackground('photo'); rescan(); });
+  rule();
+  item(BACKGROUND_NAMES.solid, () => { setBackground('solid'); close(); }, 'solid');
+  const row = document.createElement('label');
+  row.className = 'bg-colour';
+  row.textContent = 'Colour';
+  const pick = document.createElement('input');
+  pick.type = 'color';
+  pick.value = bgColour;
+  pick.addEventListener('input', () => {
+    bgColour = pick.value;
+    try { localStorage.setItem(BG_COLOUR_KEY, bgColour); } catch { /* storage unavailable */ }
+    setBackground('solid');
+  });
+  row.append(pick);
+  menu.append(row);
+  rule();
+  for (const kind of SCENES) item(BACKGROUND_NAMES[kind], () => { setBackground(kind); close(); }, kind);
+}
+setBackground(background);
+$('btn-bg').addEventListener('click', () => {
+  showGuestSettings(false);
+  $('figure-menu').classList.add('hidden');
+  $('bg-menu').classList.toggle('hidden');
 });
 $('btn-torso').addEventListener('click', (e) => {
   avatar.torso = avatar.torso === '1d' ? '2d' : '1d';
@@ -1199,6 +1250,7 @@ for (const style of FIGURE_STYLES) {
 setFigure(figureStyle);
 $('btn-figure').addEventListener('click', () => {
   showGuestSettings(false);
+  $('bg-menu').classList.add('hidden');
   $('figure-menu').classList.toggle('hidden');
 });
 
@@ -1211,12 +1263,14 @@ function showGuestSettings(show) {
 }
 $('btn-guests').addEventListener('click', () => {
   $('figure-menu').classList.add('hidden');
+  $('bg-menu').classList.add('hidden');
   showGuestSettings($('menu-panel').classList.contains('hidden'));
 });
 // A tap on the dance floor only closes what's open; it opens nothing.
 stage.addEventListener('click', () => {
   showGuestSettings(false);
   $('figure-menu').classList.add('hidden');
+  $('bg-menu').classList.add('hidden');
 });
 $('btn-exit').addEventListener('click', async () => {
   if (await confirmPopup('Exit and return to the start screen?')) exitToStart();
