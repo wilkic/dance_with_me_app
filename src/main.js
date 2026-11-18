@@ -992,16 +992,16 @@ function exitToStart() {
 }
 
 async function captureRoom() {
-  // Countdown gives the user time to step out of frame.
+  // Snapped at once: the dancer taps when the space is clear (no countdown).
+  // The 📷 shows while a few frames are averaged (under a second).
+  if ($('btn-capture').disabled) return;
+  $('btn-capture').disabled = true;
   const cd = $('countdown');
   cd.classList.remove('hidden');
-  for (let n = 3; n > 0; n--) {
-    cd.textContent = n;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
   cd.textContent = '📷';
   await room.capture(video, { mirrored: camera.mirrored });
   cd.classList.add('hidden');
+  $('btn-capture').disabled = false;
   showPlate(true);
 
   smoother.reset();
