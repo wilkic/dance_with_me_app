@@ -81,6 +81,38 @@ export class Channels {
   }
 
   /**
+   * Resident DJ sets: each channel with a `daily` slot ({ at: 'HH:MM',
+   * minutes, tz }) gets an approved booking every day, made here rather
+   * than at /schedule. The room plays the whole day; the set is the time
+   * it's on the schedule. → the next `count` sets that haven't ended,
+   * shaped like a booking (src/net/schedule.js), soonest first.
+   */
+  residentSets(now = Date.now(), count = 2) {
+    const out = [];
+    for (const c of this.list) {
+      const d = c.daily;
+      const m = /^(\d{1,2}):(\d{2})$/.exec(d?.at ?? '');
+      if (!m || !(d.minutes > 0)) continue;
+      const tz = d.tz || 'UTC';
+      let day = localDate(now, tz);
+      day = { ...day, d: day.d - 1 }; // yesterday's set may still run past midnight
+      const sets = [];
+      for (let i = 0; i < count + 2 && sets.length < count; i++, day = { ...day, d: day.d + 1 }) {
+        const start = zonedMs(day.y, day.mo, day.d, Number(m[1]), Number(m[2]), tz);
+        if (start + d.minutes * 60_000 <= now) continue;
+        const date = new Date(Date.UTC(day.y, day.mo - 1, day.d)).toISOString().slice(0, 10);
+        sets.push({
+          id: `${c.id}-${date}`, status: 'approved', resident: true, daily: true,
+          dj: c.name, room: c.id, start, minutes: d.minutes,
+          setInfo: c.setInfo ?? c.story ?? '', bio: c.bio ?? '', link: '', booth: false,
+        });
+      }
+      out.push(...sets);
+    }
+    return out.sort((a, b) => a.start - b.start);
+  }
+
+  /**
    * GET/HEAD /music/<file>: the audio (with Range, so phones can start in
    * the middle) and the credits page. True if handled.
    */
@@ -114,4 +146,25 @@ export class Channels {
     if (req.method === 'HEAD') res.end(); else createReadStream(file).pipe(res);
     return true;
   }
+}
+
+/** The calendar date at time t in time zone tz → { y, mo, d }. */
+function localDate(t, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' })
+    .formatToParts(new Date(t)).map((x) => [x.type, Number(x.value)]));
+  return { y: p.year, mo: p.month, d: p.day };
+}
+
+/** How far tz is ahead of UTC at time t, in ms. */
+function offsetMs(t, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+    .formatToParts(new Date(t)).map((x) => [x.type, Number(x.value)]));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(t / 1000) * 1000;
+}
+
+/** Wall-clock y-mo-d h:mi in tz → ms since the epoch (days may overflow, like Date.UTC). */
+function zonedMs(y, mo, d, h, mi, tz) {
+  const guess = Date.UTC(y, mo - 1, d, h, mi);
+  const first = guess - offsetMs(guess, tz);
+  return guess - offsetMs(first, tz); // again, in case the offset changes in between (summer time)
 }

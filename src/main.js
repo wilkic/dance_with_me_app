@@ -15,7 +15,7 @@ import { randomRoomName, normalizeRoomName } from './net/roomNames.js';
 import { resolveServerUrl, whipUrl, httpBase } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
-import { joinable, phase, whenText, FINE_PRINT, visitMsg } from './net/schedule.js';
+import { joinable, phase, whenText, listed, FINE_PRINT, visitMsg } from './net/schedule.js';
 import { RoomMusic, canShareScreenAudio, listSoundInputs } from './net/roomMusic.js';
 
 // ---- DOM ----
@@ -132,7 +132,7 @@ const music = new RoomMusic({
 });
 if (urlParams.has('debug')) window.dwm = { music, roomState }; // console poking / browser tests
 let lobby = []; // open rooms from the server: [{ name, dancers, bpm }] (bpm: its music's, 0 = none),
-               // then the music channels, always: [{ name, title, channel: true, dancers, bpm }]
+               // then the resident DJs' rooms, always: [{ name, title, channel: true, dancers, bpm }]
 let bookings = []; // DJ sets booked ahead (see net/schedule.js), soonest first
 const aiInfo = new Map(); // ai dancer id -> { tag, title, bpm, base, moves, borrowing }
 let libraryClips = null;
@@ -169,43 +169,37 @@ function renderJoinPicker() {
   // before anyone is in them.
   const now = Date.now();
   const sets = bookings.filter((b) => joinable(b, now) && !lobby.some((r) => r.name === b.room));
-  const open = lobby.filter((r) => !r.channel);
-  const chans = lobby.filter((r) => r.channel);
-  const key = JSON.stringify([lobby.map((r) => [r.name, r.dancers, Math.round(r.bpm || 0)]), sets.map((b) => b.id)]);
+  // Resident DJs' rooms (channel: true) always play, so they're always listed.
+  const open = lobby;
+  const key = JSON.stringify([lobby.map((r) => [r.name, r.dancers, Math.round(r.bpm || 0)]), bookings.filter((b) => joinable(b, now)).map((b) => b.id)]); // "DJ set" comes and goes
   if (key === joinKey) return;
   joinKey = key;
   const placeholder = new Option('Join a room', '', true, true);
   placeholder.disabled = true;
   placeholder.hidden = true;
   const opts = [placeholder];
-  if (!open.length && !sets.length && !chans.length) {
+  if (!open.length && !sets.length) {
     const none = new Option('No rooms yet', '');
     none.disabled = true;
     opts.push(none);
   }
-  for (const r of open) {
-    const dj = bookings.find((b) => b.room === r.name && joinable(b, now));
-    // The room's music tempo, when music plays there and it's been heard.
-    const bpm = r.bpm > 0 ? ` · ${Math.round(r.bpm)} BPM` : '';
-    opts.push(new Option(`${r.name} · ${r.dancers} dancing${bpm}${dj ? ' · DJ set' : ''}`, r.name));
-  }
+  for (const r of open) opts.push(new Option(roomText(r, now), r.name));
   for (const b of sets) opts.push(new Option(`${b.room} · DJ set`, b.room));
-  // Music channels: always playing, so always listed (issue #34).
-  if (chans.length) {
-    const group = document.createElement('optgroup');
-    group.label = 'Music channels';
-    group.append(...chans.map((r) => new Option(channelText(r), r.name)));
-    opts.push(group);
-  }
   sel.replaceChildren(...opts);
-  sel.classList.toggle('empty', !open.length && !sets.length && !chans.length);
+  sel.classList.toggle('empty', !open.length && !sets.length);
   if (!$('rooms-sheet').classList.contains('hidden')) renderRoomsSheet();
 }
 
-/** A music channel in a list: its name, the tempo playing now, who's in. */
-function channelText(r) {
+/**
+ * A room in a list: name, who's in, its music's tempo once heard, and
+ * "DJ set" while a booked set (or a resident's daily set) is on.
+ * A resident's room is always there, so an empty one doesn't say "0 dancing".
+ */
+function roomText(r, now = Date.now()) {
   const bpm = r.bpm > 0 ? ` · ${Math.round(r.bpm)} BPM` : '';
-  return `♫ ${r.title}${bpm}${r.dancers ? ` · ${r.dancers} dancing` : ''}`;
+  const dj = bookings.some((b) => b.room === r.name && joinable(b, now)) ? ' · DJ set' : '';
+  const who = r.channel && !r.dancers ? '' : ` · ${r.dancers} dancing`;
+  return `${r.name}${who}${bpm}${dj}`;
 }
 
 /**
@@ -218,7 +212,8 @@ let upcomingKey = null;
 function renderUpcoming() {
   const list = $('upcoming-list');
   const now = Date.now();
-  const key = JSON.stringify([bookings, bookings.map((b) => phase(b, now)), serverOnline]);
+  const shown = listed(bookings, now);
+  const key = JSON.stringify([shown, shown.map((b) => phase(b, now)), serverOnline]);
   if (key === upcomingKey) return;
   upcomingKey = key;
   const open = new Set([...list.querySelectorAll('details[open]')].map((d) => d.dataset.id));
@@ -228,7 +223,7 @@ function renderUpcoming() {
     if (text) e.textContent = text;
     return e;
   };
-  const items = bookings.map((b) => {
+  const items = shown.map((b) => {
     const p = phase(b, now);
     const li = el('li');
     const d = el('details', `set ${p}`);
@@ -242,7 +237,7 @@ function renderUpcoming() {
     when.append(el('span', 'set-room', `⌂ ${b.room}`));
     head.append(dj, when);
     sum.append(head);
-    if (joinable(b, now)) {
+    if (joinable(b, now) || b.resident) { // a resident's room plays all day
       const btn = el('button', 'primary', 'Join');
       btn.disabled = !serverOnline;
       btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); enter(b.room); });
@@ -820,12 +815,7 @@ function renderRoomsSheet() {
   const list = $('rooms-list');
   const here = roomState.name ?? pendingRoom;
   const now = Date.now();
-  const rows = lobby.map((r) => {
-    if (r.channel) return { name: r.name, text: channelText(r) };
-    const bpm = r.bpm > 0 ? ` · ${Math.round(r.bpm)} BPM` : '';
-    const dj = bookings.some((b) => b.room === r.name && joinable(b, now)) ? ' · DJ set' : '';
-    return { name: r.name, text: `${r.name} · ${r.dancers} dancing${bpm}${dj}` };
-  });
+  const rows = lobby.map((r) => ({ name: r.name, text: roomText(r, now) }));
   for (const b of bookings) {
     if (joinable(b, now) && !lobby.some((r) => r.name === b.room)) rows.push({ name: b.room, text: `${b.room} · DJ set` });
   }
@@ -839,7 +829,7 @@ function renderRoomsSheet() {
   });
   if (!buttons.length) buttons.push(Object.assign(document.createElement('p'), { className: 'hint', textContent: 'No other rooms open.' }));
   list.replaceChildren(...buttons);
-  // In a music channel: who made the music (CC BY asks for credit).
+  // In a resident DJ's room: who made the music (CC BY asks for credit).
   const credits = $('rooms-credits');
   const chan = roomState.music?.channel;
   credits.classList.toggle('hidden', !chan || !musicBase);

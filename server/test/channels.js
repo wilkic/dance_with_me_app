@@ -1,7 +1,8 @@
 /**
  * Music channels (issue #34): the playlist clock, the lobby listing, a
  * channel room's music and tempo, nobody hosts it, and the /music/ files
- * (Range requests, nothing outside the folder, no playlist file).
+ * (Range requests, nothing outside the folder, no playlist file); a
+ * resident DJ's daily set on the schedule, and its name can't be booked.
  */
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -28,7 +29,8 @@ writeFileSync(join(dir, 'secret.txt'), 'no');
 writeFileSync(join(dir, 'channels.json'), JSON.stringify({
   channels: [
     { id: 'slow', name: 'Slow One', bpm: [70, 90], seconds: 300, tracks: [{ file: 'slow/a.opus', sec: 100, bpm: 80 }, { file: 'slow/b.opus', sec: 200, bpm: 88 }] },
-    { id: 'fast', name: 'Fast One', bpm: [160, 178], seconds: 60, tracks: [{ file: 'fast/c.opus', sec: 60, bpm: 170 }] },
+    { id: 'fast', name: 'Fast One', bpm: [160, 178], seconds: 60, tracks: [{ file: 'fast/c.opus', sec: 60, bpm: 170 }],
+      daily: { at: '10:00', minutes: 120, tz: 'Europe/Brussels' }, setInfo: 'Fast all day.', bio: 'Resident.' },
   ],
 }));
 
@@ -46,6 +48,19 @@ await test('the clock: the playlist loops from the epoch, the same answer for ev
   assert.deepEqual([m.label, m.channel, m.bpm, m.src, m.next, m.now], ['Slow One', 'slow', 88, '/music/slow/b.opus', '/music/slow/a.opus', t]);
   assert.equal(ch.at('nope'), null);
   assert.equal(new Channels(join(dir, 'missing')).list.length, 0);
+});
+
+await test('a resident: a daily set in its own time zone, today until it ends, then tomorrow', () => {
+  const ch = new Channels(dir);
+  const ids = (t) => ch.residentSets(t).map((x) => [x.id, new Date(x.start).toISOString()]);
+  // Winter: 10:00 in Brussels is 09:00 UTC; summer: 08:00 UTC.
+  assert.deepEqual(ids(Date.parse('2026-11-23T08:00:00Z')), [['fast-2026-11-23', '2026-11-23T09:00:00.000Z'], ['fast-2026-11-24', '2026-11-24T09:00:00.000Z']]);
+  assert.equal(ids(Date.parse('2026-11-23T10:59:00Z'))[0][0], 'fast-2026-11-23'); // still on
+  assert.deepEqual(ids(Date.parse('2026-11-23T11:00:00Z')).map((x) => x[0]), ['fast-2026-11-24', 'fast-2026-11-25']);
+  assert.equal(ids(Date.parse('2026-07-01T07:00:00Z'))[0][1], '2026-07-01T08:00:00.000Z');
+  assert.equal(ids(Date.parse('2026-12-31T12:00:00Z'))[0][0], 'fast-2027-01-01'); // over the year end
+  const b = ch.residentSets(Date.parse('2026-11-23T08:00:00Z'))[0];
+  assert.deepEqual([b.dj, b.room, b.minutes, b.status, b.resident, b.daily, b.setInfo, b.token], ['Fast One', 'fast', 120, 'approved', true, true, 'Fast all day.', undefined]);
 });
 
 const server = startServer({ port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, statsFile: null, keysDir: null, adminKey: 'k', musicDir: dir, log: () => {} });
@@ -131,6 +146,18 @@ await test('/music/: whole files, Range requests, CORS; nothing else', async () 
   for (const bad of ['/music/channels.json', '/music/secret.txt', '/music/../channels.js', '/music/%2e%2e/channels.js', '/music/nope.opus']) {
     assert.equal((await fetch(base + bad)).status, 404, bad);
   }
+});
+
+await test('the schedule lists the resident set; nobody can book its name', async () => {
+  const a = await connect();
+  const sched = await next(a, (m) => m.type === 'schedule');
+  const res = sched.bookings.filter((x) => x.resident);
+  assert.equal(res.length, 2);
+  assert.ok(res.every((x) => x.room === 'fast' && x.dj === 'Fast One' && !x.token));
+  sendTo(a, { type: 'book', dj: 'Fast One', start: Date.now() + 86_400_000, minutes: 60 });
+  const err = await next(a, (m) => m.type === 'error');
+  assert.match(err.message ?? err.error ?? JSON.stringify(err), /Fast One’s room/);
+  a.ws.close();
 });
 
 server.close();

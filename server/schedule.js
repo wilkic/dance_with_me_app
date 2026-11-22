@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { checkBooking, endOf, overlaps, joinable } from '../src/net/schedule.js';
+import { normalizeRoomName } from '../src/net/roomNames.js';
 
 const MAX_APPROVED = 500;
 const MAX_WAITING = 100; // pending requests at once
@@ -30,6 +31,10 @@ export class Schedule {
     this.log = log;
     // [{ id, token, status, dj, room, start, minutes, setInfo, bio, link, booth, createdAt }]
     this.bookings = [];
+    // Resident DJ sets (channels.js): made by the server every day, always
+    // approved, no token; their rooms can't be booked. (now) → bookings.
+    this.residents = () => [];
+    this.residentKey = '';
     if (file) {
       try {
         const saved = JSON.parse(readFileSync(file, 'utf8'));
@@ -41,11 +46,14 @@ export class Schedule {
     this.prune();
   }
 
-  /** Drop sets that have ended. → true if any were dropped. */
+  /** Drop sets that have ended. → true if the public list changed (a resident's next day counts). */
   prune(now = Date.now()) {
+    const key = this.residents(now).map((b) => b.id).join();
+    const moved = key !== this.residentKey;
+    this.residentKey = key;
     const before = this.bookings.length;
     this.bookings = this.bookings.filter((b) => endOf(b) > now);
-    if (this.bookings.length === before) return false;
+    if (this.bookings.length === before) return moved;
     this.#save();
     return true;
   }
@@ -58,7 +66,7 @@ export class Schedule {
 
   /** What everyone may see: approved sets, soonest first, no tokens. */
   list(now = Date.now()) {
-    return this.#live(now, 'approved').map(pub);
+    return [...this.#live(now, 'approved').map(pub), ...this.residents(now)].sort((a, b) => a.start - b.start);
   }
 
   /** The admin's queue: requests waiting for a decision. */
@@ -100,6 +108,8 @@ export class Schedule {
     this.prune(now);
     const { booking, error } = checkBooking(raw, now);
     if (error) return { error };
+    const resident = this.residents(now).find((b) => b.room === booking.room || normalizeRoomName(b.dj) === booking.room);
+    if (resident) return { error: `“${booking.room}” is ${resident.dj}’s room, playing every day. Pick another DJ name.` };
     if (this.bookings.filter((b) => b.status === 'pending').length >= MAX_WAITING) {
       return { error: 'Too many requests are waiting for approval — try again later.' };
     }

@@ -6,7 +6,8 @@
  *   node tools/music/publish.mjs
  *
  * Writes into tools/music/opus/ (which deploy.sh music copies to the server):
- *   channels.json   [{ id, name, story, bpm: [lo, hi], seconds, tracks: [{ file, sec, bpm }] }]
+ *   channels.json   [{ id, name, story, bpm: [lo, hi], daily: { at, minutes, tz }, setInfo, bio,
+ *                      seconds, tracks: [{ file, sec, bpm }] }] — the residents (see channels.json)
  *                   — no titles: the dance view shows the channel and its BPM only
  *   credits.html    every track's artist, title, licence and ccMixter page (CC BY asks for this)
  *
@@ -46,17 +47,24 @@ function mixOrder(tracks, seed) {
   return out;
 }
 
-const channels = conf.channels.map((c) => {
-  const tracks = mixOrder(manifest.filter((t) => t.ch === c.id), c.id);
+// Only residents are published: a room with a resident DJ, its playlist
+// drawn from the channels' tracks by genre and tempo, and its daily set.
+const residents = conf.residents.list.map((r) => {
+  const pool = manifest.filter((t) => r.from.includes(t.ch) && r.genres.includes(t.genre) && t.felt >= r.bpm[0] && t.felt <= r.bpm[1]);
+  const tracks = mixOrder(pool, r.id);
   return {
-    id: c.id,
-    name: c.name,
-    story: c.story,
-    bpm: c.bpm,
+    id: r.id,
+    name: r.dj,
+    story: r.setInfo,
+    bpm: r.bpm,
+    daily: r.daily,
+    setInfo: r.setInfo,
+    bio: r.bio,
     seconds: tracks.reduce((a, t) => a + t.sec, 0),
     tracks: tracks.map((t) => ({ file: t.opus, sec: t.sec, bpm: t.felt })),
   };
 }).filter((c) => c.tracks.length);
+const channels = residents;
 
 writeFileSync(join(OPUS, 'channels.json'), JSON.stringify({ story: conf.story, channels }, null, 2));
 
@@ -88,7 +96,7 @@ h1{font-size:24px;margin:0 0 8px}h2{font-size:18px;margin:28px 0 4px}h2 span{col
 section{border-top:1px solid var(--line)}
 </style></head><body><main>
 <h1>Music credits</h1>
-<p class="sub">The music channels in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. Thank you to every artist below. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
+<p class="sub">The resident rooms in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. Thank you to every artist below. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
 ${sections}
 </main></body></html>
 `);

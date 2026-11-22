@@ -199,6 +199,9 @@ export function startServer({
   const now = () => performance.now();
   const homeRoom = home?.key ? normalizeRoomName(home.room) : null;
   const channels = new Channels(musicDir ?? '', { log });
+  // Resident DJs: each channel with a daily slot is on the schedule every day.
+  schedule.residents = (t) => channels.residentSets(t);
+  schedule.prune();
 
   const send = (s, msg) => {
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(msg));

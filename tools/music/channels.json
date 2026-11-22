@@ -22,6 +22,22 @@
     "avoid": ["gabber", "hardstyle", "hardcore", "happy_hardcore", "nsfw", "christmas", "spoken_word", "a_capella", "acapella"]
   },
 
+  "residents": {
+    "about": "What the dance server plays: rooms held by a resident DJ, always playing, with a daily set on the schedule. publish.mjs builds only these; the channels below are the pools the tracks come from (ccmixter-shortlist.mjs).",
+    "list": [
+      {
+        "id": "wilkins-mix",
+        "dj": "Wilkins-Mix",
+        "from": ["acid-axis", "kiosk-afternoon"],
+        "genres": ["acid", "303", "acid_house", "tb303", "techno", "electro", "minimal", "detroit"],
+        "bpm": [120, 134],
+        "daily": { "at": "10:00", "minutes": 120, "tz": "Europe/Brussels" },
+        "setInfo": "Acid lines, 303 squelch, minimal and electro at 120 to 134 BPM. On the schedule every day, and the room keeps the mix going around the clock, so drop in any time.",
+        "bio": "The house selector of Dance With Me: Creative Commons acid and techno picked by ear for moving to. Music credits are in the room menu."
+      }
+    ]
+  },
+
   "channels": [
     {
       "id": "morning-coffee",
