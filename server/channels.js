@@ -3,13 +3,16 @@
  *
  * Each channel is a playlist of Creative Commons tracks around one tempo
  * (made by tools/music/publish.mjs, copied here by `deploy.sh music`):
- *   <dir>/channels.json   { channels: [{ id, name, bpm, seconds, tracks: [{ file, sec, bpm }] }] }
+ *   <dir>/channels.json   { channels: [{ id, name, bpm, seconds, tracks: [{ file, sec, bpm }],
+ *                                        daily?: { at, minutes, tz }, set?: { tracks } }] }
  *   <dir>/<file>          the Opus files, served at /music/<file>
  *   <dir>/credits.html    who made what, served at /music/credits.html
  *
  * A channel never stops and never starts: what plays is worked out from the
  * clock (the playlist loops from EPOCH), so everyone who joins hears the
- * same moment of the same track. Nothing runs while nobody listens: the
+ * same moment of the same track. A resident with a daily slot plays its
+ * set during the slot instead, from the set's first track at the start
+ * (cut off at the end; phones switch with the next 'room' message). Nothing runs while nobody listens: the
  * phones in the room fetch the audio themselves, and the server only says
  * which file and where in it. The room's tempo is the track's known BPM.
  */
@@ -29,7 +32,11 @@ export class Channels {
       if (existsSync(file)) {
         this.list = JSON.parse(readFileSync(file, 'utf8')).channels
           .filter((c) => c.tracks?.length && c.seconds > 0)
-          .map((c) => ({ ...c, ms: c.tracks.reduce((a, t) => a + t.sec * 1000, 0) }));
+          .map((c) => ({
+            ...c,
+            ms: c.tracks.reduce((a, t) => a + t.sec * 1000, 0),
+            setMs: c.set?.tracks?.length ? c.set.tracks.reduce((a, t) => a + t.sec * 1000, 0) : 0,
+          }));
       }
     } catch (e) { log(`channels: can't read ${dir}/channels.json (${e.message})`); }
     this.byId = new Map(this.list.map((c) => [c.id, c]));
@@ -45,14 +52,21 @@ export class Channels {
   at(id, t = Date.now()) {
     const c = this.byId.get(id);
     if (!c) return null;
-    const loopStart = t - ((t - EPOCH) % c.ms + c.ms) % c.ms;
-    let start = loopStart;
+    const slot = c.setMs ? this.slotAt(c, t) : null;
+    const [tracks, ms, from] = slot != null ? [c.set.tracks, c.setMs, slot] : [c.tracks, c.ms, EPOCH];
+    let start = t - ((t - from) % ms + ms) % ms;
     for (let i = 0; ; i++) {
-      const track = c.tracks[i % c.tracks.length];
+      const track = tracks[i % tracks.length];
       const end = start + track.sec * 1000;
-      if (end > t) return { track, start, end, next: c.tracks[(i + 1) % c.tracks.length] };
+      if (end > t) return { track, start, end, next: tracks[(i + 1) % tracks.length], set: slot != null };
       start = end;
     }
+  }
+
+  /** When channel c's daily set that's on at time t started (ms), or null. */
+  slotAt(c, t) {
+    for (const { start } of slots(c.daily, t, 2)) if (start <= t && t < start + c.daily.minutes * 60_000) return start;
+    return null;
   }
 
   /**
@@ -91,16 +105,9 @@ export class Channels {
     const out = [];
     for (const c of this.list) {
       const d = c.daily;
-      const m = /^(\d{1,2}):(\d{2})$/.exec(d?.at ?? '');
-      if (!m || !(d.minutes > 0)) continue;
-      const tz = d.tz || 'UTC';
-      let day = localDate(now, tz);
-      day = { ...day, d: day.d - 1 }; // yesterday's set may still run past midnight
       const sets = [];
-      for (let i = 0; i < count + 2 && sets.length < count; i++, day = { ...day, d: day.d + 1 }) {
-        const start = zonedMs(day.y, day.mo, day.d, Number(m[1]), Number(m[2]), tz);
-        if (start + d.minutes * 60_000 <= now) continue;
-        const date = new Date(Date.UTC(day.y, day.mo - 1, day.d)).toISOString().slice(0, 10);
+      for (const { start, date } of slots(d, now, count + 2)) {
+        if (sets.length >= count || start + d.minutes * 60_000 <= now) continue;
         sets.push({
           id: `${c.id}-${date}`, status: 'approved', resident: true, daily: true,
           dj: c.name, room: c.id, start, minutes: d.minutes,
@@ -146,6 +153,25 @@ export class Channels {
     if (req.method === 'HEAD') res.end(); else createReadStream(file).pipe(res);
     return true;
   }
+}
+
+/**
+ * A daily slot's starts, from yesterday's (it may still run past midnight):
+ * n of them, as [{ start (ms), date ('YYYY-MM-DD' in its time zone) }].
+ * Nothing for a missing or broken slot.
+ */
+function slots(daily, now, n) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(daily?.at ?? '');
+  if (!m || !(daily.minutes > 0)) return [];
+  const tz = daily.tz || 'UTC';
+  const today = localDate(now, tz);
+  return Array.from({ length: n }, (_, i) => {
+    const d = today.d - 1 + i;
+    return {
+      start: zonedMs(today.y, today.mo, d, Number(m[1]), Number(m[2]), tz),
+      date: new Date(Date.UTC(today.y, today.mo - 1, d)).toISOString().slice(0, 10),
+    };
+  });
 }
 
 /** The calendar date at time t in time zone tz → { y, mo, d }. */

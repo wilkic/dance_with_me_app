@@ -30,7 +30,8 @@ writeFileSync(join(dir, 'channels.json'), JSON.stringify({
   channels: [
     { id: 'slow', name: 'Slow One', bpm: [70, 90], seconds: 300, tracks: [{ file: 'slow/a.opus', sec: 100, bpm: 80 }, { file: 'slow/b.opus', sec: 200, bpm: 88 }] },
     { id: 'fast', name: 'Fast One', bpm: [160, 178], seconds: 60, tracks: [{ file: 'fast/c.opus', sec: 60, bpm: 170 }],
-      daily: { at: '10:00', minutes: 120, tz: 'Europe/Brussels' }, setInfo: 'Fast all day.', bio: 'Resident.' },
+      daily: { at: '10:00', minutes: 120, tz: 'Europe/Brussels' }, setInfo: 'Fast all day.', bio: 'Resident.',
+      set: { tracks: [{ file: 'slow/a.opus', sec: 1000, bpm: 126 }, { file: 'slow/b.opus', sec: 3000, bpm: 130 }] } },
   ],
 }));
 
@@ -61,6 +62,22 @@ await test('a resident: a daily set in its own time zone, today until it ends, t
   assert.equal(ids(Date.parse('2026-12-31T12:00:00Z'))[0][0], 'fast-2027-01-01'); // over the year end
   const b = ch.residentSets(Date.parse('2026-11-23T08:00:00Z'))[0];
   assert.deepEqual([b.dj, b.room, b.minutes, b.status, b.resident, b.daily, b.setInfo, b.token], ['Fast One', 'fast', 120, 'approved', true, true, 'Fast all day.', undefined]);
+});
+
+await test('a resident plays its set during the slot, from the top; all its tracks the rest of the day', () => {
+  const ch = new Channels(dir);
+  const slot = Date.parse('2026-11-23T09:00:00Z'); // 10:00 in Brussels
+  const before = ch.at('fast', slot - 1000);
+  assert.equal(before.track.file, 'fast/c.opus');
+  assert.equal(before.set, false);
+  const first = ch.at('fast', slot);
+  assert.deepEqual([first.track.file, first.start, first.set, first.next.file], ['slow/a.opus', slot, true, 'slow/b.opus']);
+  const later = ch.at('fast', slot + 1500_000);
+  assert.deepEqual([later.track.file, later.start, later.track.bpm], ['slow/b.opus', slot + 1000_000, 130]);
+  assert.equal(ch.at('fast', slot + 4000_000 + 10).track.file, 'slow/a.opus'); // the set loops within the slot
+  assert.equal(ch.at('fast', slot + 120 * 60_000).track.file, 'fast/c.opus'); // 12:00: back to all day
+  assert.equal(ch.music('fast', slot + 60_000).src, '/music/slow/a.opus');
+  assert.equal(ch.at('slow', slot).set, false); // no daily slot: never a set
 });
 
 const server = startServer({ port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, statsFile: null, keysDir: null, adminKey: 'k', musicDir: dir, log: () => {} });

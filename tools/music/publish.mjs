@@ -7,7 +7,9 @@
  *
  * Writes into tools/music/opus/ (which deploy.sh music copies to the server):
  *   channels.json   [{ id, name, story, bpm: [lo, hi], daily: { at, minutes, tz }, setInfo, bio,
- *                      seconds, tracks: [{ file, sec, bpm }] }] — the residents (see channels.json)
+ *                      seconds, tracks: [{ file, sec, bpm }],   ← all day: every track
+ *                      set: { seconds, tracks } }]              ← during the daily set
+ *                   — the residents (see channels.json)
  *                   — no titles: the dance view shows the channel and its BPM only
  *   credits.html    every track's artist, title, licence and ccMixter page (CC BY asks for this)
  *
@@ -47,11 +49,18 @@ function mixOrder(tracks, seed) {
   return out;
 }
 
-// Only residents are published: a room with a resident DJ, its playlist
-// drawn from the channels' tracks by genre and tempo, and its daily set.
+// Every channel's playlist: a pool of tracks the residents play from.
+const pools = conf.channels.map((c) => ({ ...c, tracks: mixOrder(manifest.filter((t) => t.ch === c.id), c.id) })).filter((c) => c.tracks.length);
+const entry = (t) => ({ file: t.opus, sec: t.sec, bpm: t.felt });
+const total = (list) => list.reduce((a, t) => a + t.sec, 0);
+
+// Only residents are published: a room with a resident DJ and a daily set.
+// All day it loops every downloaded track, one channel after another in
+// tempo order (so the pulse holds for a while); during the daily set it
+// plays the set: tracks from its pools by genre and tempo, from the top.
 const residents = conf.residents.list.map((r) => {
-  const pool = manifest.filter((t) => r.from.includes(t.ch) && r.genres.includes(t.genre) && t.felt >= r.bpm[0] && t.felt <= r.bpm[1]);
-  const tracks = mixOrder(pool, r.id);
+  const all = pools.flatMap((c) => c.tracks);
+  const set = mixOrder(all.filter((t) => r.from.includes(t.ch) && r.genres.includes(t.genre) && t.felt >= r.bpm[0] && t.felt <= r.bpm[1]), r.id);
   return {
     id: r.id,
     name: r.dj,
@@ -60,8 +69,9 @@ const residents = conf.residents.list.map((r) => {
     daily: r.daily,
     setInfo: r.setInfo,
     bio: r.bio,
-    seconds: tracks.reduce((a, t) => a + t.sec, 0),
-    tracks: tracks.map((t) => ({ file: t.opus, sec: t.sec, bpm: t.felt })),
+    seconds: total(all),
+    tracks: all.map(entry),
+    set: { seconds: total(set), tracks: set.map(entry) },
   };
 }).filter((c) => c.tracks.length);
 const channels = residents;
@@ -70,18 +80,15 @@ writeFileSync(join(OPUS, 'channels.json'), JSON.stringify({ story: conf.story, c
 
 // ---------------------------------------------------------------- credits
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-const byFile = new Map(manifest.map((t) => [t.opus, t]));
-const sections = channels.map((c) => `
+const sections = pools.map((c) => `
 <section id="${c.id}">
   <h2>${esc(c.name)} <span>${c.bpm[0]}–${c.bpm[1]} BPM</span></h2>
   <p class="story">${esc(c.story)}</p>
-  <ul>${c.tracks.map((x) => {
-    const t = byFile.get(x.file);
-    return `
-    <li><a href="${esc(t.page)}" rel="noopener">${esc(t.title)}</a> by ${esc(t.artist)} · <a href="${esc(t.licenceUrl)}" rel="noopener license">${esc(t.licence)}</a></li>`;
-  }).join('')}
+  <ul>${c.tracks.map((t) => `
+    <li><a href="${esc(t.page)}" rel="noopener">${esc(t.title)}</a> by ${esc(t.artist)} · <a href="${esc(t.licenceUrl)}" rel="noopener license">${esc(t.licence)}</a></li>`).join('')}
   </ul>
 </section>`).join('');
+const residentNote = residents.map((r) => `<span id="${r.id}"></span>`).join('');
 
 writeFileSync(join(OPUS, 'credits.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -96,9 +103,9 @@ h1{font-size:24px;margin:0 0 8px}h2{font-size:18px;margin:28px 0 4px}h2 span{col
 section{border-top:1px solid var(--line)}
 </style></head><body><main>
 <h1>Music credits</h1>
-<p class="sub">The resident rooms in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. Thank you to every artist below. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
-${sections}
+<p class="sub">The resident DJ rooms in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. They play every track below, a channel at a time, and their daily sets pick from them. Thank you to every artist. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
+${residentNote}${sections}
 </main></body></html>
 `);
 
-console.log(`${channels.length} channels, ${channels.reduce((a, c) => a + c.tracks.length, 0)} tracks, ${(channels.reduce((a, c) => a + c.seconds, 0) / 3600).toFixed(1)} h → ${OPUS}/channels.json, credits.html`);
+console.log(`${residents.length} resident(s): ${residents.map((r) => `${r.id} all day ${r.tracks.length} tracks ${(r.seconds / 3600).toFixed(1)} h, set ${r.set.tracks.length} tracks ${(r.set.seconds / 60).toFixed(0)} min`).join("; ")} → ${OPUS}/channels.json, credits.html`);
