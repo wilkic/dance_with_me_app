@@ -86,6 +86,8 @@ fi
 IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
 [ -n "$IP" ] || IP=$(hostname -I | awk '{print $1}')
 export WHIP_LOCAL_IP="$IP"
+# Music channels (issue #34): the local Opus files, until they live in server/music.
+[ -z "${MUSIC_DIR:-}" ] && [ ! -f server/music/channels.json ] && [ -f tools/music/opus/channels.json ] && export MUSIC_DIR="$PWD/tools/music/opus"
 (cd server && exec node index.js) > "$LOGDIR/server.log" 2>&1 &
 SERVER_PID=$!
 node_modules/.bin/vite --host --strictPort --port "$PORT" > "$LOGDIR/vite.log" 2>&1 &
