@@ -260,15 +260,16 @@ function page(r) {
     </table></div>
   </section>`).join('');
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
 <title>Selector Channels Shortlist</title>
 <style>
 :root{--bg:#f7f5f0;--card:#fff;--ink:#1d1b18;--sub:#6b665d;--line:#e4dfd4;--accent:#b4451f;--tag:#efe9dd;--pick:#f6dfb8}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15140f;--card:#1e1d18;--ink:#ece8df;--sub:#a29c90;--line:#34322a;--accent:#f0875c;--tag:#2c2a23;--pick:#5a4420}}
-:root[data-theme="dark"]{--bg:#15140f;--card:#1e1d18;--ink:#ece8df;--sub:#a29c90;--line:#34322a;--accent:#f0875c;--tag:#2c2a23;--pick:#5a4420}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15140f;--card:#1e1d18;--ink:#ece8df;--sub:#a29c90;--line:#34322a;--accent:#f0875c;--tag:#2c2a23;--pick:#5a4420;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15140f;--card:#1e1d18;--ink:#ece8df;--sub:#a29c90;--line:#34322a;--accent:#f0875c;--tag:#2c2a23;--pick:#5a4420;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,sans-serif}
-main{max-width:1000px;margin:0 auto;padding:24px 16px 80px}
-h1{font-size:28px;margin:0 0 6px}.lede{color:var(--sub);max-width:70ch}
+main{max-width:1000px;margin:0 auto;padding-block:24px 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:28px;margin:0 0 6px;text-wrap:balance}.lede{color:var(--sub);max-width:70ch}
 nav{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 8px}nav a{padding:4px 10px;border:1px solid var(--line);border-radius:99px;color:var(--ink);text-decoration:none;font-size:13px}
 section{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:20px 0;padding:16px}
 header{display:flex;gap:16px;align-items:flex-start}.band{font-size:26px;font-weight:700;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}.band small{font-size:12px;color:var(--sub)}
@@ -279,7 +280,8 @@ td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}.num{font-
 a{color:var(--accent)}.sub{color:var(--sub);font-size:12px}.tag{display:inline-block;background:var(--tag);border-radius:6px;padding:1px 6px;font-size:12px;margin:0 4px 2px 0;white-space:nowrap}.tag.pick{background:var(--pick)}
 .felt{font-size:11px;color:var(--sub);margin-left:3px}.lic{font-size:12px;white-space:nowrap}
 tr.reserve{opacity:.65}tr.sep td{color:var(--sub);font-size:12px;padding-top:14px}
-.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:center}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;gap:12px;align-items:center;justify-content:center}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button{font:inherit;padding:6px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
 @media (max-width:600px){header{flex-direction:column;gap:4px}}
 </style></head><body><main>
