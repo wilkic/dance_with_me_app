@@ -114,6 +114,8 @@ function track(u) {
     page: u.file_page_url,
     artistPage: u.artist_page_url,
     file: file.file_name,
+    // The real address: contest entries live under /contests/<contest>/<user>/, not /content/<user>/.
+    url: file.download_url,
     year: (u.upload_date_format || '').match(/\b(19|20)\d\d\b/)?.[0] || '',
   };
 }

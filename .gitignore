@@ -11,3 +11,4 @@ server/deploy/.env
 server/data/
 tools/music/.cache/
 tools/music/out/
+tools/music/audio/
