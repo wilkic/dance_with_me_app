@@ -1,0 +1,69 @@
+{
+  "story": "One pulse, many rooms. Each channel is a tempo, not a genre: whatever is playing, your body already knows the beat. A Bill Evans ballad and a dub plate can share 80 BPM; an acid line and a Bach allegro felt at double time can share 128; jungle and fast bluegrass picking both run at 170. We pick the tracks like a selector does, by feel, so you can drop in any time and just move.",
+
+  "licences": ["by", "sa", "zero"],
+  "licencesWithNc": ["by", "sa", "zero", "nc"],
+
+  "taste": {
+    "about": "Chris's taste, from his liked music (acid / 303, Charlotte de Witte and Amelie Lens techno, Portishead, Wu-Tang / Nas / Cypress Hill, Bob Marley and roots reggae, Bill Evans / Miles Davis / Takuya Kuroda jazz, Bach / Mozart / Schubert / Rachmaninoff / Philip Glass) and his club notes (UK garage tempo and acid house first; Introspekt's 128-175 BPM spread; live hardware sets; dub techno; no gabber or hardstyle). Weights 0-1 lift a track's score; avoided tags drop it.",
+    "weights": {
+      "acid": 1.0, "303": 1.0, "acid_house": 1.0, "tb303": 1.0,
+      "2_step": 1.0, "two_step": 1.0, "garage": 1.0, "uk_garage": 1.0,
+      "dubstep": 0.9, "dub": 0.9, "jungle": 0.9, "dnb": 0.9, "breaks": 0.8, "grime": 0.7, "footwork": 0.8, "juke": 0.8, "bass_music": 0.8,
+      "trip_hop": 0.9, "reggae": 0.9, "ska": 0.5,
+      "hip_hop": 0.8, "boom_bap": 1.0,
+      "jazz": 0.9, "swing": 0.7, "swing_jazz": 0.7, "big_band": 0.6, "bossa_nova": 0.7, "ragtime": 0.5,
+      "classical": 0.9, "orchestral": 0.6, "strings": 0.6, "piano": 0.5,
+      "bluegrass": 1.0, "banjo": 0.8, "fiddle": 0.8, "folk": 0.4, "country": 0.3, "blues": 0.5, "gospel": 0.4,
+      "techno": 0.7, "minimal": 0.8, "electro": 0.6, "house": 0.8, "deep_house": 0.9, "chicago": 0.9, "detroit": 0.9,
+      "disco": 0.7, "funk": 0.7, "soul": 0.6, "latin": 0.5,
+      "live": 0.3, "instrumental": 0.2, "editorial_pick": 0.5
+    },
+    "avoid": ["gabber", "hardstyle", "hardcore", "happy_hardcore", "nsfw", "christmas", "spoken_word", "a_capella", "acapella"]
+  },
+
+  "channels": [
+    {
+      "id": "morning-coffee",
+      "name": "Morning Coffee",
+      "bpm": [70, 92],
+      "story": "Slow pulse for the first move of the day: jazz piano, a string quartet, dub, trip-hop. Bill Evans and Portishead in the same room, at the same heartbeat.",
+      "genres": ["jazz", "classical", "strings", "piano", "dub", "reggae", "trip_hop", "bossa_nova", "soul"]
+    },
+    {
+      "id": "boom-bap-yard",
+      "name": "Boom Bap Yard",
+      "bpm": [84, 100],
+      "story": "Head-nod tempo. Golden-era hip hop, roots reggae and funk share a swing, and jungle sits here too at half time.",
+      "genres": ["hip_hop", "boom_bap", "reggae", "ska", "funk", "dub", "jungle", "dnb", "soul"]
+    },
+    {
+      "id": "kiosk-afternoon",
+      "name": "Kiosk Afternoon",
+      "bpm": [108, 124],
+      "story": "A daytime floor by the water: deep house, disco, latin and swing. Easy to step into, hard to leave.",
+      "genres": ["house", "deep_house", "disco", "funk", "latin", "swing", "swing_jazz", "minimal", "chicago", "bluegrass"]
+    },
+    {
+      "id": "acid-axis",
+      "name": "Acid Axis",
+      "bpm": [124, 134],
+      "story": "The 303 tempo. Acid, techno and electro, with an orchestral piece or a fast baroque line felt at double time slipping in between.",
+      "genres": ["acid", "303", "acid_house", "techno", "electro", "minimal", "detroit", "classical", "orchestral", "big_band"]
+    },
+    {
+      "id": "two-step",
+      "name": "Two-Step & Strings",
+      "bpm": [132, 142],
+      "story": "Garage swing, breaks and half-step dubstep, and bluegrass fiddle tunes at the same canter.",
+      "genres": ["2_step", "garage", "breaks", "grime", "dubstep", "bluegrass", "banjo", "fiddle", "ragtime", "swing"]
+    },
+    {
+      "id": "pressure",
+      "name": "Pressure",
+      "bpm": [160, 178],
+      "story": "Introspekt's top end: jungle, drum & bass and footwork, next to banjo breakdowns and bebop-fast swing.",
+      "genres": ["jungle", "dnb", "footwork", "juke", "bluegrass", "banjo", "fiddle", "big_band", "swing", "jazz"]
+    }
+  ]
+}

@@ -9,3 +9,5 @@ server/recordings_web/
 server/library/
 server/deploy/.env
 server/data/
+tools/music/.cache/
+tools/music/out/
