@@ -13,3 +13,4 @@ tools/music/.cache/
 tools/music/out/
 tools/music/audio/
 tools/music/opus/
+server/music/

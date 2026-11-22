@@ -41,6 +41,8 @@ export default defineConfig({
       '/ws': { target: 'ws://localhost:8901', ws: true },
       // OBS streaming (WHIP) lands on the same dance server.
       '/whip': { target: 'http://localhost:8901' },
+      // Music channels: the files and the credits page, from the same server.
+      '/music': { target: 'http://localhost:8901' },
     },
   },
 });

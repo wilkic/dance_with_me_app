@@ -16,6 +16,19 @@ export function whipUrl(serverUrl) {
   } catch { return null; }
 }
 
+/** Where the music channels' files are, for a dance-server URL: wss://host/ws → https://host (+ /music/…). */
+export function httpBase(serverUrl) {
+  if (!serverUrl) return null;
+  try {
+    const u = new URL(serverUrl);
+    u.protocol = u.protocol === 'wss:' ? 'https:' : 'http:';
+    u.pathname = u.pathname.replace(/\/ws\/?$/, '').replace(/\/$/, '');
+    u.search = '';
+    u.hash = '';
+    return u.href.replace(/\/$/, '');
+  } catch { return null; }
+}
+
 export function resolveServerUrl(params = new URLSearchParams(location.search)) {
   const p = params.get('server');
   if (p === '0') return null;

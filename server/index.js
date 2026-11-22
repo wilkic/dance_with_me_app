@@ -34,6 +34,12 @@
  * messages carry music { label, live: true }, and 'rtc' offers come from
  * 'live:<room>'). The room's host can't play anything else meanwhile and
  * stopping from their phone ends the stream.
+ *
+ * Music channels (channels.js): standing rooms named after a channel id,
+ * always listed in 'rooms' (with channel: true, title, bpm), with no host.
+ * Their 'room' messages carry music { label, channel, bpm, src, start, sec,
+ * next, now }: the phones fetch src (GET /music/… on this port) and play it
+ * from (their clock lined up with now) - start. The room's tempo is bpm.
  *   → { type: 'music-stopped' }                   host: an admin stopped your room's music
  *   → { type: 'room-ended' }                      an admin closed your room (you're solo now)
  *   → { type: 'error', error, for }               e.g. for: 'book' — why it was refused
@@ -93,6 +99,7 @@ import { EnvelopeTempo } from './tempo.js';
 import { Schedule } from './schedule.js';
 import { Stats } from './stats.js';
 import { WhipIngest } from './whip.js';
+import { Channels } from './channels.js';
 import { normalizeRoomName } from '../src/net/roomNames.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -162,10 +169,13 @@ export function startServer({
   home = process.env.HOME_ROOM && process.env.HOME_KEY ? { room: process.env.HOME_ROOM, key: process.env.HOME_KEY } : null,
   // Approves DJ bookings; null = read or create server/data/admin-key.
   adminKey = null,
+  // Music channels (channels.js): a folder with channels.json and the music;
+  // MUSIC_DIR=0 (or a folder without channels.json) means no channels.
+  musicDir = process.env.MUSIC_DIR === '0' ? null : (process.env.MUSIC_DIR || join(HERE, 'music')),
   log = console.log,
 } = {}) {
   // One HTTP server: WebSocket upgrades for the app, plain HTTP for WHIP.
-  const http = createServer((req, res) => { if (!whip.handle(req, res)) { res.writeHead(404); res.end(); } });
+  const http = createServer((req, res) => { if (!whip.handle(req, res) && !channels.handle(req, res)) { res.writeHead(404); res.end(); } });
   const wss = new WebSocketServer({ server: http });
   http.listen(port);
   const sessions = new Map(); // id -> session (see connection handler)
@@ -188,6 +198,7 @@ export function startServer({
   const lib = library === false ? null : (library ?? new Library({ log }).load());
   const now = () => performance.now();
   const homeRoom = home?.key ? normalizeRoomName(home.room) : null;
+  const channels = new Channels(musicDir ?? '', { log });
 
   const send = (s, msg) => {
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(msg));
@@ -206,6 +217,8 @@ export function startServer({
    */
   const roomMusicBeat = (name) => {
     if (!name || !musicOf(name)) return null;
+    // A channel knows its tempo: the track's BPM, no need to listen.
+    if (channels.has(name)) return { bpm: musicOf(name).bpm, confidence: 1 };
     let best = null;
     for (const m of rooms.members(name)) {
       const st = heard(m);
@@ -230,12 +243,14 @@ export function startServer({
   const isHost = (s, name = s.room) => {
     if (!name || s.room !== name) return false;
     if (name === homeRoom) return false; // the home studio's music comes from OBS only
+    if (channels.has(name)) return false; // a channel plays by itself
     const dj = schedule.djToken(name);
     return dj ? s.bookingToken === dj : rooms.createdBy(s, name);
   };
   const hostOf = (name) => rooms.members(name).find((m) => isHost(m, name)) ?? null;
   const roomMusic = new Map(); // room name -> { label } while its host plays music
   const musicOf = (name) => {
+    if (channels.has(name)) return silenced.has(name) ? null : channels.music(name);
     const live = whip.liveIn(name);
     if (live) return live; // an OBS stream beats anything the host's phone plays
     const m = roomMusic.get(name);
@@ -258,7 +273,7 @@ export function startServer({
       const booked = schedule.roomForToken(key);
       if (booked) return silenced.has(booked) ? null : booked;
       // A room's creator — unless a booked DJ has the room right now.
-      for (const name of rooms.names) if (name !== homeRoom && rooms.hostKeys.get(name) === key) return silenced.has(name) || schedule.djToken(name) ? null : name;
+      for (const name of rooms.names) if (name !== homeRoom && !channels.has(name) && rooms.hostKeys.get(name) === key) return silenced.has(name) || schedule.djToken(name) ? null : name;
       return null;
     },
     send: (sid, msg) => { const s = sessions.get(sid); if (s) send(s, msg); },
@@ -277,13 +292,16 @@ export function startServer({
   // Lobby: every open room with how many are dancing and its tempo, so the
   // start screen can list rooms to join. Sent to everyone on connect, on
   // every scan, and immediately when any room's membership changes.
+  // Music channels are always listed, in their tempo order, open or not.
   const lobby = () => ({
     type: 'rooms',
-    rooms: rooms.names
-      .map((name) => {
-        return { name, dancers: rooms.members(name).length, bpm: roomBpm(name) };
-      })
-      .sort((a, b) => b.dancers - a.dancers || a.name.localeCompare(b.name)),
+    rooms: [
+      ...rooms.names
+        .filter((name) => !channels.has(name))
+        .map((name) => ({ name, dancers: rooms.members(name).length, bpm: roomBpm(name) }))
+        .sort((a, b) => b.dancers - a.dancers || a.name.localeCompare(b.name)),
+      ...channels.lobby().map((c) => ({ ...c, channel: true, dancers: rooms.members(c.name).length, bpm: silenced.has(c.name) ? 0 : c.bpm })),
+    ],
   });
   const broadcastLobby = () => {
     const msg = lobby();
