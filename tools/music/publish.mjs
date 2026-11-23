@@ -58,15 +58,15 @@ const total = (list) => list.reduce((a, t) => a + t.sec, 0);
 // All day it loops every downloaded track, one channel after another in
 // tempo order (so the pulse holds for a while); during the daily set it
 // plays the set: tracks from its pools by genre and tempo, from the top.
+// An `always` resident (the open room) has no daily set: all day, every day.
 const residents = conf.residents.list.map((r) => {
   const all = pools.flatMap((c) => c.tracks);
-  const set = mixOrder(all.filter((t) => r.from.includes(t.ch) && r.genres.includes(t.genre) && t.felt >= r.bpm[0] && t.felt <= r.bpm[1]), r.id);
+  const set = r.always ? [] : mixOrder(all.filter((t) => r.from.includes(t.ch) && r.genres.includes(t.genre) && t.felt >= r.bpm[0] && t.felt <= r.bpm[1]), r.id);
   return {
     id: r.id,
     name: r.dj,
     story: r.setInfo,
-    bpm: r.bpm,
-    daily: r.daily,
+    ...(r.always ? { always: true } : { bpm: r.bpm, daily: r.daily }),
     setInfo: r.setInfo,
     bio: r.bio,
     seconds: total(all),
@@ -103,7 +103,7 @@ h1{font-size:24px;margin:0 0 8px}h2{font-size:18px;margin:28px 0 4px}h2 span{col
 section{border-top:1px solid var(--line)}
 </style></head><body><main>
 <h1>Music credits</h1>
-<p class="sub">The resident DJ rooms in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. They play every track below, a channel at a time, and their daily sets pick from them. Thank you to every artist. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
+<p class="sub">The resident DJ rooms in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. Free Mixter Mix All Day Long is the open room: it plays every track below, a channel at a time, day and night, and new tracks keep joining it. Other residents' daily sets pick from the same list. Thank you to every artist. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
 ${residentNote}${sections}
 </main></body></html>
 `);

@@ -197,7 +197,7 @@ function renderJoinPicker() {
  */
 function roomText(r, now = Date.now()) {
   const bpm = r.bpm > 0 ? ` · ${Math.round(r.bpm)} BPM` : '';
-  const dj = bookings.some((b) => b.room === r.name && joinable(b, now)) ? ' · DJ set' : '';
+  const dj = bookings.some((b) => b.room === r.name && !b.always && joinable(b, now)) ? ' · DJ set' : '';
   const who = r.channel && !r.dancers ? '' : ` · ${r.dancers} dancing`;
   return `${r.name}${who}${bpm}${dj}`;
 }
@@ -232,7 +232,7 @@ function renderUpcoming() {
     const sum = el('summary');
     const head = el('div', 'set-head');
     const dj = el('div', 'set-dj', b.dj);
-    if (p === 'live') dj.append(el('span', 'set-badge', 'LIVE'));
+    if (p === 'live' && !b.always) dj.append(el('span', 'set-badge', 'LIVE'));
     const when = el('div', 'set-when', `${whenText(b)} · `);
     when.append(el('span', 'set-room', `⌂ ${b.room}`));
     head.append(dj, when);

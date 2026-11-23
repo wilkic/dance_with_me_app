@@ -23,8 +23,15 @@
   },
 
   "residents": {
-    "about": "What the dance server plays: rooms held by a resident DJ, always playing, with a daily set on the schedule. publish.mjs builds only these; the channels below are the pools the tracks come from (ccmixter-shortlist.mjs).",
+    "about": "What the dance server plays: rooms held by a resident DJ, always playing. The first, Free Mixter Mix All Day Long, is the open room: every track we have, all day, no set times (always: true); it stays. Others (Wilkins-Mix) have a daily set on the schedule and may come and go. publish.mjs builds only these; the channels below are the pools the tracks come from (ccmixter-shortlist.mjs).",
     "list": [
+      {
+        "id": "free-mixter-all-day",
+        "dj": "Free Mixter Mix All Day Long",
+        "always": true,
+        "setInfo": "The open room, always on. Everything freely available that we've gathered from ccMixter (Creative Commons music, free to share), mixed one tempo at a time: slow jazz and dub, boom bap, house, acid, two-step, jungle. Drop in any time, day or night, and move. New music keeps going into the mix to keep it fresh.",
+        "bio": "The first resident selector of Dance With Me, and the one that stays. Other residents may come and go with their own daily sets; this room is always open and always playing. Music credits are in the room menu."
+      },
       {
         "id": "wilkins-mix",
         "dj": "Wilkins-Mix",

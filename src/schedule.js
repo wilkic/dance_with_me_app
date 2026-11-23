@@ -189,7 +189,7 @@ function item(b, { status = false, details = false, actions = [] } = {}) {
   const p = phase(b);
   const li = el('li', `set ${b.status === 'approved' ? p : ''}`);
   const head = el('div');
-  head.append(el('b', '', b.dj), el('span', 'when', `${p === 'live' && b.status === 'approved' ? 'LIVE · ' : ''}${whenText(b)} · ⌂ ${b.room}`));
+  head.append(el('b', '', b.dj), el('span', 'when', `${p === 'live' && b.status === 'approved' && !b.always ? 'LIVE · ' : ''}${whenText(b)} · ⌂ ${b.room}`));
   li.append(head);
   if (status) li.append(el('span', `status-pill ${b.status}`, STATUS[b.status] ?? b.status));
   if (details) {

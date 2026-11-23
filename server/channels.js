@@ -20,6 +20,8 @@ import { readFileSync, statSync, createReadStream, existsSync } from 'node:fs';
 import { join, normalize, extname, sep } from 'node:path';
 
 const EPOCH = Date.UTC(2026, 0, 1);
+/** An always-on resident's entry on the schedule runs from EPOCH for a century. */
+const ALWAYS_MINUTES = 100 * 365 * 24 * 60;
 const TYPES = { '.opus': 'audio/ogg', '.ogg': 'audio/ogg', '.html': 'text/html; charset=utf-8', '.json': 'application/json' };
 
 export class Channels {
@@ -99,11 +101,20 @@ export class Channels {
    * minutes, tz }) gets an approved booking every day, made here rather
    * than at /schedule. The room plays the whole day; the set is the time
    * it's on the schedule. → the next `count` sets that haven't ended,
-   * shaped like a booking (src/net/schedule.js), soonest first.
+   * shaped like a booking (src/net/schedule.js), soonest first. An
+   * `always` resident (the open room) has one entry, on all the time.
    */
   residentSets(now = Date.now(), count = 2) {
     const out = [];
     for (const c of this.list) {
+      if (c.always) { // the open room: listed once, on all the time
+        out.push({
+          id: `${c.id}-always`, status: 'approved', resident: true, always: true,
+          dj: c.name, room: c.id, start: EPOCH, minutes: ALWAYS_MINUTES,
+          setInfo: c.setInfo ?? c.story ?? '', bio: c.bio ?? '', link: '', booth: false,
+        });
+        continue;
+      }
       const d = c.daily;
       const sets = [];
       for (const { start, date } of slots(d, now, count + 2)) {
