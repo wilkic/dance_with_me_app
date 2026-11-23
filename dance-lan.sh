@@ -211,6 +211,7 @@ echo "  DJ booking:  ${URL}schedule/"
 # The server makes its admin key on first start (server/data/admin-key).
 for _ in $(seq 1 20); do [ -s server/data/admin-key ] && break; sleep 0.25; done
 [ -s server/data/admin-key ] && echo "  Approve bookings (local admin link):  ${URL}schedule/#admin=$(cat server/data/admin-key)"
+[ -s server/data/invite-key ] && echo "  Private resident rooms (invite link):  ${URL}#invite=$(cat server/data/invite-key)"
 echo
 echo "  logs: $LOGDIR/server.log  $LOGDIR/vite.log      Ctrl+C stops everything"
 echo "------------------------------------------------------------------------"

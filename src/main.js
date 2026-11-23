@@ -12,6 +12,7 @@ import {
   DelayedLoopbackTransport,
 } from './net/poseChannel.js';
 import { randomRoomName, normalizeRoomName } from './net/roomNames.js';
+import { inviteMsg, forgetInvite, onInviteLink } from './net/invite.js';
 import { resolveServerUrl, whipUrl, httpBase } from './net/serverUrl.js';
 import { KP, STRIDE } from './pose/poseFormat.js';
 import { Metronome } from './audio/metronome.js';
@@ -73,9 +74,12 @@ const metronome = clickBpm > 0 ? new Metronome(clickBpm) : null;
 
 if (serverLink) {
   let visitSent = false;
+  onInviteLink((m) => serverLink.sendJSON(m));
   serverLink.onOpen = () => {
     if (!visitSent) { serverLink.sendJSON(visitMsg('app')); visitSent = true; } // daily totals, once per page load
     // Every (re)connect: resend session state.
+    const invite = inviteMsg(); // the private resident rooms (net/invite.js)
+    if (invite) serverLink.sendJSON(invite);
     if (clickBpm > 0) serverLink.sendJSON({ type: 'label', clickBpm });
     lastWants = '';
     planGuests();
@@ -441,6 +445,8 @@ function onServerMessage(msg) {
   } else if (msg.type === 'room-ended') {
     leaveRoom();
     notice('This room was closed by the moderator. You’re dancing on your own now.');
+  } else if (msg.type === 'error' && msg.for === 'invite') {
+    forgetInvite();
   } else if (msg.type === 'error' && msg.for === 'join') {
     leaveRoom();
     notice(msg.error);

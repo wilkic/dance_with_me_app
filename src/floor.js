@@ -18,6 +18,7 @@ import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl } from './net/serverUrl.js';
 import { deserializePoseFrame } from './pose/poseFormat.js';
 import { normalizeRoomName } from './net/roomNames.js';
+import { inviteMsg } from './net/invite.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -57,7 +58,11 @@ if (!serverUrl) {
   $('status').textContent = 'no dance server configured';
 } else {
   const link = new WebSocketTransport(serverUrl);
-  link.onOpen = () => link.sendJSON({ type: 'watch' });
+  link.onOpen = () => {
+    const invite = inviteMsg(); // private rooms on the floor too
+    if (invite) link.sendJSON(invite);
+    link.sendJSON({ type: 'watch' });
+  };
   link.onStatus = (state) => {
     const el = $('status');
     el.className = `status ${state}`;

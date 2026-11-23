@@ -5,6 +5,7 @@
 #   server/deploy/deploy.sh pull    # fetch sessions recorded on the VM (only if RECORD_DIR is set there)
 #   server/deploy/deploy.sh logs    # follow the server log
 #   server/deploy/deploy.sh admin   # print the link that approves DJ bookings (secret!)
+#   server/deploy/deploy.sh invite  # print the invite link to the private resident rooms (share with care)
 #   server/deploy/deploy.sh stats   # daily visit totals, last 14 days
 #   server/deploy/deploy.sh music   # music channels: tools/music/opus → the VM (issue #34), restart
 # OBS streaming (server/whip.js) needs UDP $WHIP_PORTS open in Oracle's
@@ -100,6 +101,12 @@ case "${1:-deploy}" in
     echo "Approve DJ bookings at (keep this link private):"
     echo "  https://${DANCE_SITE:-dance.wilkinscoffee.be}/schedule/#admin=$KEY"
     ;;
+  invite)
+    # The key is made by the server on first start (server/data/invite-key).
+    KEY=$(ssh "$DANCE_HOST" "cat $APP/server/data/invite-key") || { echo "no invite key yet — deploy and start the server first" >&2; exit 1; }
+    echo "The private resident rooms (Free Mixter Mix, Wilkins-Mix) at:"
+    echo "  https://${DANCE_SITE:-dance.wilkinscoffee.be}/#invite=$KEY"
+    ;;
   stats)
     ssh "$DANCE_HOST" "cd $APP/server && node -e \"
       import('./stats.js').then(({ Stats }) => {
@@ -113,5 +120,5 @@ case "${1:-deploy}" in
   logs)
     ssh -t "$DANCE_HOST" "journalctl -u dance -f -n 50"
     ;;
-  *) echo "usage: $0 [setup|deploy|music|pull|logs|admin|stats]" >&2; exit 2 ;;
+  *) echo "usage: $0 [setup|deploy|music|pull|logs|admin|invite|stats]" >&2; exit 2 ;;
 esac

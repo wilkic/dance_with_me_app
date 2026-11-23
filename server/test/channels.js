@@ -107,11 +107,21 @@ await test('a resident plays its set during the slot, from the top; all its trac
   assert.equal(ch.at('slow', slot).set, false); // no daily slot: never a set
 });
 
-const server = startServer({ port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, statsFile: null, keysDir: null, adminKey: 'k', musicDir: dir, log: () => {} });
+const server = startServer({ port: 0, scanIntervalMs: 60_000, library: false, recordDir: null, scheduleFile: null, statsFile: null, keysDir: null, adminKey: 'k', inviteKey: 'inv', musicDir: dir, log: () => {} });
 await new Promise((r) => server.wss.on('listening', r));
 const base = `http://127.0.0.1:${server.port}`;
 
-const connect = () => new Promise((resolve) => {
+// A phone that came with the invite link (the residents' rooms are private),
+// with what it got before the invite cleared; or an uninvited one.
+const connect = async (invite = true) => {
+  const c = await open();
+  if (!invite) return c;
+  await next(c, (m) => m.type === 'schedule'); // the uninvited lists, sent on connect
+  c.inbox.length = 0;
+  sendTo(c, { type: 'invite', key: 'inv' });
+  return c;
+};
+const open = () => new Promise((resolve) => {
   const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
   const c = { ws, inbox: [], waiters: [] };
   ws.on('message', (d) => {
@@ -130,6 +140,24 @@ const next = async (c, pred, ms = 2000) => {
   }
 };
 const sendTo = (c, msg) => c.ws.send(JSON.stringify(msg));
+
+await test('without the invite: no private rooms in the lobby or schedule, joining one is refused; a wrong key is told so', async () => {
+  const a = await connect(false);
+  const lobby = await next(a, (m) => m.type === 'rooms');
+  const sched = await next(a, (m) => m.type === 'schedule');
+  assert.equal(lobby.rooms.filter((r) => r.channel).length, 0);
+  assert.equal(sched.bookings.filter((b) => b.resident).length, 0);
+  sendTo(a, { type: 'join', room: 'fast' });
+  assert.match((await next(a, (m) => m.type === 'error' && m.for === 'join')).error, /private/);
+  sendTo(a, { type: 'join', room: 'acid' }); // a set-only resident, outside its set or not
+  assert.match((await next(a, (m) => m.type === 'error' && m.for === 'join')).error, /private/);
+  sendTo(a, { type: 'invite', key: 'nope' });
+  assert.equal((await next(a, (m) => m.type === 'error')).for, 'invite');
+  sendTo(a, { type: 'invite', key: 'inv' });
+  const after = await next(a, (m) => m.type === 'rooms');
+  assert.ok(after.rooms.some((r) => r.name === 'slow' && r.channel));
+  a.ws.close();
+});
 
 await test('the lobby lists every channel, even with nobody in it', async () => {
   const a = await connect();
