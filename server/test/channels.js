@@ -34,6 +34,9 @@ writeFileSync(join(dir, 'channels.json'), JSON.stringify({
       set: { tracks: [{ file: 'slow/a.opus', sec: 1000, bpm: 126 }, { file: 'slow/b.opus', sec: 3000, bpm: 130 }] } },
     { id: 'acid', name: 'Acid Only', setOnly: true, seconds: 60, tracks: [{ file: 'fast/c.opus', sec: 60, bpm: 128 }],
       daily: { at: '10:00', minutes: 120, tz: 'Europe/Brussels' }, set: { tracks: [{ file: 'fast/c.opus', sec: 60, bpm: 128 }] } },
+    { id: 'long', name: 'Long Set', setOnly: true, seconds: 60, tracks: [{ file: 'fast/c.opus', sec: 60, bpm: 128 }],
+      daily: { at: '10:00', minutes: 60, tz: 'Europe/Brussels' },
+      set: { tracks: ['a', 'b', 'c', 'd', 'e', 'f'].map((x) => ({ file: `slow/${x}.opus`, sec: 1800, bpm: 125 })) } },
   ],
 }));
 
@@ -76,6 +79,16 @@ await test('a set-only resident is a music room during its set only; an ordinary
   assert.equal(ch.has('fast', slot - 1000), true); // a resident without setOnly plays all day
   assert.ok(!ch.lobby(slot - 1000).some((c) => c.name === 'acid'));
   assert.ok(ch.lobby(slot).some((c) => c.name === 'acid'));
+});
+
+await test('a set longer than its slot carries on the next day where it stopped', () => {
+  const ch = new Channels(dir);
+  const d1 = Date.parse('2026-11-23T09:00:00Z'); // 10:00 Brussels; 1 h slot = 2 of 6 half-hour tracks
+  const day = (t) => [ch.at('long', t).track.file, ch.at('long', t + 30 * 60_000).track.file];
+  const a = day(d1), b = day(d1 + 86_400_000), c = day(d1 + 2 * 86_400_000), d = day(d1 + 3 * 86_400_000);
+  assert.equal(ch.at('long', d1).start, d1); // starts on a whole track
+  assert.equal(new Set([...a, ...b, ...c]).size, 6); // three days play all six
+  assert.deepEqual(d, a); // then round again
 });
 
 await test('a resident plays its set during the slot, from the top; all its tracks the rest of the day', () => {
@@ -121,7 +134,7 @@ const sendTo = (c, msg) => c.ws.send(JSON.stringify(msg));
 await test('the lobby lists every channel, even with nobody in it', async () => {
   const a = await connect();
   const lobby = await next(a, (m) => m.type === 'rooms');
-  const chans = lobby.rooms.filter((r) => r.channel && r.name !== 'acid'); // acid: only 10:00-12:00
+  const chans = lobby.rooms.filter((r) => r.channel && !['acid', 'long'].includes(r.name)); // set-only rooms
   assert.deepEqual(chans.map((r) => [r.name, r.title, r.dancers]), [['slow', 'Slow One', 0], ['fast', 'Fast One', 0]]);
   assert.ok(chans[0].bpm === 80 || chans[0].bpm === 88);
   a.ws.close();

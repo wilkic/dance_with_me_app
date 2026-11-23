@@ -11,7 +11,8 @@
  * A channel never stops and never starts: what plays is worked out from the
  * clock (the playlist loops from EPOCH), so everyone who joins hears the
  * same moment of the same track. A resident with a daily slot plays its
- * set during the slot instead, from the set's first track at the start
+ * set during the slot instead, from the start of a track (the first, or
+ * where yesterday's slot stopped when the set is longer than the slot)
  * (cut off at the end; phones switch with the next 'room' message). A
  * `setOnly` resident plays only during its set; outside it, its name is an
  * ordinary room (anyone can open it and host). Nothing runs while nobody listens: the
@@ -62,7 +63,7 @@ export class Channels {
     const c = this.byId.get(id);
     if (!c) return null;
     const slot = c.setMs ? this.slotAt(c, t) : null;
-    const [tracks, ms, from] = slot != null ? [c.set.tracks, c.setMs, slot] : [c.tracks, c.ms, EPOCH];
+    const [tracks, ms, from] = slot != null ? [this.setFor(c, slot), c.setMs, slot] : [c.tracks, c.ms, EPOCH];
     let start = t - ((t - from) % ms + ms) % ms;
     for (let i = 0; ; i++) {
       const track = tracks[i % tracks.length];
@@ -70,6 +71,22 @@ export class Channels {
       if (end > t) return { track, start, end, next: tracks[(i + 1) % tracks.length], set: slot != null };
       start = end;
     }
+  }
+
+  /**
+   * The set's tracks for the slot that starts at `slot`. A set longer than
+   * its slot carries on each day where the day before stopped (whole
+   * tracks: about a slot's worth further on), so every track comes round;
+   * a shorter one plays from the top.
+   */
+  setFor(c, slot) {
+    const list = c.set.tracks;
+    const slotMs = c.daily.minutes * 60_000;
+    if (c.setMs <= slotMs) return list;
+    const step = Math.max(1, Math.round(slotMs / (c.setMs / list.length)));
+    const day = Math.floor((slot - EPOCH) / 86_400_000);
+    const i = ((day * step) % list.length + list.length) % list.length;
+    return [...list.slice(i), ...list.slice(0, i)];
   }
 
   /** When channel c's daily set that's on at time t started (ms), or null. */
