@@ -1,5 +1,6 @@
 /**
  * DJ schedule: rooms booked in advance. A booking is a DJ's set at a time;
+ * resident DJs (server/channels.js) get one every day, marked resident/daily;
  * its room is the DJ name, normalized like any room name, so "DJ Funk"
  * plays in `dj-funk`. Shared by the server (validation, storage) and the
  * pages (the /schedule form, Upcoming rooms on the start screen).
@@ -57,13 +58,28 @@ export function phase(b, now = Date.now()) {
 export const joinable = (b, now) => ['open', 'live'].includes(phase(b, now));
 export const overlaps = (a, b) => a.start < endOf(b) && b.start < endOf(a);
 
-/** "Sat 18 Oct, 21:00–22:30" in the viewer's own time zone. */
+/** "Sat 18 Oct, 21:00–22:30" (a resident's daily set: "Daily, 10:00–12:00"; a 24-hour one: "Daily, all day long") in the viewer's own time zone. */
 export function whenText(b, locale = undefined) {
+  if (b.daily && b.minutes >= 24 * 60) return 'Daily, all day long';
   const s = new Date(b.start);
   const e = new Date(endOf(b));
-  const day = s.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
+  const day = b.daily ? 'Daily' : s.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
   const t = (d) => d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   return `${day}, ${t(s)}–${t(e)}`;
+}
+
+/**
+ * The sets to list: the server sends a resident DJ's next two days (so the
+ * list stays right when today's set ends); show only the first not over.
+ */
+export function listed(bookings, now = Date.now()) {
+  const seen = new Set();
+  return bookings.filter((b) => {
+    if (!b.resident) return true;
+    if (phase(b, now) === 'over' || seen.has(b.room)) return false;
+    seen.add(b.room);
+    return true;
+  });
 }
 
 /**

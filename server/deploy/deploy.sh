@@ -6,6 +6,7 @@
 #   server/deploy/deploy.sh logs    # follow the server log
 #   server/deploy/deploy.sh admin   # print the link that approves DJ bookings (secret!)
 #   server/deploy/deploy.sh stats   # daily visit totals, last 14 days
+#   server/deploy/deploy.sh music   # music channels: tools/music/opus → the VM (issue #34), restart
 # OBS streaming (server/whip.js) needs UDP $WHIP_PORTS open in Oracle's
 # security list too (console; see doc/overview.html "Run it").
 # Settings (env or server/deploy/.env): DANCE_HOST (ssh target, e.g.
@@ -34,6 +35,7 @@ PUBLIC_IP=${DANCE_PUBLIC_IP:-${DANCE_HOST#*@}}
 CADDYFILE="$DANCE_DOMAIN {
 	reverse_proxy /ws* 127.0.0.1:8901
 	reverse_proxy /whip* 127.0.0.1:8901
+	reverse_proxy /music/* 127.0.0.1:8901
 	respond / \"dance server\" 200
 }"
 # Firewall + service environment for OBS streaming, idempotent.
@@ -60,7 +62,7 @@ case "${1:-deploy}" in
     # The server imports shared modules from src/, so both go up.
     git -C "$ROOT" archive "$REF" server src | tar -x -C "$TMP"
     rsync -az --delete --exclude node_modules --exclude lab/out \
-      --exclude recordings --exclude recordings_web --exclude library --exclude data \
+      --exclude recordings --exclude recordings_web --exclude library --exclude data --exclude music \
       "$TMP/server" "$TMP/src" "$DANCE_HOST:$APP/"
     echo "== dance library (add-only: sessions recorded on the VM are kept)"
     for d in recordings recordings_web library; do
@@ -75,6 +77,19 @@ case "${1:-deploy}" in
     echo "== check: https://$DANCE_DOMAIN/"
     curl -fsS --max-time 10 "https://$DANCE_DOMAIN/" && echo
     echo "== check: WHIP endpoint (a wrong key must get 401): $(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Authorization: Bearer nope' "https://$DANCE_DOMAIN/whip")"
+    ;;
+  music)
+    # The channels' Opus files, channels.json and credits.html (made by
+    # tools/music/to-opus.sh and publish.mjs; not in git, ~450 MB). Files
+    # gone from the folder go from the VM too. The server reads channels.json
+    # at start, so it restarts.
+    SRC="$ROOT/tools/music/opus"
+    [ -f "$SRC/channels.json" ] || { echo "no $SRC/channels.json: run tools/music/publish.mjs first" >&2; exit 1; }
+    echo "== music ($(du -sh "$SRC" | cut -f1))"
+    rsync -az --delete --info=stats1 --exclude manifest.json "$SRC/" "$DANCE_HOST:$APP/server/music/"
+    ssh "$DANCE_HOST" "CADDYFILE='$CADDYFILE'; $WHIP_SETUP"
+    ssh "$DANCE_HOST" "sudo systemctl restart dance && sleep 2 && systemctl is-active dance"
+    echo "== check: credits page $(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DANCE_DOMAIN/music/credits.html")"
     ;;
   pull)
     rsync -az "$DANCE_HOST:$APP/server/library/sessions/" "$ROOT/server/library/sessions/"
@@ -98,5 +113,5 @@ case "${1:-deploy}" in
   logs)
     ssh -t "$DANCE_HOST" "journalctl -u dance -f -n 50"
     ;;
-  *) echo "usage: $0 [setup|deploy|pull|logs|admin|stats]" >&2; exit 2 ;;
+  *) echo "usage: $0 [setup|deploy|music|pull|logs|admin|stats]" >&2; exit 2 ;;
 esac

@@ -19,6 +19,12 @@
  * host, and each member hearing it — also when the server itself streams
  * a DJ's OBS mix) sends its beat as numbers: 'music' messages with
  * from: 'room' (see audio/onsetEnvelope.js). Never the sound.
+ *
+ * Music channels (server/channels.js) have no host: the server says which
+ * file plays and since when, and each phone in the room fetches it from
+ * the dance server and plays it from that moment, so everyone hears the
+ * same part of the same track. Their tempo is known, so nothing is
+ * measured. Nothing plays, and nothing is fetched, outside the room.
  */
 import { OnsetEnvelope } from '../audio/onsetEnvelope.js';
 
@@ -67,6 +73,7 @@ export class RoomMusic {
     this.listen = null;   // listening: { from, pc, queue, audio }
     this.hostId = null;   // who hosts my room (null: nobody / me)
     this.beat = null;     // OnsetEnvelope on whatever this phone plays to or hears from the room
+    this.chan = null;     // a music channel: { audio, src, needsTap, skew }
   }
 
   /** Measure the beat of the room's music as this phone plays it (null: stop). */
@@ -79,8 +86,8 @@ export class RoomMusic {
     return {
       hosting: !!this.host,
       label: this.host?.label ?? null,
-      hearing: !!this.listen?.audio?.srcObject,
-      needsTap: !!this.listen?.needsTap,
+      hearing: !!this.listen?.audio?.srcObject || !!this.chan,
+      needsTap: !!this.listen?.needsTap || !!this.chan?.needsTap,
     };
   }
   #emit(extra = {}) { this.onState({ ...this.state, ...extra }); }
@@ -301,12 +308,14 @@ export class RoomMusic {
    * Happens when the room was joined without one (the /?room= link).
    */
   get stalled() {
+    if (this.chan) return this.chan.needsTap;
     const l = this.listen;
     return !!l && (l.needsTap || l.audio.paused || (!!this.beat && this.beat.ctx.state !== 'running'));
   }
 
   /** Autoplay was blocked: call from a tap to start hearing. */
   tapToHear() {
+    if (this.chan) return this.#chanPlay(this.chan);
     const l = this.listen;
     if (!l) return;
     this.beat?.resume();
@@ -324,10 +333,80 @@ export class RoomMusic {
     this.#emit();
   }
 
+  // ------------------------------------------------------------ channel --
+
+  /**
+   * The room is a music channel: m is the 'room' message's music ({ src,
+   * start, sec, next, now }, see server/channels.js), base the dance
+   * server's https address. null: not (or no longer) a channel.
+   * Called with every 'room' message; only acts on a new track, or when
+   * this phone has drifted more than a couple of seconds from the clock.
+   */
+  channel(m, base) {
+    if (!m?.channel || !base) return this.#chanStop();
+    const skew = m.now - Date.now(); // server clock minus mine (ignores the trip, ~0.1 s)
+    const c = this.chan;
+    if (c && c.src === m.src) {
+      c.skew = skew;
+      c.start = m.start;
+      const want = (Date.now() + skew - m.start) / 1000;
+      if (!c.needsTap && !c.audio.paused && !c.audio.seeking && Math.abs(c.audio.currentTime - want) > 1) c.audio.currentTime = want + 0.2;
+      return;
+    }
+    this.#chanStop();
+    const audio = new Audio();
+    audio.crossOrigin = 'anonymous';
+    audio.playsInline = true;
+    audio.preload = 'auto';
+    const chan = (this.chan = { audio, src: m.src, start: m.start, next: m.next, skew, needsTap: false, base, fixes: 0 });
+    // A seek lands late (the data at the new spot still has to load): once
+    // the sound is going, check again and catch up, a few times at most.
+    audio.addEventListener('playing', () => {
+      if (this.chan !== chan || chan.fixes >= 3) return;
+      const off = (Date.now() + chan.skew - chan.start) / 1000 - audio.currentTime;
+      if (Math.abs(off) > 0.25) { chan.fixes++; audio.currentTime += off + 0.15; }
+    });
+    // The track ended before the server's next word: go on with the next one.
+    audio.addEventListener('ended', () => {
+      if (this.chan !== chan || !chan.next) return;
+      chan.src = chan.next;
+      chan.start = Date.now() + chan.skew;
+      chan.next = null;
+      chan.fixes = 0;
+      audio.src = base + chan.src;
+      this.#chanPlay(chan);
+    });
+    audio.src = base + m.src;
+    this.#chanPlay(chan);
+    this.#emit();
+  }
+
+  #chanPlay(chan) {
+    const a = chan.audio;
+    const seek = () => {
+      const at = (Date.now() + chan.skew - chan.start) / 1000;
+      if (at > 0.5 && (!Number.isFinite(a.duration) || at < a.duration - 1)) a.currentTime = at;
+    };
+    if (a.readyState >= 1) seek(); else a.addEventListener('loadedmetadata', seek, { once: true });
+    a.play().then(() => { chan.needsTap = false; seek(); this.#emit(); })
+      .catch(() => { if (this.chan === chan) { chan.needsTap = true; this.#emit(); } });
+  }
+
+  #chanStop() {
+    const c = this.chan;
+    if (!c) return;
+    this.chan = null;
+    c.audio.pause();
+    c.audio.removeAttribute('src');
+    c.audio.load(); // drop the download too: nothing is fetched outside the room
+    this.#emit();
+  }
+
   /** Leaving the room: stop hosting and listening. */
   reset() {
     this.stop();
     this.#hangUp();
+    this.#chanStop();
     this.hostId = null;
   }
 }

@@ -13,7 +13,7 @@
 import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl, whipUrl } from './net/serverUrl.js';
 import { normalizeRoomName } from './net/roomNames.js';
-import { LENGTHS, phase, whenText, FINE_PRINT, visitMsg } from './net/schedule.js';
+import { LENGTHS, phase, whenText, listed, FINE_PRINT, visitMsg } from './net/schedule.js';
 
 const $ = (id) => document.getElementById(id);
 const TOKENS_KEY = 'dwm.bookings'; // { [bookingId]: token }
@@ -238,7 +238,7 @@ function render() {
       }),
     ],
   })));
-  const all = bookings.map((b) => item(b));
+  const all = listed(bookings).map((b) => item(b));
   if (!all.length) all.push(el('li', 'none', 'Nothing on the schedule yet — be the first.'));
   $('all-list').replaceChildren(...all);
 }
