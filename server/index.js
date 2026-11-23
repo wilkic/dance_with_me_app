@@ -61,6 +61,9 @@
  *   ← { type: 'cancel', id, token }               cancel one of your bookings
  *   ← { type: 'mine', tokens }                    follow your own bookings ({ id: token })
  *   ← { type: 'admin', key }                      sign in to approve bookings
+ *   ← { type: 'invite', key }                     the invite link's key: see and join the private
+ *                                                 resident rooms (otherwise hidden from rooms,
+ *                                                 schedule and floor; joining them is refused)
  *   ← { type: 'approve' | 'reject', id }          admin: decide on a request
  *   ← { type: 'visit', page, ref, phone }         a page was opened (counted, nothing kept about who)
  *   ← { type: 'stats' }                           admin: send the visit totals again
@@ -117,20 +120,21 @@ const HEARTBEAT_MS = 15_000;  // ping every connection; one that misses a whole 
 const QUIET_MS = 3000;        // a rejoining tab replaces its old connection if that one went quiet
 
 /**
- * The key that approves DJ bookings: ADMIN_KEY, else server/data/admin-key,
- * created on first start (deploy.sh leaves data/ alone; `deploy.sh admin`
- * prints the admin link).
+ * A secret kept in server/data/, created on first start (deploy.sh leaves
+ * data/ alone): the admin key that approves DJ bookings (ADMIN_KEY,
+ * `deploy.sh admin` prints the link) and the invite key that shows the
+ * private resident rooms (INVITE_KEY, `deploy.sh invite`).
  */
-function loadAdminKey(file, log) {
-  if (process.env.ADMIN_KEY) return process.env.ADMIN_KEY;
+function loadAdminKey(file, log, env = 'ADMIN_KEY') {
+  if (process.env[env]) return process.env[env];
   try { return readFileSync(file, 'utf8').trim(); } catch { /* first start */ }
   const key = randomBytes(18).toString('base64url');
   try {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, `${key}\n`, { mode: 0o600 });
-    log(`admin key created in ${file}`);
+    log(`${env === 'ADMIN_KEY' ? 'admin' : 'invite'} key created in ${file}`);
   } catch (e) {
-    log(`could not save the admin key (${e.message}) — booking approval is off`);
+    log(`could not save ${file} (${e.message}) — ${env === 'ADMIN_KEY' ? 'booking approval is off' : 'the private rooms stay hidden'}`);
     return null;
   }
   return key;
@@ -169,6 +173,9 @@ export function startServer({
   home = process.env.HOME_ROOM && process.env.HOME_KEY ? { room: process.env.HOME_ROOM, key: process.env.HOME_KEY } : null,
   // Approves DJ bookings; null = read or create server/data/admin-key.
   adminKey = null,
+  // Shows the private resident rooms (Free Mixter Mix, Wilkins-Mix): only
+  // phones that sent it see them and may join; null = server/data/invite-key.
+  inviteKey = null,
   // Music channels (channels.js): a folder with channels.json and the music;
   // MUSIC_DIR=0 (or a folder without channels.json) means no channels.
   musicDir = process.env.MUSIC_DIR === '0' ? null : (process.env.MUSIC_DIR || join(HERE, 'music')),
@@ -184,12 +191,18 @@ export function startServer({
   const stats = new Stats(statsFile, { log });
   const statsMsg = () => ({ type: 'stats', days: stats.recent(14), online: sessions.size });
   const theAdminKey = adminKey ?? loadAdminKey(join(HERE, 'data', 'admin-key'), log);
-  const isAdminKey = (k) => {
-    if (!theAdminKey || typeof k !== 'string') return false;
+  const sameKey = (k, key) => {
+    if (!key || typeof k !== 'string') return false;
     const a = Buffer.from(k);
-    const b = Buffer.from(theAdminKey);
+    const b = Buffer.from(key);
     return a.length === b.length && timingSafeEqual(a, b);
   };
+  const isAdminKey = (k) => sameKey(k, theAdminKey);
+  const theInviteKey = inviteKey ?? loadAdminKey(join(HERE, 'data', 'invite-key'), log, 'INVITE_KEY');
+  // Private rooms: every resident's room name, playing or not. A session
+  // sees and joins them only after sending the invite key (admins too).
+  const isPrivate = (name) => channels.byId.has(name);
+  const invited = (s) => s.invited || s.admin;
   const keys = keysDir ? new Keys(keysDir, { log }) : null;
   const purgeKeys = () => keys?.purge(new Set([...sessions.values()].map((x) => x.key).filter(Boolean)));
   purgeKeys();
@@ -296,19 +309,21 @@ export function startServer({
   // start screen can list rooms to join. Sent to everyone on connect, on
   // every scan, and immediately when any room's membership changes.
   // Music channels are always listed, in their tempo order, open or not.
-  const lobby = () => ({
+  // Private rooms (the residents') only for invited sessions.
+  const lobby = (open = false) => ({
     type: 'rooms',
     rooms: [
       ...rooms.names
-        .filter((name) => !channels.has(name))
+        .filter((name) => !channels.has(name) && (open || !isPrivate(name)))
         .map((name) => ({ name, dancers: rooms.members(name).length, bpm: roomBpm(name) }))
         .sort((a, b) => b.dancers - a.dancers || a.name.localeCompare(b.name)),
-      ...channels.lobby().map((c) => ({ ...c, channel: true, dancers: rooms.members(c.name).length, bpm: silenced.has(c.name) ? 0 : c.bpm })),
+      ...(open ? channels.lobby().map((c) => ({ ...c, channel: true, dancers: rooms.members(c.name).length, bpm: silenced.has(c.name) ? 0 : c.bpm })) : []),
     ],
   });
+  const lobbyFor = (s) => lobby(invited(s));
   const broadcastLobby = () => {
-    const msg = lobby();
-    for (const s of sessions.values()) send(s, msg);
+    const msgs = {};
+    for (const s of sessions.values()) { const o = invited(s); send(s, (msgs[o] ??= lobby(o))); }
     broadcastFloor();
     broadcastLiveRooms();
   };
@@ -333,12 +348,15 @@ export function startServer({
   // (a booking, a cancellation, a set ending — checked on every scan).
   // Approved sets go to everyone; each DJ also follows their own requests
   // (any status), and signed-in admins get the queue waiting for approval.
-  const scheduleMsg = () => ({ type: 'schedule', bookings: schedule.list() });
+  // The residents' daily sets are private: only invited sessions get them.
+  const scheduleMsg = (open = false) => ({ type: 'schedule', bookings: schedule.list().filter((b) => open || !b.resident) });
+  const scheduleFor = (s) => scheduleMsg(invited(s));
   const broadcastSchedule = () => {
-    const msg = scheduleMsg();
+    const msgs = {};
     let waiting = null;
     for (const s of sessions.values()) {
-      send(s, msg);
+      const o = invited(s);
+      send(s, (msgs[o] ??= scheduleMsg(o)));
       if (s.myBookings) send(s, { type: 'mine', bookings: schedule.mine(s.myBookings) });
       if (s.admin) send(s, (waiting ??= { type: 'waiting', bookings: schedule.waiting() }));
     }
@@ -348,18 +366,18 @@ export function startServer({
   // and every room with its music's tempo. Sent to watchers with every
   // lobby update.
   const dancersOnline = () => [...sessions.values()].filter((s) => !s.watching);
-  const floor = () => ({
+  const floor = (open = false) => ({
     type: 'floor',
-    dancers: dancersOnline().map((s) => ({ id: s.id, room: s.room })),
-    rooms: rooms.names.map((name) => {
+    dancers: dancersOnline().filter((d) => open || !isPrivate(d.room)).map((d) => ({ id: d.id, room: d.room })),
+    rooms: rooms.names.filter((name) => open || !isPrivate(name)).map((name) => {
       const bpm = roomBpm(name);
       return { name, dancers: rooms.members(name).length, bpm };
     }),
   });
   const broadcastFloor = () => {
-    let msg = null;
+    const msgs = {};
     for (const s of sessions.values()) {
-      if (s.watching) send(s, (msg ??= floor()));
+      if (s.watching) { const o = invited(s); send(s, (msgs[o] ??= floor(o))); }
     }
   };
 
@@ -473,12 +491,13 @@ export function startServer({
       booked: 0,           // bookings made on this connection (rate limit)
       myBookings: null,    // { id: token } — this DJ's requests, followed for status
       admin: false, adminTries: 0,
+      invited: false, inviteTries: 0, // sent the invite key: sees the private rooms
       key: null, keyTries: 0, keysMade: 0, recKeyed: false, // dance key (keys.js)
     };
     sessions.set(id, s);
     send(s, { type: 'welcome', id, ...(recordDir ? { recording: recordButton ? 'button' : true } : {}), ...(keys ? { keys: true } : {}) });
-    send(s, lobby());
-    send(s, scheduleMsg());
+    send(s, lobbyFor(s));
+    send(s, scheduleFor(s));
     log(`+ ${id} connected (${sessions.size} online)`);
     stats.online(sessions.size);
     broadcastFloor();
@@ -562,6 +581,9 @@ export function startServer({
             }
           }
           s.bookingToken = str(msg.bookingToken);
+          if (isPrivate(normalizeRoomName(msg.room)) && !invited(s)) {
+            return send(s, { type: 'error', for: 'join', error: 'That room is private. Ask for an invite link.' });
+          }
           if (roomClosed(normalizeRoomName(msg.room))) {
             return send(s, { type: 'error', for: 'join', error: 'That room was closed. Try another one.' });
           }
@@ -627,6 +649,19 @@ export function startServer({
         } else if (msg.type === 'mine') {
           s.myBookings = msg.tokens && typeof msg.tokens === 'object' ? { ...msg.tokens } : null;
           send(s, { type: 'mine', bookings: schedule.mine(s.myBookings) });
+        } else if (msg.type === 'invite') {
+          if (s.inviteTries >= MAX_ADMIN_TRIES) return;
+          if (!sameKey(msg.key, theInviteKey)) {
+            s.inviteTries++;
+            return send(s, { type: 'error', for: 'invite', error: 'That invite link isn’t right.' });
+          }
+          if (!s.invited) {
+            s.invited = true;
+            log(`✉ ${id} came with the invite link`);
+          }
+          send(s, lobbyFor(s));
+          send(s, scheduleFor(s));
+          if (s.watching) send(s, floor(true));
         } else if (msg.type === 'admin') {
           if (s.adminTries >= MAX_ADMIN_TRIES) return;
           if (!isAdminKey(msg.key)) {
@@ -636,6 +671,8 @@ export function startServer({
           }
           s.admin = true;
           log(`♛ ${id} signed in as admin`);
+          send(s, lobbyFor(s)); // admins see the private rooms too
+          send(s, scheduleFor(s));
           send(s, { type: 'waiting', bookings: schedule.waiting() });
           send(s, liveRooms());
           send(s, statsMsg());

@@ -13,6 +13,7 @@
 import { WebSocketTransport } from './net/poseChannel.js';
 import { resolveServerUrl, whipUrl } from './net/serverUrl.js';
 import { normalizeRoomName } from './net/roomNames.js';
+import { inviteMsg, forgetInvite, onInviteLink } from './net/invite.js';
 import { LENGTHS, phase, whenText, listed, FINE_PRINT, visitMsg } from './net/schedule.js';
 
 const $ = (id) => document.getElementById(id);
@@ -84,7 +85,10 @@ if (!link) {
     if (!visitSent) { link.sendJSON(visitMsg('schedule')); visitSent = true; } // daily totals, once per page load
     link.sendJSON({ type: 'mine', tokens });
     if (adminKey) link.sendJSON({ type: 'admin', key: adminKey });
+    const invite = inviteMsg(); // the private resident rooms show here too
+    if (invite) link.sendJSON(invite);
   };
+  onInviteLink((m) => link.sendJSON(m));
   link.onMessage = onMessage;
 }
 
@@ -133,6 +137,8 @@ function onMessage(msg) {
     if (msg.for === 'book' || msg.for === 'cancel') {
       $('btn-book').disabled = !online;
       setMsg('form-msg', msg.error, 'err');
+    } else if (msg.for === 'invite') {
+      forgetInvite();
     } else if (msg.for === 'admin') {
       adminKey = null;
       store.set(ADMIN_KEY, null);
