@@ -4,7 +4,7 @@
  * Each channel is a playlist of Creative Commons tracks around one tempo
  * (made by tools/music/publish.mjs, copied here by `deploy.sh music`):
  *   <dir>/channels.json   { channels: [{ id, name, bpm, seconds, tracks: [{ file, sec, bpm }],
- *                                        daily?: { at, minutes, tz }, set?: { tracks } }] }
+ *                                        daily?: { at, minutes, tz }, set?: { tracks }, setOnly? }] }
  *   <dir>/<file>          the Opus files, served at /music/<file>
  *   <dir>/credits.html    who made what, served at /music/credits.html
  *
@@ -12,7 +12,9 @@
  * clock (the playlist loops from EPOCH), so everyone who joins hears the
  * same moment of the same track. A resident with a daily slot plays its
  * set during the slot instead, from the set's first track at the start
- * (cut off at the end; phones switch with the next 'room' message). Nothing runs while nobody listens: the
+ * (cut off at the end; phones switch with the next 'room' message). A
+ * `setOnly` resident plays only during its set; outside it, its name is an
+ * ordinary room (anyone can open it and host). Nothing runs while nobody listens: the
  * phones in the room fetch the audio themselves, and the server only says
  * which file and where in it. The room's tempo is the track's known BPM.
  */
@@ -20,8 +22,6 @@ import { readFileSync, statSync, createReadStream, existsSync } from 'node:fs';
 import { join, normalize, extname, sep } from 'node:path';
 
 const EPOCH = Date.UTC(2026, 0, 1);
-/** An always-on resident's entry on the schedule runs from EPOCH for a century. */
-const ALWAYS_MINUTES = 100 * 365 * 24 * 60;
 const TYPES = { '.opus': 'audio/ogg', '.ogg': 'audio/ogg', '.html': 'text/html; charset=utf-8', '.json': 'application/json' };
 
 export class Channels {
@@ -45,7 +45,14 @@ export class Channels {
     if (this.list.length) log(`channels: ${this.list.map((c) => `${c.id} (${c.tracks.length})`).join(', ')}`);
   }
 
-  has(id) { return this.byId.has(id); }
+  /**
+   * Is `id` a music room at time t? A `setOnly` resident is one only during
+   * its daily set; the rest of the day its name is an ordinary room.
+   */
+  has(id, t = Date.now()) {
+    const c = this.byId.get(id);
+    return !!c && (!c.setOnly || this.slotAt(c, t) != null);
+  }
 
   /**
    * What channel `id` plays at time t (ms): { track, start, end, next } with
@@ -93,7 +100,7 @@ export class Channels {
 
   /** For the lobby: every channel with its name and what it plays now. */
   lobby(t = Date.now()) {
-    return this.list.map((c) => ({ name: c.id, title: c.name, bpm: this.at(c.id, t).track.bpm }));
+    return this.list.filter((c) => this.has(c.id, t)).map((c) => ({ name: c.id, title: c.name, bpm: this.at(c.id, t).track.bpm }));
   }
 
   /**
@@ -101,20 +108,11 @@ export class Channels {
    * minutes, tz }) gets an approved booking every day, made here rather
    * than at /schedule. The room plays the whole day; the set is the time
    * it's on the schedule. → the next `count` sets that haven't ended,
-   * shaped like a booking (src/net/schedule.js), soonest first. An
-   * `always` resident (the open room) has one entry, on all the time.
+   * shaped like a booking (src/net/schedule.js), soonest first.
    */
   residentSets(now = Date.now(), count = 2) {
     const out = [];
     for (const c of this.list) {
-      if (c.always) { // the open room: listed once, on all the time
-        out.push({
-          id: `${c.id}-always`, status: 'approved', resident: true, always: true,
-          dj: c.name, room: c.id, start: EPOCH, minutes: ALWAYS_MINUTES,
-          setInfo: c.setInfo ?? c.story ?? '', bio: c.bio ?? '', link: '', booth: false,
-        });
-        continue;
-      }
       const d = c.daily;
       const sets = [];
       for (const { start, date } of slots(d, now, count + 2)) {

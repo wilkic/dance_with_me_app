@@ -58,19 +58,25 @@ const total = (list) => list.reduce((a, t) => a + t.sec, 0);
 // All day it loops every downloaded track, one channel after another in
 // tempo order (so the pulse holds for a while); during the daily set it
 // plays the set: tracks from its pools by genre and tempo, from the top.
-// An `always` resident (the open room) has no daily set: all day, every day.
+// A resident's set: tracks from its pools by genre and tempo, or every
+// track when it names none (Free Mixter Mix, a 24-hour daily set). A
+// `setOnly` resident (Wilkins-Mix) plays nothing outside its set.
 const residents = conf.residents.list.map((r) => {
   const all = pools.flatMap((c) => c.tracks);
-  const set = r.always ? [] : mixOrder(all.filter((t) => r.from.includes(t.ch) && r.genres.includes(t.genre) && t.felt >= r.bpm[0] && t.felt <= r.bpm[1]), r.id);
+  const picked = r.from ? all.filter((t) => r.from.includes(t.ch) && r.genres.includes(t.genre) && t.felt >= r.bpm[0] && t.felt <= r.bpm[1]) : all;
+  const set = r.from ? mixOrder(picked, r.id) : picked;
+  const day = r.setOnly ? set : all;
   return {
     id: r.id,
     name: r.dj,
     story: r.setInfo,
-    ...(r.always ? { always: true } : { bpm: r.bpm, daily: r.daily }),
+    bpm: r.bpm,
+    daily: r.daily,
+    ...(r.setOnly ? { setOnly: true } : {}),
     setInfo: r.setInfo,
     bio: r.bio,
-    seconds: total(all),
-    tracks: all.map(entry),
+    seconds: total(day),
+    tracks: day.map(entry),
     set: { seconds: total(set), tracks: set.map(entry) },
   };
 }).filter((c) => c.tracks.length);
@@ -103,7 +109,7 @@ h1{font-size:24px;margin:0 0 8px}h2{font-size:18px;margin:28px 0 4px}h2 span{col
 section{border-top:1px solid var(--line)}
 </style></head><body><main>
 <h1>Music credits</h1>
-<p class="sub">The resident DJ rooms in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. Free Mixter Mix All Day Long is the open room: it plays every track below, a channel at a time, day and night, and new tracks keep joining it. Other residents' daily sets pick from the same list. Thank you to every artist. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
+<p class="sub">The resident DJ rooms in <a href="https://dance.wilkinscoffee.be/">Dance With Me</a> play Creative Commons music from <a href="https://ccmixter.org/">ccMixter</a>. Free Mixter Mix is the open room: every day, all day long, it plays every track below, a channel at a time, and new tracks keep joining it. Other residents' daily sets pick from the same list. Thank you to every artist. Each track keeps its own licence; follow a track's link to hear, download or remix it.</p>
 ${residentNote}${sections}
 </main></body></html>
 `);

@@ -23,23 +23,24 @@
   },
 
   "residents": {
-    "about": "What the dance server plays: rooms held by a resident DJ, always playing. The first, Free Mixter Mix All Day Long, is the open room: every track we have, all day, no set times (always: true); it stays. Others (Wilkins-Mix) have a daily set on the schedule and may come and go. publish.mjs builds only these; the channels below are the pools the tracks come from (ccmixter-shortlist.mjs).",
+    "about": "What the dance server plays: rooms held by a resident DJ, always playing. The first, Free Mixter Mix, is the open room: a 24-hour daily set of every track we have (no from/genres = all); it stays. Others may come and go; Wilkins-Mix plays only during its daily set (setOnly) and is an ordinary room the rest of the day. publish.mjs builds only these; the channels below are the pools the tracks come from (ccmixter-shortlist.mjs).",
     "list": [
       {
         "id": "free-mixter-all-day",
-        "dj": "Free Mixter Mix All Day Long",
-        "always": true,
-        "setInfo": "The open room, always on. Everything freely available that we've gathered from ccMixter (Creative Commons music, free to share), mixed one tempo at a time: slow jazz and dub, boom bap, house, acid, two-step, jungle. Drop in any time, day or night, and move. New music keeps going into the mix to keep it fresh.",
-        "bio": "The first resident selector of Dance With Me, and the one that stays. Other residents may come and go with their own daily sets; this room is always open and always playing. Music credits are in the room menu."
+        "dj": "Free Mixter Mix",
+        "daily": { "at": "00:00", "minutes": 1440, "tz": "Europe/Brussels" },
+        "setInfo": "The open room, booked every day, all day long. Everything freely available that we've gathered from ccMixter (Creative Commons music, free to share), mixed one tempo at a time: slow jazz and dub, boom bap, house, acid, two-step, jungle. Drop in any time, day or night, and move. New music keeps going into the mix to keep it fresh.",
+        "bio": "The first resident selector of Dance With Me, and the one that stays. Other residents may come and go with their own daily sets; this room is booked every day, all day long. Music credits are in the room menu."
       },
       {
         "id": "wilkins-mix",
         "dj": "Wilkins-Mix",
+        "setOnly": true,
         "from": ["acid-axis", "kiosk-afternoon"],
         "genres": ["acid", "303", "acid_house", "tb303", "techno", "electro", "minimal", "detroit"],
         "bpm": [120, 134],
         "daily": { "at": "10:00", "minutes": 120, "tz": "Europe/Brussels" },
-        "setInfo": "Acid lines, 303 squelch, minimal and electro at 120 to 134 BPM. Every day on the schedule. The rest of the day the room plays the whole collection, one tempo at a time, from slow jazz and dub to jungle, so drop in any time.",
+        "setInfo": "Acid lines, 303 squelch, minimal and electro at 120 to 134 BPM. Every day, two hours. The rest of the day, Free Mixter Mix plays the whole collection.",
         "bio": "The house selector of Dance With Me: Creative Commons acid and techno picked by ear for moving to. Music credits are in the room menu."
       }
     ]

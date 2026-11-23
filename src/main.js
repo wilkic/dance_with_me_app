@@ -132,7 +132,7 @@ const music = new RoomMusic({
 });
 if (urlParams.has('debug')) window.dwm = { music, roomState }; // console poking / browser tests
 let lobby = []; // open rooms from the server: [{ name, dancers, bpm }] (bpm: its music's, 0 = none),
-               // then the resident DJs' rooms, always: [{ name, title, channel: true, dancers, bpm }]
+               // then the resident DJs' rooms while they play: [{ name, title, channel: true, dancers, bpm }]
 let bookings = []; // DJ sets booked ahead (see net/schedule.js), soonest first
 const aiInfo = new Map(); // ai dancer id -> { tag, title, bpm, base, moves, borrowing }
 let libraryClips = null;
@@ -169,7 +169,7 @@ function renderJoinPicker() {
   // before anyone is in them.
   const now = Date.now();
   const sets = bookings.filter((b) => joinable(b, now) && !lobby.some((r) => r.name === b.room));
-  // Resident DJs' rooms (channel: true) always play, so they're always listed.
+  // Resident DJs' rooms (channel: true) are listed while they play.
   const open = lobby;
   const key = JSON.stringify([lobby.map((r) => [r.name, r.dancers, Math.round(r.bpm || 0)]), bookings.filter((b) => joinable(b, now)).map((b) => b.id)]); // "DJ set" comes and goes
   if (key === joinKey) return;
@@ -197,7 +197,7 @@ function renderJoinPicker() {
  */
 function roomText(r, now = Date.now()) {
   const bpm = r.bpm > 0 ? ` · ${Math.round(r.bpm)} BPM` : '';
-  const dj = bookings.some((b) => b.room === r.name && !b.always && joinable(b, now)) ? ' · DJ set' : '';
+  const dj = bookings.some((b) => b.room === r.name && joinable(b, now)) ? ' · DJ set' : '';
   const who = r.channel && !r.dancers ? '' : ` · ${r.dancers} dancing`;
   return `${r.name}${who}${bpm}${dj}`;
 }
@@ -232,12 +232,12 @@ function renderUpcoming() {
     const sum = el('summary');
     const head = el('div', 'set-head');
     const dj = el('div', 'set-dj', b.dj);
-    if (p === 'live' && !b.always) dj.append(el('span', 'set-badge', 'LIVE'));
+    if (p === 'live') dj.append(el('span', 'set-badge', 'LIVE'));
     const when = el('div', 'set-when', `${whenText(b)} · `);
     when.append(el('span', 'set-room', `⌂ ${b.room}`));
     head.append(dj, when);
     sum.append(head);
-    if (joinable(b, now) || b.resident) { // a resident's room plays all day
+    if (joinable(b, now)) {
       const btn = el('button', 'primary', 'Join');
       btn.disabled = !serverOnline;
       btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); enter(b.room); });

@@ -58,9 +58,9 @@ export function phase(b, now = Date.now()) {
 export const joinable = (b, now) => ['open', 'live'].includes(phase(b, now));
 export const overlaps = (a, b) => a.start < endOf(b) && b.start < endOf(a);
 
-/** "Sat 18 Oct, 21:00–22:30" (a resident's daily set: "Daily, 10:00–12:00"; the open room: "Always on…") in the viewer's own time zone. */
+/** "Sat 18 Oct, 21:00–22:30" (a resident's daily set: "Daily, 10:00–12:00"; a 24-hour one: "Daily, all day long") in the viewer's own time zone. */
 export function whenText(b, locale = undefined) {
-  if (b.always) return 'Always on, day and night';
+  if (b.daily && b.minutes >= 24 * 60) return 'Daily, all day long';
   const s = new Date(b.start);
   const e = new Date(endOf(b));
   const day = b.daily ? 'Daily' : s.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
